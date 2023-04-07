@@ -9,7 +9,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Aggregates.Tests", "Aggrega
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Aggregates.Protobuf", "Aggregates.Protobuf\Aggregates.Protobuf.csproj", "{067220EA-81DD-4373-9B98-1A39FF4B68F3}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Aggregates.EventStoreDB", "Aggregates.EventStore\Aggregates.EventStoreDB.csproj", "{1B267C6C-1AE9-4D15-8E9D-A73D04E38A8A}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Aggregates.EventStoreDB", "Aggregates.EventStoreDB\Aggregates.EventStoreDB.csproj", "{1B267C6C-1AE9-4D15-8E9D-A73D04E38A8A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aggregates.Json", "Aggregates.Json\Aggregates.Json.csproj", "{01A244FE-5B0A-4040-880F-53F2460F5C58}"
 EndProject
