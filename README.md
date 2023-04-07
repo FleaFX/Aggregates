@@ -1,0 +1,3 @@
+# Aggregates
+
+Functional event sourcing.
