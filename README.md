@@ -88,16 +88,20 @@ public readonly record struct ShoppingCart(Guid Id, ImmutableDictionary<string, 
     public ShoppingCart Apply(IShoppingCartEvent @event) =>
         @event switch {
             ItemAdded added =>
-                new(Id, this.Items.TryGetValue(@event.ItemId, out var current) ?
+                this with { Items =
+                    (this.Items.TryGetValue(@event.ItemId, out var current) ?
                         this.Items.SetItem(@event.ItemId, current + @event.Quantity) :
                         this.Items.Add(@event.ItemId, @event.Quantity)
-                    ),
+                    )
+                },
 
             ItemRemoved removed =>
                 this.Items.TryGetValue(@event.ItemId, out var current) ?
-                    current == @event.Quantity ?
-                        new(Id, this.Items.Remove(@event.ItemId)) :
-                        new(Id, this.Items.SetItem(@event.ItemId, current - @event.Quantity)) :
+                    this with { Items =
+                        current == @event.Quantity ?
+                            this.Items.Remove(@event.ItemId) :
+                            this.Items.SetItem(@event.ItemId, current - @event.Quantity)
+                    } :
                     this,
 
             _ => throw new InvalidOperationException()
