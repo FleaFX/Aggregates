@@ -76,7 +76,7 @@ public readonly record struct ItemRemoved(
 ) : IShoppingCartEvent
 
 ```
-I've added a marker interface for events that are handled by our shopping cart so that I can pattern match on this later on. The events are attributed with `EventContract`. This governs the type of the event when storing it in EventStoreDB by giving it a name, a version and a namespace. The `ItemRemoved` event shows that the latter two are optional. In this example, the event types would end up as 'Example.ItemAdded@v1' and 'ItemRemoved@v1'. `ItemRemoved` does not have the namespace prefix, but it still has the version suffix as this defaults to 1.
+I've added a marker interface for events that are handled by our shopping cart so that I can pattern match on this later on. The events are attributed with `EventContract`. This governs the type of the event when storing it in EventStoreDB by giving it a name, a version and a namespace. The `ItemRemoved` event shows that the latter two are optional. In this example, the event types would end up as 'Example.ItemAdded@v1' and 'ItemRemoved@v1'. `ItemRemoved` does not have the namespace prefix, but it still has the version suffix as this defaults to 1. These versions are used when upgrading, but I'll leave this out of this introduction.
 
 You can now use these events in the state object:
 ```csharp
@@ -88,7 +88,7 @@ public readonly record struct ShoppingCart(Guid Id, ImmutableDictionary<string, 
     public ShoppingCart Apply(IShoppingCartEvent @event) =>
         @event switch {
             ItemAdded added =>
-                new(this.Items.TryGetValue(@event.ItemId, out var current) ?
+                new(Id, this.Items.TryGetValue(@event.ItemId, out var current) ?
                         this.Items.SetItem(@event.ItemId, current + @event.Quantity) :
                         this.Items.Add(@event.ItemId, @event.Quantity)
                     ),
@@ -96,8 +96,8 @@ public readonly record struct ShoppingCart(Guid Id, ImmutableDictionary<string, 
             ItemRemoved removed =>
                 this.Items.TryGetValue(@event.ItemId, out var current) ?
                     current == @event.Quantity ?
-                        new(this.Items.Remove(@event.ItemId)) :
-                        new(this.Items.SetItem(@event.ItemId, current - @event.Quantity)) :
+                        new(Id, this.Items.Remove(@event.ItemId)) :
+                        new(Id, this.Items.SetItem(@event.ItemId, current - @event.Quantity)) :
                     this,
 
             _ => throw new InvalidOperationException()
