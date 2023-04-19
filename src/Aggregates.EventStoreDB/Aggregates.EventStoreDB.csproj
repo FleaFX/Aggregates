@@ -4,12 +4,14 @@
     <TargetFramework>net7.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
 	  <GenerateDocumentationFile>True</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="EventStore.Client.Grpc.PersistentSubscriptions" Version="23.0.0" />
     <PackageReference Include="EventStore.Client.Grpc.Streams" Version="23.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="7.0.1" />
     <PackageReference Include="System.Linq.Async" Version="6.0.1" />
   </ItemGroup>
 
@@ -19,6 +21,7 @@
 
   <ItemGroup>
     <Folder Include="Extensions\" />
+    <Folder Include="Properties\" />
   </ItemGroup>
 
 </Project>

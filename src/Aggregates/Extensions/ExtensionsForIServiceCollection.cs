@@ -16,6 +16,13 @@ public class AggregatesOptions {
         ConfigureServices = ConfigureServices.AndThen(configuration);
 }
 
+public class ProjectionsOptions {
+    internal Action<IServiceCollection>? ConfigureServices { get; private set; }
+
+    internal void AddConfiguration(Action<IServiceCollection> configuration) =>
+        ConfigureServices = ConfigureServices.AndThen(configuration);
+}
+
 public static class ExtensionsForIServiceCollection {
     /// <summary>
     /// Registers the necessary dependencies to work with the event sourcing infrastructure provided by the Aggregates package.
@@ -32,6 +39,21 @@ public static class ExtensionsForIServiceCollection {
         return services
             .TryAddUnitOfWork()
             .TryAddCommandHandlers();
+    }
+
+    /// <summary>
+    /// Registers the necessary dependencies to work with the projection infrastructure provided by the Aggregates package.
+    /// </summary>
+    /// <param name="services">The <see cref="IServiceCollection"/> to register with.</param>
+    /// <param name="configure">A function to configure non-default options for the Aggregates package.</param>
+    /// <returns>A <see cref="IServiceCollection"/>.</returns>
+    public static IServiceCollection UseProjections(this IServiceCollection services, Action<ProjectionsOptions> configure) {
+        var options = new ProjectionsOptions();
+        configure(options);
+
+        options.ConfigureServices?.Invoke(services);
+
+        return services;
     }
 
     static IServiceCollection TryAddUnitOfWork(this IServiceCollection services) {

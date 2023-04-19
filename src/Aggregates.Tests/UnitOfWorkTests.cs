@@ -1,6 +1,6 @@
 ﻿using FluentAssertions;
 
-namespace Aggregates.Tests; 
+namespace Aggregates; 
 
 public class UnitOfWorkTests {
     public readonly record struct TestState(string Value) : IState<TestState, string> {

@@ -32,6 +32,11 @@ public interface IState<out TState, in TEvent> where TState : IState<TState, TEv
 }
 
 /// <summary>
+/// Marker interface for projections, which maintain a state using events sourced from multiple streams.
+/// </summary>
+public interface IProjection<out TState, in TEvent> : IState<TState, TEvent> where TState : IState<TState, TEvent> { };
+
+/// <summary>
 /// Decides which events are required to progress a state object as a result of executing a command.
 /// </summary>
 /// <typeparam name="TCommand">The type of the command itself.</typeparam>

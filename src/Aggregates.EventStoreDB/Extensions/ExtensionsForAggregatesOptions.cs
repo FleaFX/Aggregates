@@ -14,7 +14,7 @@ public static class ExtensionsForAggregatesOptions {
     /// <param name="connectionString">The connection string to use when connecting to EventStoreDB.</param>
     public static void UseEventStoreDB(this AggregatesOptions options, string connectionString) {
         options.AddConfiguration(services => {
-            services.TryAddSingleton(sp =>
+            services.TryAddSingleton(_ =>
                 new EventStoreClient(EventStoreClientSettings.Create(connectionString))
             );
 

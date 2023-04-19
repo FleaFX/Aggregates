@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
@@ -7,9 +7,11 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <RootNamespace>$(MSBuildProjectName.Replace(" ", "_").Replace(".Tests", ""))</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="FakeItEasy" Version="7.3.1" />
     <PackageReference Include="FluentAssertions" Version="6.10.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.5.0" />
     <PackageReference Include="xunit" Version="2.4.2" />
@@ -24,7 +26,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Aggregates.EventStoreDB\Aggregates.EventStoreDB.csproj" />
     <ProjectReference Include="..\Aggregates\Aggregates.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="EventStoreDB\" />
   </ItemGroup>
 
 </Project>
