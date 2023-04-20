@@ -34,7 +34,27 @@ public interface IState<out TState, in TEvent> where TState : IState<TState, TEv
 /// <summary>
 /// Marker interface for projections, which maintain a state using events sourced from multiple streams.
 /// </summary>
-public interface IProjection<out TState, in TEvent> : IState<TState, TEvent> where TState : IState<TState, TEvent> { };
+public interface IProjection<TState, in TEvent> {
+    /// <summary>
+    /// Applies the given <paramref name="event"/> to progress to a new state.
+    /// </summary>
+    /// <param name="event">The event to apply.</param>
+    /// <returns>The new state.</returns>
+    ICommit<TState> Apply(TEvent @event);
+}
+
+/// <summary>
+/// Represents the changes that are made to a projection, but have not been committed yet.
+/// </summary>
+/// <typeparam name="TState">The type of the state that is produced after committing the changes.</typeparam>
+public interface ICommit<TState> {
+    /// <summary>
+    /// Asynchronously commits the changes made to a projection after applying an event.
+    /// </summary>
+    /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous operation.</param>
+    /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation, which resolves to the new state.</returns>
+    ValueTask<TState> CommitAsync(CancellationToken cancellationToken = default);
+}
 
 /// <summary>
 /// Decides which events are required to progress a state object as a result of executing a command.

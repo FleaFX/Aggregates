@@ -4,6 +4,7 @@ using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 namespace Aggregates.EventStoreDB; 
 
@@ -38,9 +39,12 @@ public static class ExtensionsForProjectionsOptions {
             foreach (var (stateType, eventType) in
                      from assembly in AppDomain.CurrentDomain.GetAssemblies()
                      from type in assembly.GetTypes()
+                     where !type.IsAbstract
+
                      from iface in type.GetInterfaces()
                      where iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IProjection<,>)
                      let genericArgs = iface.GetGenericArguments()
+
                      select (stateType: genericArgs[0], eventType: genericArgs[1])) {
                 services.AddSingleton(typeof(IHostedService), typeof(ProjectionWorker<,>).MakeGenericType(stateType, eventType));
             }

@@ -11,7 +11,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Aggregates.Protobuf", "Aggr
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Aggregates.EventStoreDB", "Aggregates.EventStoreDB\Aggregates.EventStoreDB.csproj", "{1B267C6C-1AE9-4D15-8E9D-A73D04E38A8A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Aggregates.Json", "Aggregates.Json\Aggregates.Json.csproj", "{01A244FE-5B0A-4040-880F-53F2460F5C58}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Aggregates.Json", "Aggregates.Json\Aggregates.Json.csproj", "{01A244FE-5B0A-4040-880F-53F2460F5C58}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Aggregates.Sql", "Aggregates.Sql\Aggregates.Sql.csproj", "{559EA245-666C-4552-9F2A-5F062499F2AE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +41,10 @@ Global
 		{01A244FE-5B0A-4040-880F-53F2460F5C58}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{01A244FE-5B0A-4040-880F-53F2460F5C58}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{01A244FE-5B0A-4040-880F-53F2460F5C58}.Release|Any CPU.Build.0 = Release|Any CPU
+		{559EA245-666C-4552-9F2A-5F062499F2AE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{559EA245-666C-4552-9F2A-5F062499F2AE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{559EA245-666C-4552-9F2A-5F062499F2AE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{559EA245-666C-4552-9F2A-5F062499F2AE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

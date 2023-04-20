@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aggregates.EventStoreDB\Aggregates.EventStoreDB.csproj" />
+    <ProjectReference Include="..\Aggregates.Sql\Aggregates.Sql.csproj" />
     <ProjectReference Include="..\Aggregates\Aggregates.csproj" />
   </ItemGroup>
 

@@ -6,11 +6,11 @@ namespace Aggregates.EventStoreDB;
 /// <summary>
 /// A <see cref="IHostedService"/> should normally be registered as a singleton, requiring its injected dependencies to be singletons as well. This class allows you to use dependencies that are registered as scoped.
 /// </summary>
-abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4> : BackgroundService {
+abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5> : BackgroundService {
     readonly IServiceScopeFactory _serviceScopeFactory;
 
     /// <summary>
-    /// Initializes a new <see cref="ScopedBackgroundService{TDep1,TDep2,TDep3,TDep4}"/>.
+    /// Initializes a new <see cref="ScopedBackgroundService{TDep1,TDep2,TDep3,TDep4,TDep5}"/>.
     /// </summary>
     /// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
     protected ScopedBackgroundService(IServiceScopeFactory serviceScopeFactory) =>
@@ -30,6 +30,7 @@ abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4> : BackgroundS
             scope.ServiceProvider.GetRequiredService<TDep2>(),
             scope.ServiceProvider.GetRequiredService<TDep3>(),
             scope.ServiceProvider.GetRequiredService<TDep4>(),
+            scope.ServiceProvider.GetRequiredService<TDep5>(),
             stoppingToken);
     }
 
@@ -40,7 +41,8 @@ abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4> : BackgroundS
     /// <param name="dep2">The second scoped dependency.</param>
     /// <param name="dep3">The third scoped dependency.</param>
     /// <param name="dep4">The fourth scoped dependency.</param>
+    /// <param name="dep5">The fifth scoped dependency.</param>
     /// <param name="stoppingToken">A <see cref="CancellationToken"/> that is signaled when the asynchronous operation should be stopped.</param>
     /// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-    protected abstract Task ExecuteCoreAsync(TDep1 dep1, TDep2 dep2, TDep3 dep3, TDep4 dep4, CancellationToken stoppingToken);
+    protected abstract Task ExecuteCoreAsync(TDep1 dep1, TDep2 dep2, TDep3 dep3, TDep4 dep4, TDep5 dep5, CancellationToken stoppingToken);
 }

@@ -1,7 +1,8 @@
-﻿using EventStore.Client;
+﻿using System.Data.Common;
+using Aggregates.Sql;
+using EventStore.Client;
 using FakeItEasy;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace Aggregates.EventStoreDB; 
 
@@ -24,6 +25,7 @@ public class ProjectionWorkerTests {
         A.CallTo(() => serviceProvider.GetService(typeof(CreateToAllAsyncDelegate))).Returns(_createToAllAsync);
         A.CallTo(() => serviceProvider.GetService(typeof(SubscribeToAllAsync))).Returns(_subscribeToAllAsync);
         A.CallTo(() => serviceProvider.GetService(typeof(ResolvedEventDeserializer))).Returns(new ResolvedEventDeserializer((source, target) => null!));
+        A.CallTo(() => serviceProvider.GetService(typeof(IProjection<ExampleProjection, IExampleProjectionEvent>))).Returns(new ExampleProjection(A.Dummy<IDbConnectionFactory>()));
 
         var serviceScope = A.Dummy<IServiceScope>();
         A.CallTo(() => serviceScope.ServiceProvider).Returns(serviceProvider);
@@ -31,7 +33,7 @@ public class ProjectionWorkerTests {
         _serviceScopeFactory = A.Dummy<IServiceScopeFactory>();
         A.CallTo(() => _serviceScopeFactory.CreateScope()).Returns(serviceScope);
 
-        _worker = new ProjectionWorker<ExampleProjection, IExampleProjectionEvent>(_serviceScopeFactory, new Logger<ProjectionWorker<ExampleProjection, IExampleProjectionEvent>>(A.Dummy<ILoggerFactory>()));
+        _worker = new ProjectionWorker<ExampleProjection, IExampleProjectionEvent>(_serviceScopeFactory);
     }
 
 
@@ -78,13 +80,11 @@ public class ProjectionWorkerTests {
     record struct EventType1(string StringValue) : IExampleProjectionEvent;
     [EventContract(nameof(EventType2), @namespace: "Projections.Tests")]
     record struct EventType2(int NumberValue) : IExampleProjectionEvent;
-    record ExampleProjection : IProjection<ExampleProjection, IExampleProjectionEvent> {
-        public static ExampleProjection Initial => new();
-
-        public ExampleProjection Apply(IExampleProjectionEvent @event) =>
+    record ExampleProjection(IDbConnectionFactory DbConnectionFactory) : SqlProjection<IDbConnectionFactory, ExampleProjection, IExampleProjectionEvent>(DbConnectionFactory) {
+        public override ICommit<ExampleProjection> Apply(IExampleProjectionEvent @event) =>
             @event switch {
-                EventType1 eventType1 => this,
-                EventType2 eventType2 => this,
+                EventType1 eventType1 => Query("").Query(""),
+                EventType2 eventType2 => Query("").Query(""),
                 _ => throw new ArgumentOutOfRangeException(nameof(@event))
             };
     }
