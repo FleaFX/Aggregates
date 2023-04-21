@@ -1,6 +1,7 @@
 ﻿using System.Collections.Immutable;
 using System.Data;
 using System.Reflection;
+using System.Transactions;
 
 namespace Aggregates.Sql;
 
@@ -48,7 +49,8 @@ readonly record struct SqlCommit<TDbConnectionFactory, TState>(TState origin, TD
     async ValueTask<TState> ICommit<TState>.CommitAsync(CancellationToken cancellationToken) {
         await using var connection = DbConnectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
-        
+        using var tx = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+
         var uncommittedQueries = UncommittedQueries;
         while (!uncommittedQueries.IsEmpty) {
             uncommittedQueries = uncommittedQueries.Dequeue(out var query);
@@ -66,6 +68,8 @@ readonly record struct SqlCommit<TDbConnectionFactory, TState>(TState origin, TD
 
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
+
+        tx.Complete();
 
         return origin;
     }
