@@ -40,11 +40,10 @@ class CreationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TSta
     /// </summary>
     /// <param name="command">The command object to handle.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
-    public ValueTask HandleAsync(TCommand command) {
+    public async ValueTask HandleAsync(TCommand command) {
         var aggregateRoot = new AggregateRoot<TState, TEvent>();
-        aggregateRoot.Accept(command);
+        await aggregateRoot.AcceptAsync(command);
         _repository.Add(command, aggregateRoot);
-        return ValueTask.CompletedTask;
     }
 }
 
@@ -72,9 +71,8 @@ class ModificationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, 
     /// <param name="command">The command object to handle.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TCommand command) {
-        var aggregateRoot = await _repository.GetAsync(command);
-        if (aggregateRoot == null) throw new AggregateRootNotFoundException(command);
-        aggregateRoot.Accept(command);
+        var aggregateRoot = await _repository.GetAggregateRootAsync(command);
+        await aggregateRoot.AcceptAsync(command);
     }
 }
 
@@ -100,7 +98,6 @@ class DefaultHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TStat
     /// <summary>
     /// Asynchronously handles the given <paramref name="command"/>.
     /// </summary>
-    /// <param name="identifier">Uniquely identifies the aggregate within the system, which is affected by the handled command.</param>
     /// <param name="command">The command object to handle.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public ValueTask HandleAsync(TCommand command) =>

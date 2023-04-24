@@ -1,4 +1,5 @@
-﻿using Aggregates.Extensions;
+﻿using System.Runtime.CompilerServices;
+using Aggregates.Extensions;
 
 namespace Aggregates;
 
@@ -35,13 +36,17 @@ sealed record AggregateRoot<TState, TEvent>(TState? State = default, long Versio
     public IEnumerable<object> GetChanges() => _changes;
 
     /// <summary>
-    /// Accepts the given <paramref name="command"/> in order to progress the state of the aggregate.
+    /// Accepts the given <paramref name="command"/> in order to asynchronously progress the state of the aggregate.
     /// </summary>
     /// <param name="command">The command to accept.</param>
-    public void Accept<TCommand>(TCommand command) where TCommand : ICommand<TCommand, TState, TEvent> =>
-        State = command.Progress(State)
-            .Tap(@event => _changes.Add(@event))
-            .Aggregate(State, static (state, @event) => state.Apply(@event));
+    /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous operation.</param>
+    public async ValueTask AcceptAsync<TCommand>(TCommand command, CancellationToken cancellationToken = default)
+        where TCommand : ICommand<TCommand, TState, TEvent> =>
+        State = await command.ProgressAsync(State, cancellationToken)
+            .TapAsync(@event => _changes.Add(@event))
+            .AggregateAsync(State, static (state, @event) => state.Apply(@event), cancellationToken: cancellationToken);
+
+    public static implicit operator TState(AggregateRoot<TState, TEvent> instance) => instance.State;
 }
 
 /// <summary>

@@ -70,7 +70,17 @@ public interface ICommand<in TCommand, in TState, out TEvent>
     /// </summary>
     /// <param name="state">The current state to accept.</param>
     /// <returns>A sequence of events.</returns>
-    IEnumerable<TEvent> Progress(TState state);
+    IEnumerable<TEvent> Progress(TState state) =>
+        ProgressAsync(state).ToEnumerable();
+
+    /// <summary>
+    /// Accepts the <paramref name="state"/> to produce a sequence of events that will progress it to a new state.
+    /// </summary>
+    /// <param name="state">The current state to accept.</param>
+    /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous operation.</param>
+    /// <returns>An asynchronous sequence of events.</returns>
+    IAsyncEnumerable<TEvent> ProgressAsync(TState state, CancellationToken cancellationToken = default) =>
+        Progress(state).ToAsyncEnumerable();
 
     /// <summary>
     /// Implicitly casts the given <typeparamref name="TCommand"/> to an <see cref="AggregateIdentifier"/>.
