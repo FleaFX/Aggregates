@@ -25,10 +25,8 @@ public interface ISqlCommit<TState> : ICommit<TState> {
 /// </summary>
 /// <param name="origin">The originating state, to be returned after committing the changes.</param>
 /// <param name="DbConnectionFactory">The <see cref="IDbConnectionFactory"/> to use when creating a connection to the database.</param>
-/// <typeparam name="TDbConnectionFactory">The type of the <see cref="IDbConnectionFactory"/>.</typeparam>
 /// <typeparam name="TState">The type of the state returned after committing.</typeparam>
-readonly record struct SqlCommit<TDbConnectionFactory, TState>(TState origin, TDbConnectionFactory DbConnectionFactory) : ISqlCommit<TState>
-    where TDbConnectionFactory : IDbConnectionFactory {
+readonly record struct SqlCommit<TState>(TState origin, IDbConnectionFactory DbConnectionFactory) : ISqlCommit<TState> {
     ImmutableQueue<Query> UncommittedQueries { get; init; } = ImmutableQueue<Query>.Empty;
 
     /// <summary>

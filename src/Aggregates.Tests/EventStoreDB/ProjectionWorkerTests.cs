@@ -80,7 +80,7 @@ public class ProjectionWorkerTests {
     record struct EventType1(string StringValue) : IExampleProjectionEvent;
     [EventContract(nameof(EventType2), @namespace: "Projections.Tests")]
     record struct EventType2(int NumberValue) : IExampleProjectionEvent;
-    record ExampleProjection(IDbConnectionFactory DbConnectionFactory) : SqlProjection<IDbConnectionFactory, ExampleProjection, IExampleProjectionEvent>(DbConnectionFactory) {
+    record ExampleProjection(IDbConnectionFactory DbConnectionFactory) : SqlProjection<ExampleProjection, IExampleProjectionEvent>(DbConnectionFactory) {
         public override ICommit<ExampleProjection> Apply(IExampleProjectionEvent @event) =>
             @event switch {
                 EventType1 eventType1 => Query("").Query(""),

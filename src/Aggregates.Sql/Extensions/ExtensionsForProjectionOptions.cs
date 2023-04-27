@@ -11,7 +11,7 @@ public static class ExtensionsForProjectionOptions {
             foreach (var (implType, stateType, eventType) in
                      from assembly in AppDomain.CurrentDomain.GetAssemblies()
                      from type in assembly.GetTypes()
-                     where !type.IsAbstract && (type.BaseType?.IsGenericType ?? false) && type.BaseType.GetGenericTypeDefinition() == typeof(SqlProjection<,,>)
+                     where !type.IsAbstract && (type.BaseType?.IsGenericType ?? false) && type.BaseType.GetGenericTypeDefinition() == typeof(SqlProjection<,>)
 
                      let genericArgs = type.BaseType.GetGenericArguments()
 
