@@ -25,4 +25,10 @@ public abstract record SqlProjection<TState, TEvent>(IDbConnectionFactory DbConn
     /// <returns></returns>
     protected ISqlCommit<TState> Query(string sql, object? parameters = null, CommandType commandType = CommandType.Text) =>
         new SqlCommit<TState>((TState)this, DbConnectionFactory).Query(sql, parameters, commandType);
+
+    /// <summary>
+    /// Provides an empty commit to use as the seed when you need to fold over a collection to produce a <see cref="ICommit{TState}"/>.
+    /// </summary>
+    protected ISqlCommit<TState> Seed =>
+        new SqlCommit<TState>((TState)this, DbConnectionFactory);
 }

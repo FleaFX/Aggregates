@@ -11,7 +11,7 @@ namespace Aggregates;
 delegate ValueTask CommitDelegate(UnitOfWork unitOfWork);
 
 sealed class UnitOfWork {
-    readonly Dictionary<AggregateIdentifier, object> _aggregates = new();
+    readonly Dictionary<AggregateIdentifier, Aggregate> _aggregates = new();
 
     /// <summary>
     /// Retrieves the <see cref="Aggregate"/> associated with the given <paramref name="identifier"/>.
@@ -19,7 +19,7 @@ sealed class UnitOfWork {
     /// <param name="identifier">Uniquely identifies the <see cref="Aggregate"/> to retrieve.</param>
     /// <returns>An <see cref="Aggregate"/>, or <c>null</c> if it was not found.</returns>
     public Aggregate? Get(AggregateIdentifier identifier) =>
-        _aggregates.TryGetValue(identifier, out var aggregate) ? (Aggregate)aggregate : null;
+        _aggregates.TryGetValue(identifier, out var aggregate) ? aggregate : null;
 
     /// <summary>
     /// Attaches the given <paramref name="aggregate"/> to the unit of work.
@@ -39,9 +39,9 @@ sealed class UnitOfWork {
     /// </remarks>
     /// <returns>An <see cref="Aggregate"/>, or <c>null</c> if no aggregates were changed.</returns>
     public Aggregate? GetChanged() {
-        var changed = _aggregates.Values.SingleOrDefault(a => ((Aggregate)a).AggregateRoot.GetChanges().Any());
+        var changed = _aggregates.Values.SingleOrDefault(a => a.AggregateRoot.GetChanges().Any());
         if (Aggregate.None.Equals(changed)) return null;
-        return (Aggregate)changed!;
+        return changed;
     }
 }
 

@@ -10,10 +10,11 @@ public static class ExtensionsForAggregateOptions {
     /// Completes the Aggregates event sourcing infrastructure with serialization logic using Json.
     /// </summary>
     /// <param name="options">The <see cref="AggregatesOptions"/> to configure.</param>
-    public static void UseJson(this AggregatesOptions options) {
+    /// <param name="jsonSerializerOptions">An optional <see cref="JsonSerializerOptions"/> to use.</param>
+    public static void UseJson(this AggregatesOptions options, JsonSerializerOptions? jsonSerializerOptions = null) {
         options.AddConfiguration(services => {
-            services.TryAddTransient<EventSerializerDelegate>(_ => (destination, @event) => JsonSerializer.Serialize(destination, @event, @event.GetType()));
-            services.TryAddTransient<EventDeserializerDelegate>(_ => (source, target) => JsonSerializer.Deserialize(source, target)!);
+            services.TryAddTransient<EventSerializerDelegate>(_ => (destination, @event) => JsonSerializer.Serialize(destination, @event, @event.GetType(), jsonSerializerOptions));
+            services.TryAddTransient<EventDeserializerDelegate>(_ => (source, target) => JsonSerializer.Deserialize(source, target, jsonSerializerOptions)!);
         });
     }
 }

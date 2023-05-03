@@ -15,7 +15,7 @@ public static class ExtensionsForProjectionOptions {
 
                      let genericArgs = type.BaseType.GetGenericArguments()
 
-                     select (type, genericArgs[1], genericArgs[2])) {
+                     select (type, genericArgs[0], genericArgs[1])) {
                 services.AddScoped(typeof(IProjection<,>).MakeGenericType(stateType, eventType), implType);
             }
         });
