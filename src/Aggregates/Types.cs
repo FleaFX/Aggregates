@@ -90,11 +90,6 @@ public interface ICommand<in TCommand, in TState, out TEvent>
 }
 
 /// <summary>
-/// Marker interface to indicate that a command initializes the lifetime of an aggregate.
-/// </summary>
-public interface IInitialCommand { }
-
-/// <summary>
 /// Serializes the given <paramref name="event"/> to the given <paramref name="destination"/> <see cref="Stream"/>.
 /// </summary>
 /// <param name="destination">The <see cref="Stream"/> to write the serialized event to.</param>

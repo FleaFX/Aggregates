@@ -71,10 +71,15 @@ class ModificationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, 
     /// <param name="command">The command object to handle.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TCommand command) {
-        var aggregateRoot = await _repository.GetAggregateRootAsync(command);
+        var aggregateRoot = await _repository.GetAsync(command);
         await aggregateRoot.AcceptAsync(command);
     }
 }
+
+/// <summary>
+/// Provides the type to use when checking whether commands are creation commands.
+/// </summary>
+delegate Type MarkerInterfaceTypeProviderDelegate();
 
 /// <summary>
 /// Handler that decides whether a given command creates a new or affects an existing <see cref="AggregateRoot{TState,TEvent}"/> object and acts accordingly.
@@ -89,10 +94,12 @@ class DefaultHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TStat
     /// </summary>
     /// <param name="creationHandler">The <see cref="ICommandHandler{TCommand,TState,TEvent}"/> to invoke when the handled command is the initial command for an aggregate (marked by <see cref="IInitialCommand"/>.)</param>
     /// <param name="modificationHandler">The <see cref="ICommandHandler{TCommand,TState,TEvent}"/> to invoke when the handled command is not the initial command for an aggregate.</param>
+    /// <param name="markerInterfaceTypeProvider">Provides the type of the marker interface to look for on commands.</param>
     public DefaultHandler(
         CreationHandler<TCommand, TState, TEvent> creationHandler,
-        ModificationHandler<TCommand, TState, TEvent> modificationHandler) {
-        _handler = typeof(TCommand).IsAssignableTo(typeof(IInitialCommand)) ? creationHandler : modificationHandler;
+        ModificationHandler<TCommand, TState, TEvent> modificationHandler,
+        MarkerInterfaceTypeProviderDelegate markerInterfaceTypeProvider) {
+        _handler = typeof(TCommand).IsAssignableTo(markerInterfaceTypeProvider()) ? creationHandler : modificationHandler;
     }
 
     /// <summary>
@@ -105,6 +112,42 @@ class DefaultHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TStat
 }
 
 /// <summary>
+/// Handlers that first tries to retrieve an <see cref="AggregateRoot{TState,TEvent}"/> object, and if it doesn't exist yet, adds it to the repository.
+/// </summary>
+class GetOrAddHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
+    where TCommand : ICommand<TCommand, TState, TEvent>
+    where TState : IState<TState, TEvent> {
+    readonly IRepository<TState, TEvent> _repository;
+
+    /// <summary>
+    /// Initializes a new <see cref="GetOrAddHandler{TCommand,TState,TEvent}"/>.
+    /// </summary>
+    /// <param name="repository">The <see cref="IRepository{TState,TEvent}"/> to use when interacting with the aggregate which is affected by the handled command.</param>
+    public GetOrAddHandler(IRepository<TState, TEvent> repository) =>
+        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+
+    /// <summary>
+    /// Asynchronously handles the given <paramref name="command"/>.
+    /// </summary>
+    /// <param name="command">The command object to handle.</param>
+    /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
+    public async ValueTask HandleAsync(TCommand command) {
+        var aggregateRoot = await _repository.TryGetAsync(command);
+        if (aggregateRoot is null) {
+            aggregateRoot = new AggregateRoot<TState, TEvent>(TState.Initial, AggregateVersion.None);
+            _repository.Add(command, aggregateRoot);
+        }
+        await aggregateRoot.AcceptAsync(command);
+    }
+}
+
+interface ICommandHandlerFactory {
+    ICommandHandler<TCommand, TState, TEvent> Create<TCommand, TState, TEvent>()
+        where TCommand : ICommand<TCommand, TState, TEvent>
+        where TState : IState<TState, TEvent>;
+}
+
+/// <summary>
 /// Handler that commits changes tracked by the given <see cref="UnitOfWork"/>.
 /// </summary>DefaultHandler
 class UnitOfWorkAwareHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
@@ -112,18 +155,18 @@ class UnitOfWorkAwareHandler<TCommand, TState, TEvent> : ICommandHandler<TComman
     where TState : IState<TState, TEvent> {
     readonly UnitOfWork _unitOfWork;
     readonly CommitDelegate _commitDelegate;
-    readonly DefaultHandler<TCommand, TState, TEvent> _handler;
+    readonly ICommandHandler<TCommand, TState, TEvent> _handler;
 
     /// <summary>
     /// Initializes a new <see cref="UnitOfWorkAwareHandler{TCommand,TState,TEvent}"/>.
     /// </summary>
     /// <param name="unitOfWork">The <see cref="UnitOfWork"/> that tracks changes.</param>
     /// <param name="commitDelegate">The <see cref="CommitDelegate"/> that commits the changes made.</param>
-    /// <param name="handler">The handler that performs the actual work.</param>
-    public UnitOfWorkAwareHandler(UnitOfWork unitOfWork, CommitDelegate commitDelegate, DefaultHandler<TCommand, TState, TEvent> handler) {
+    /// <param name="handlerFactory">Provides the handler that performs the actual work.</param>
+    public UnitOfWorkAwareHandler(UnitOfWork unitOfWork, CommitDelegate commitDelegate, ICommandHandlerFactory handlerFactory) {
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _commitDelegate = commitDelegate ?? throw new ArgumentNullException(nameof(commitDelegate));
-        _handler = handler ?? throw new ArgumentNullException(nameof(handler));
+        _handler = handlerFactory.Create<TCommand, TState, TEvent>();
     }
 
     /// <summary>

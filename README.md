@@ -145,8 +145,6 @@ public readonly record struct RemoveItem(
 ```
 The `Progress` method receives the current state and uses it to do some validations and guard domain rules, e.g. you can't remove an item that isn't in the cart of remove more items than the current amount in the cart. If all is well, it yields the events that are needed to progress to the next state. Each command has one more thing, the cast operator to `AggregateIdentifier`. This is a technicality that is necessary to know which aggregate object to apply the command to. You wouldn't want to get shopping carts from different users mixed up.
 
-One more thing about commands. I guess that most commands you'll apply to existing aggregate objects, but some commands are special in that they start the lifetime of a new object. These commands differ from each other in that for an existing object, you need to load up the stream of previous events and possibly append new events to it. For new objects, you don't load an existing stream but rather create a new one instead. For these creation commands, you just need to add the marker interface `IInitialCommand` and the infrastructure will handle it accordingly.
-
 That is it as the domain is concerned. You just need a way to put it to work now, which comes in the form of the `ICommandHandler` interface. I'll assume some kind of API controller here, but that's just for the purpose of demonstration. Use them wherever you need.
 ```csharp
 
