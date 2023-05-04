@@ -1,13 +1,33 @@
-﻿using System.Runtime.CompilerServices;
-using Aggregates.Extensions;
+﻿using Aggregates.Extensions;
 
 namespace Aggregates;
+
+struct AggregateVersion {
+    readonly long _value;
+
+    /// <summary>
+    /// Version used when the aggregate has no prior existing history.
+    /// </summary>
+    public static AggregateVersion None => new(long.MinValue);
+
+    /// <summary>
+    /// Initializes a new <see cref="AggregateVersion"/>.
+    /// </summary>
+    /// <param name="value"></param>
+    public AggregateVersion(long value) => _value = value;
+
+    /// <summary>
+    /// Implicitly casts the given <paramref name="instance"/> to a <see cref="long"/>.
+    /// </summary>
+    /// <param name="instance">The <see cref="AggregateVersion"/> to cast.</param>
+    public static implicit operator long(AggregateVersion instance) => instance._value;
+}
 
 interface IAggregateRoot {
     /// <summary>
     /// Gets the version that the aggregate instance is at.
     /// </summary>
-    long Version { get; }
+    AggregateVersion Version { get; }
 
     /// <summary>
     /// Gets the sequence of changes that were applied, if any.
@@ -21,7 +41,7 @@ interface IAggregateRoot {
 /// </summary>
 /// <typeparam name="TState">The type of the maintained state object.</typeparam>
 /// <typeparam name="TEvent">The type of the event(s) that are applicable.</typeparam>
-sealed record AggregateRoot<TState, TEvent>(TState? State = default, long Version = 0L) : IAggregateRoot where TState : IState<TState, TEvent> {
+sealed record AggregateRoot<TState, TEvent>(TState? State, AggregateVersion Version) : IAggregateRoot where TState : IState<TState, TEvent> {
     readonly List<object> _changes = new();
 
     /// <summary>

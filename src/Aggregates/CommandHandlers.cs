@@ -41,7 +41,7 @@ class CreationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TSta
     /// <param name="command">The command object to handle.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TCommand command) {
-        var aggregateRoot = new AggregateRoot<TState, TEvent>();
+        var aggregateRoot = new AggregateRoot<TState, TEvent>(TState.Initial, AggregateVersion.None);
         await aggregateRoot.AcceptAsync(command);
         _repository.Add(command, aggregateRoot);
     }

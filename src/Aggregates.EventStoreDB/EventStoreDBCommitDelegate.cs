@@ -15,7 +15,7 @@ static class EventStoreDBCommitDelegate {
             if (changed is { } aggregate) {
                 await client.AppendToStreamAsync(
                     aggregate.Identifier.Value,
-                    aggregate.AggregateRoot.Version == 0 ? StreamRevision.None : StreamRevision.FromInt64(aggregate.AggregateRoot.Version),
+                    AggregateVersion.None.Equals(aggregate.AggregateRoot.Version) ? StreamRevision.None : StreamRevision.FromInt64(aggregate.AggregateRoot.Version),
                     aggregate.AggregateRoot.GetChanges().Select(@event => serializer(aggregate, @event))
                 );
             }

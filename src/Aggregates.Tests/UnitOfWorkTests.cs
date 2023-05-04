@@ -22,7 +22,7 @@ public class UnitOfWorkTests {
         [Fact]
         public void GivenAggregateAttached_ThenReturnsAggregate() {
             var uow = new UnitOfWork();
-            var aggregateRoot = new AggregateRoot<TestState, string>();
+            var aggregateRoot = new AggregateRoot<TestState, string>(TestState.Initial, AggregateVersion.None);
             uow.Attach(new Aggregate("aggregate/1", aggregateRoot));
 
             var aggregate = uow.Get("aggregate/1");
@@ -35,7 +35,7 @@ public class UnitOfWorkTests {
         [Fact]
         public void GivenAggregateAlreadyAttached_ThenThrows() {
             var uow = new UnitOfWork();
-            var aggregateRoot = new AggregateRoot<TestState, string>();
+            var aggregateRoot = new AggregateRoot<TestState, string>(TestState.Initial, AggregateVersion.None);
             uow.Attach(new Aggregate("aggregate/1", aggregateRoot));
 
             var act = () => uow.Attach(new Aggregate("aggregate/1", aggregateRoot));

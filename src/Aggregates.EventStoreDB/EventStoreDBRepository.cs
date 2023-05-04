@@ -27,7 +27,7 @@ class EventStoreDBRepository<TState, TEvent> : BaseRepository<TState, TEvent> wh
             var events = _eventStoreClient.ReadStreamAsync(Direction.Forwards, identifier.Value, StreamPosition.Start);
             var state = await events.Select(_deserializer.Deserialize).Cast<TEvent>().AggregateAsync(TState.Initial, (state, @event) => state.Apply(@event));
 
-            return new AggregateRoot<TState, TEvent>(state, events.LastStreamPosition?.ToInt64() ?? 0L);
+            return new AggregateRoot<TState, TEvent>(state, new AggregateVersion(events.LastStreamPosition?.ToInt64() ?? default));
         }
         catch (StreamNotFoundException) {
             return null;
