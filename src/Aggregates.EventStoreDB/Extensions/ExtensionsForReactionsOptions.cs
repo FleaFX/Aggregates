@@ -7,15 +7,15 @@ using Microsoft.Extensions.Hosting;
 
 namespace Aggregates.EventStoreDB; 
 
-public static class ExtensionsForProjectionsOptions {
+public static class ExtensionsForReactionsOptions {
     /// <summary>
-    /// Completes the Aggregates projection infrastructure with a connection to EventStoreDB.
+    /// Completes the Aggregates reaction infrastructure with a connection to EventStoreDB.
     /// </summary>
-    /// <param name="options">The <see cref="ProjectionsOptions"/> to configure.</param>
+    /// <param name="options">The <see cref="ReactionsOptions"/> to configure.</param>
     /// <param name="connectionString">The connection string to use when connecting to EventStoreDB.</param>
-    public static void UseEventStoreDB(this ProjectionsOptions options, string connectionString) {
+    public static void UseEventStoreDB(this ReactionsOptions options, string connectionString) {
         options.AddConfiguration(services => {
-            services.TryAddSingleton(_ => 
+            services.TryAddSingleton(_ =>
                 new EventStorePersistentSubscriptionsClient(EventStoreClientSettings.Create(connectionString))
             );
 
@@ -35,17 +35,17 @@ public static class ExtensionsForProjectionsOptions {
             services.TryAddScoped(typeof(ResolvedEventDeserializer));
 
             // find all implementations of IProjection<,> and register a ProjectionWorker for it
-            foreach (var (stateType, eventType) in
+            foreach (var (type, reactionType, commandType, stateType, eventType) in
                      from assembly in AppDomain.CurrentDomain.GetAssemblies()
                      from type in assembly.GetTypes()
                      where !type.IsAbstract
 
                      from iface in type.GetInterfaces()
-                     where iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IProjection<,>)
+                     where iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IReaction<,,,>)
                      let genericArgs = iface.GetGenericArguments()
 
-                     select (stateType: genericArgs[0], eventType: genericArgs[1])) {
-                services.AddSingleton(typeof(IHostedService), typeof(ProjectionWorker<,>).MakeGenericType(stateType, eventType));
+                     select (type, reactionType: genericArgs[0], commandType: genericArgs[1], stateType: genericArgs[2], eventType: genericArgs[3])) {
+                services.AddSingleton(typeof(IHostedService), typeof(ReactionWorker<,,,,>).MakeGenericType(type, reactionType, commandType, stateType, eventType));
             }
         });
     }

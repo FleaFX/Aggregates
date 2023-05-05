@@ -32,6 +32,11 @@ sealed class UnitOfWork {
     }
 
     /// <summary>
+    /// Clears the unit of work. Any uncommitted work will be discarded.
+    /// </summary>
+    public void Clear() => _aggregates.Clear();
+
+    /// <summary>
     /// Gets the <see cref="Aggregate"/> that was changed, if any.
     /// </summary>
     /// <remarks>
@@ -78,10 +83,9 @@ sealed class UnitOfWorkScope : IAsyncDisposable {
     /// Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources asynchronously.
     /// </summary>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous dispose operation.</returns>
-    public ValueTask DisposeAsync() {
+    public async ValueTask DisposeAsync() {
         Scopes = Scopes.Pop(out var scope);
-        return scope._completed ?
-            scope._onCommit(_unitOfWork) :
-            ValueTask.CompletedTask;
+        if (scope._completed) await scope._onCommit(_unitOfWork);
+        scope._unitOfWork.Clear();
     }
 }

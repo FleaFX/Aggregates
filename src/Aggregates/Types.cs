@@ -44,6 +44,34 @@ public interface IProjection<TState, in TEvent> {
 }
 
 /// <summary>
+/// Reacts to an event by producing new commands to handle.
+/// </summary>
+/// <typeparam name="TReactionEvent">The type of the event to react to.</typeparam>
+/// <typeparam name="TCommand">The type of the produced commands.</typeparam>
+/// <typeparam name="TState">The type of the state object that is acted upon by the produced commands.</typeparam>
+/// <typeparam name="TEvent">The type of the event(s) that are applicable to the state that is acted upon by the produced commands.</typeparam>
+public interface IReaction<in TReactionEvent, out TCommand, TState, TEvent>
+    where TState : IState<TState, TEvent>
+    where TCommand : ICommand<TCommand, TState, TEvent> {
+    /// <summary>
+    /// Asynchronously reacts to an event by producing a sequence of commands to handle.
+    /// </summary>
+    /// <param name="event">The instigating event.</param>
+    /// <returns>A sequence of commands.</returns>
+    IEnumerable<TCommand> React(TReactionEvent @event) =>
+        ReactAsync(@event).ToEnumerable();
+
+    /// <summary>
+    /// Asynchronously reacts to an event by producing a sequence of commands to handle.
+    /// </summary>
+    /// <param name="event">The instigating event.</param>
+    /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous enumeration.</param>
+    /// <returns>An asynchronous sequence of commands.</returns>
+    IAsyncEnumerable<TCommand> ReactAsync(TReactionEvent @event, CancellationToken cancellationToken = default) =>
+        React(@event).ToAsyncEnumerable();
+}
+
+/// <summary>
 /// Represents the changes that are made to a projection, but have not been committed yet.
 /// </summary>
 /// <typeparam name="TState">The type of the state that is produced after committing the changes.</typeparam>

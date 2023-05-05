@@ -14,7 +14,7 @@ struct AggregateVersion {
     /// Initializes a new <see cref="AggregateVersion"/>.
     /// </summary>
     /// <param name="value"></param>
-    public AggregateVersion(long value) => _value = value;
+    public AggregateVersion(long value) => _value = value >= 0 ? value : long.MinValue;
 
     /// <summary>
     /// Implicitly casts the given <paramref name="instance"/> to a <see cref="long"/>.

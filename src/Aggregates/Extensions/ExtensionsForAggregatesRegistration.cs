@@ -25,13 +25,9 @@ public class AggregatesOptions {
         ConfigureServices = ConfigureServices.AndThen(configuration);
 }
 
-public class ProjectionsOptions {
-    internal Action<IServiceCollection>? ConfigureServices { get; private set; }
-
-    internal void AddConfiguration(Action<IServiceCollection> configuration) =>
-        ConfigureServices = ConfigureServices.AndThen(configuration);
-}
-
+/// <summary>
+/// Configures how aggregates should be created.
+/// </summary>
 public abstract class AggregateCreationBehaviour {
     /// <summary>
     /// Configures command handlers to attempt to load an existing aggregate to handle the command, or create a new one if the aggregate is not found.
@@ -92,7 +88,7 @@ class MarkerInterfaceCreationBehaviour<TInterface> : AggregateCreationBehaviour 
     }
 }
 
-public static class ExtensionsForIServiceCollection {
+public static class ExtensionsForAggregatesRegistration {
     /// <summary>
     /// Registers the necessary dependencies to work with the event sourcing infrastructure provided by the Aggregates package.
     /// </summary>
@@ -112,32 +108,11 @@ public static class ExtensionsForIServiceCollection {
             .TryAddUnitOfWork();
     }
 
-    /// <summary>
-    /// Registers the necessary dependencies to work with the projection infrastructure provided by the Aggregates package.
-    /// </summary>
-    /// <param name="services">The <see cref="IServiceCollection"/> to register with.</param>
-    /// <param name="configure">A function to configure non-default options for the Aggregates package.</param>
-    /// <returns>A <see cref="IServiceCollection"/>.</returns>
-    public static IServiceCollection UseProjections(this IServiceCollection services, Action<ProjectionsOptions> configure) {
-        var options = new ProjectionsOptions();
-        configure(options);
-
-        options.ConfigureServices?.Invoke(services);
-
-        return services;
-    }
-
     static IServiceCollection TryAddUnitOfWork(this IServiceCollection services) {
         services.TryAddScoped<UnitOfWork>();
 
         // register as default ICommandHandler implementation
         services.TryAddScoped(typeof(ICommandHandler<,,>), typeof(UnitOfWorkAwareHandler<,,>));
-
-        return services;
-    }
-
-    static IServiceCollection TryAddCommandHandlers(this IServiceCollection services, AggregateCreationBehaviour aggregateCreationBehaviour) {
-        
 
         return services;
     }

@@ -23,11 +23,13 @@ class EventStoreDBRepository<TState, TEvent> : BaseRepository<TState, TEvent> wh
     /// <param name="identifier">Uniquely identifies the aggregate to retrieve.</param>
     /// <returns>An awaitable <see cref="ValueTask{TResult}"/>, which resolves to a <see cref="AggregateRoot{TState,TEvent}"/>.</returns>
     protected override async ValueTask<AggregateRoot<TState, TEvent>?> GetCoreAsync(AggregateIdentifier identifier) {
-        try {
-            var events = _eventStoreClient.ReadStreamAsync(Direction.Forwards, identifier.Value, StreamPosition.Start);
-            var state = await events.Select(_deserializer.Deserialize).Cast<TEvent>().AggregateAsync(TState.Initial, (state, @event) => state.Apply(@event));
+        if (identifier.Value.StartsWith('$')) throw new InvalidOperationException("Repository shouldn't be reading a system stream.");
 
-            return new AggregateRoot<TState, TEvent>(state, new AggregateVersion(events.LastStreamPosition?.ToInt64() ?? default));
+        try {
+            var events = await _eventStoreClient.ReadStreamAsync(Direction.Forwards, identifier.Value, StreamPosition.Start).ToArrayAsync();
+            var state = events.Select(_deserializer.Deserialize).Cast<TEvent>().Aggregate(TState.Initial, (state, @event) => state.Apply(@event));
+
+            return new AggregateRoot<TState, TEvent>(state, new AggregateVersion(events.Length - 1L));
         }
         catch (StreamNotFoundException) {
             return null;
