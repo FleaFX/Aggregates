@@ -36,7 +36,7 @@ public static class ExtensionsForReactionsOptions {
 
             // find all implementations of IProjection<,> and register a ProjectionWorker for it
             foreach (var (type, reactionType, commandType, stateType, eventType) in
-                     from assembly in AppDomain.CurrentDomain.GetAssemblies()
+                     from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
                      from type in assembly.GetTypes()
                      where !type.IsAbstract
 

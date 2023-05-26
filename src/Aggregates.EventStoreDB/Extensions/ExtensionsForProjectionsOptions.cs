@@ -36,7 +36,7 @@ public static class ExtensionsForProjectionsOptions {
 
             // find all implementations of IProjection<,> and register a ProjectionWorker for it
             foreach (var (stateType, eventType) in
-                     from assembly in AppDomain.CurrentDomain.GetAssemblies()
+                     from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
                      from type in assembly.GetTypes()
                      where !type.IsAbstract
 

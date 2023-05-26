@@ -2,10 +2,16 @@
 
 using Aggregates.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
 
 namespace Aggregates; 
 
 public class ReactionsOptions {
+    /// <summary>
+    /// Gets or sets the set of <see cref="Assembly"/> to scan for reaction types.
+    /// </summary>
+    public Assembly[]? Assemblies { get; set; }
+
     internal Action<IServiceCollection>? ConfigureServices { get; private set; }
 
     internal void AddConfiguration(Action<IServiceCollection> configuration) =>
@@ -27,7 +33,7 @@ public static class ExtensionsForReactionRegistration {
 
         // find all implementations of IReaction and register them
         foreach (var (implType, reactionEventType, commandType, stateType, eventType) in
-                 from assembly in AppDomain.CurrentDomain.GetAssemblies()
+                 from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
                  from type in assembly.GetTypes()
 
                  from @interface in type.GetInterfaces()

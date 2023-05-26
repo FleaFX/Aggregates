@@ -9,7 +9,7 @@ public static class ExtensionsForProjectionOptions {
         options.AddConfiguration(services => {
             // find all implementations of SqlProjection and register them
             foreach (var (implType, stateType, eventType) in
-                     from assembly in AppDomain.CurrentDomain.GetAssemblies()
+                     from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
                      from type in assembly.GetTypes()
                      where !type.IsAbstract && (type.BaseType?.IsGenericType ?? false) && type.BaseType.GetGenericTypeDefinition() == typeof(SqlProjection<,>)
 

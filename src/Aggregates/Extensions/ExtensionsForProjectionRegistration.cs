@@ -1,5 +1,6 @@
 ﻿// ReSharper disable CheckNamespace
 
+using System.Reflection;
 using Aggregates.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,6 +10,11 @@ namespace Aggregates;
 /// A configuration object that can be used to complete non-default options regarding projections.
 /// </summary>
 public class ProjectionsOptions {
+    /// <summary>
+    /// Gets or sets the set of <see cref="Assembly"/> to scan for projection types.
+    /// </summary>
+    public Assembly[]? Assemblies { get; set; }
+
     internal Action<IServiceCollection>? ConfigureServices { get; private set; }
 
     internal void AddConfiguration(Action<IServiceCollection> configuration) =>
