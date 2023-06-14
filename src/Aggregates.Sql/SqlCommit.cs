@@ -1,7 +1,6 @@
 ﻿using System.Collections.Immutable;
 using System.Data;
 using System.Reflection;
-using System.Transactions;
 
 namespace Aggregates.Sql;
 
@@ -47,27 +46,32 @@ readonly record struct SqlCommit<TState>(TState origin, IDbConnectionFactory DbC
     async ValueTask<TState> ICommit<TState>.CommitAsync(CancellationToken cancellationToken) {
         await using var connection = DbConnectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
-        using var tx = new TransactionScope(TransactionScopeAsyncFlowOption.Enabled);
+        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
 
-        var uncommittedQueries = UncommittedQueries;
-        while (!uncommittedQueries.IsEmpty) {
-            uncommittedQueries = uncommittedQueries.Dequeue(out var query);
+        try {
+            var uncommittedQueries = UncommittedQueries;
+            while (!uncommittedQueries.IsEmpty) {
+                uncommittedQueries = uncommittedQueries.Dequeue(out var query);
 
-            await using var command = connection.CreateCommand();
-            command.CommandType = query.CommandType;
-            command.CommandText = query.Sql;
-            foreach (var property in query.Parameters?.GetType().GetRuntimeProperties() ??
-                                     Array.Empty<PropertyInfo>()) {
-                var parameter = command.CreateParameter();
-                parameter.ParameterName = property.Name;
-                parameter.Value = property.GetValue(query.Parameters);
-                command.Parameters.Add(parameter);
+                await using var command = connection.CreateCommand();
+                command.Transaction = tx;
+                command.CommandType = query.CommandType;
+                command.CommandText = query.Sql;
+                foreach (var property in query.Parameters?.GetType().GetRuntimeProperties() ??
+                                         Array.Empty<PropertyInfo>()) {
+                    var parameter = command.CreateParameter();
+                    parameter.ParameterName = property.Name;
+                    parameter.Value = property.GetValue(query.Parameters);
+                    command.Parameters.Add(parameter);
+                }
+
+                await command.ExecuteNonQueryAsync(cancellationToken);
             }
-
-            await command.ExecuteNonQueryAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken);
+        } catch {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
         }
-
-        tx.Complete();
 
         return origin;
     }
