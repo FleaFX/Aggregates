@@ -1,4 +1,5 @@
-﻿using EventStore.Client;
+﻿using System.Collections.Immutable;
+using EventStore.Client;
 using System.Reflection;
 using System.Security.Cryptography;
 
@@ -8,9 +9,9 @@ static class Serialization {
     /// <summary>
     /// Returns a <see cref="Func{TResult}"/> that creates a <see cref="EventData"/> for each change.
     /// </summary>
-    /// <param name="serializer">The <see cref="EventSerializerDelegate"/> to use when serializing the event payload.</param>
+    /// <param name="serializer">The <see cref="SerializerDelegate"/> to use when serializing the event payload.</param>
     /// <returns>A <see cref="Func{TResult}"/></returns>
-    public static Func<Aggregate, object, EventData> CreateSerializer(EventSerializerDelegate serializer) {
+    public static Func<Aggregate, object, EventData> CreateSerializer(SerializerDelegate serializer) {
         var serializedEventsPerAggregate = new Dictionary<AggregateIdentifier, int>();
 
         return (aggregate, @event) => {
@@ -28,10 +29,9 @@ static class Serialization {
 
                 data:
                 SerializePayload(serializer, @event),
-
-                // todo: null metadata for now, since we have no idea what to put in here.
+                
                 metadata:
-                null);
+                SerializePayload(serializer, GetEventMetadata(@event)));
 
             // next time round, the version offset for this aggregate will be incremented by one
             serializedEventsPerAggregate[aggregate.Identifier]++;
@@ -74,13 +74,24 @@ static class Serialization {
     }
 
     /// <summary>
-    /// Serializes the given <paramref name="event"/> using Google Protocol Buffers.
+    /// Gets the metadata to be saved with the event.
     /// </summary>
-    /// <param name="event">The event to serialize.</param>
+    /// <param name="event">The event to get the metadata for.</param>
+    /// <returns>A <see cref="IDictionary{TKey,TValue}"/>.</returns>
+    static IDictionary<string, object> GetEventMetadata(object @event) =>
+        @event.GetType()
+            .GetCustomAttributes<MetadataAttribute>()
+            .Aggregate(ImmutableDictionary<string, object>.Empty,
+                (metadata, attribute) => attribute.Add(metadata, @event));
+
+    /// <summary>
+    /// Serializes the given <paramref name="payload"/> using the given <see cref="SerializerDelegate"/>.
+    /// </summary>
+    /// <param name="payload">The payload to serialize.</param>
     /// <returns>A byte array.</returns>
-    static byte[] SerializePayload(EventSerializerDelegate serialize, object @event) {
+    static byte[] SerializePayload(SerializerDelegate serialize, object payload) {
         using var stream = new MemoryStream();
-        serialize(stream, @event);
+        serialize(stream, payload);
         stream.Seek(0, SeekOrigin.Begin);
         var reader = new BinaryReader(stream);
         return reader.ReadBytes((int)stream.Length);

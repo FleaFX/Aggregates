@@ -23,7 +23,7 @@ public static class ExtensionsForAggregatesOptions {
             services.TryAddScoped(sp =>
                 EventStoreDBCommitDelegate.Create(
                     sp.GetRequiredService<EventStoreClient>(),
-                    Serialization.CreateSerializer(sp.GetRequiredService<EventSerializerDelegate>())
+                    Serialization.CreateSerializer(sp.GetRequiredService<SerializerDelegate>())
                 )
             );
         });

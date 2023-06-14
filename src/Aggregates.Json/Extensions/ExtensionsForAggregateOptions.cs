@@ -13,8 +13,8 @@ public static class ExtensionsForAggregateOptions {
     /// <param name="jsonSerializerOptions">An optional <see cref="JsonSerializerOptions"/> to use.</param>
     public static void UseJson(this AggregatesOptions options, JsonSerializerOptions? jsonSerializerOptions = null) {
         options.AddConfiguration(services => {
-            services.TryAddTransient<EventSerializerDelegate>(_ => (destination, @event) => JsonSerializer.Serialize(destination, @event, @event.GetType(), jsonSerializerOptions));
-            services.TryAddTransient<EventDeserializerDelegate>(_ => (source, target) => JsonSerializer.Deserialize(source, target, jsonSerializerOptions)!);
+            services.TryAddTransient<SerializerDelegate>(_ => (destination, @event) => JsonSerializer.Serialize(destination, @event, @event.GetType(), jsonSerializerOptions));
+            services.TryAddTransient<DeserializerDelegate>(_ => (source, target) => JsonSerializer.Deserialize(source, target, jsonSerializerOptions)!);
         });
     }
 }

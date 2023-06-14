@@ -4,10 +4,10 @@ using System.Reflection;
 namespace Aggregates.EventStoreDB; 
 
 class ResolvedEventDeserializer {
-    readonly EventDeserializerDelegate _deserializer;
+    readonly DeserializerDelegate _deserializer;
     readonly Lazy<Type[]> _eventContracts;
 
-    public ResolvedEventDeserializer(EventDeserializerDelegate deserializer) {
+    public ResolvedEventDeserializer(DeserializerDelegate deserializer) {
         _deserializer = deserializer ?? throw new ArgumentNullException(nameof(deserializer));
 
         // find all types that are attributed with EventContract

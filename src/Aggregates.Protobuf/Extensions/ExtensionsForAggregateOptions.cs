@@ -16,8 +16,8 @@ public static class ExtensionsForAggregateOptions {
         RuntimeTypeModel.Default.Add<DateTimeOffset>(false).SetSurrogate(typeof(DateTimeOffsetSurrogate));
 
         options.AddConfiguration(services => {
-            services.TryAddTransient<EventSerializerDelegate>(_ => Serializer.Serialize);
-            services.TryAddTransient<EventDeserializerDelegate>(_ => (source, target) => Serializer.Deserialize(target, source));
+            services.TryAddTransient<SerializerDelegate>(_ => Serializer.Serialize);
+            services.TryAddTransient<DeserializerDelegate>(_ => (source, target) => Serializer.Deserialize(target, source));
         });
     }
 }
