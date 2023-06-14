@@ -105,14 +105,21 @@ public static class ExtensionsForAggregatesRegistration {
 
         
         return options.AggregateCreationBehaviour.Configure(services)
-            .TryAddUnitOfWork();
+            .TryAddUnitOfWork()
+            .TryAddMetadata();
+    }
+
+    static IServiceCollection TryAddMetadata(this IServiceCollection services) {
+        // register as default ICommandHandler implementation
+        services.TryAddScoped(typeof(ICommandHandler<,,>), typeof(MetadataAwareHandler<,,>));
+
+        return services;
     }
 
     static IServiceCollection TryAddUnitOfWork(this IServiceCollection services) {
         services.TryAddScoped<UnitOfWork>();
 
-        // register as default ICommandHandler implementation
-        services.TryAddScoped(typeof(ICommandHandler<,,>), typeof(UnitOfWorkAwareHandler<,,>));
+        services.TryAddScoped(typeof(UnitOfWorkAwareHandler<,,>));
 
         return services;
     }

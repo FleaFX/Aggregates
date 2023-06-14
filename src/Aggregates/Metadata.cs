@@ -1,19 +1,20 @@
-﻿using System.Collections.Immutable;
+﻿using Aggregates.Util;
+using System.Collections.Immutable;
 
 namespace Aggregates;
 
 /// <summary>
 /// Provides a value that should be added as metadata to a written event.
 /// </summary>
-/// <typeparam name="TEvent">The type of the event to provide metadata for.</typeparam>
+/// <typeparam name="TContext">The type of the context that may provide more information to generate the metadata value.</typeparam>
 /// <typeparam name="TValue">The type of the metadata value.</typeparam>
-public interface IMetadataProvider<in TEvent, out TValue> {
+public interface IMetadataProvider<in TContext, out TValue> {
     /// <summary>
     /// Gets the value for a metadata
     /// </summary>
     /// <param name="event">The event to provide metadata for.</param>
     /// <returns>A <typeparamref name="TValue"/>.</returns>
-    TValue GetValue(TEvent @event);
+    TValue GetValue(TContext @event);
 }
 
 /// <summary>
@@ -22,7 +23,7 @@ public interface IMetadataProvider<in TEvent, out TValue> {
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true, Inherited = false)]
 public class MetadataAttribute : Attribute {
     readonly string _key;
-    readonly Func<object, object> _valueProvider;
+    readonly Func<object, object?> _valueProvider;
 
     /// <summary>
     /// Initializes a new <see cref="MetadataAttribute"/>.
@@ -39,7 +40,7 @@ public class MetadataAttribute : Attribute {
             where iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IMetadataProvider<,>)
             let getValueMethod = iface.GetMethod("GetValue")
             let instance = Activator.CreateInstance(valueProviderType)
-            select new Func<object, object>(@event => getValueMethod.Invoke(instance, new[] { @event }))
+            select new Func<object, object?>(@event => getValueMethod.Invoke(instance, new[] { @event }))
         ).FirstOrDefault();
         if (!(candidate is { } valueProvider)) throw new ArgumentOutOfRangeException(nameof(valueProviderType));
 
@@ -48,11 +49,61 @@ public class MetadataAttribute : Attribute {
     }
 
     /// <summary>
-    /// Adds a metadata entry for the given <paramref name="event"/> to the given <paramref name="metadata"/> collection.
+    /// Creates a <see cref="KeyValuePair"/> to be used in a metadata dictionary using the given <paramref name="context"/>.
     /// </summary>
-    /// <param name="metadata"></param>
-    /// <param name="event"></param>
+    /// <param name="context">A context object that may provide more information to create the metadata.</param>
     /// <returns></returns>
-    public ImmutableDictionary<string, object> Add(ImmutableDictionary<string, object> metadata, object @event) =>
-        metadata.Add(_key, _valueProvider(@event));
+    internal KeyValuePair<string, object?> Create(object context) =>
+        new(_key, _valueProvider(context));
+}
+
+/// <summary>
+/// Provides a scope object into which event metadata can be collected while handling a command.
+/// </summary>
+sealed class MetadataScope : IAsyncDisposable {
+    readonly Dictionary<string, object?> _metadata;
+
+    /// <summary>
+    /// Initializes a new <see cref="MetadataScope"/>.
+    /// </summary>
+    public MetadataScope() {
+        _metadata = new Dictionary<string, object?>();
+
+        Scopes = Scopes.Push(this);
+    }
+
+    /// <summary>
+    /// Gets the current <see cref="MetadataScope"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown if there is no current scope.</exception>
+    public static MetadataScope Current => !Scopes.IsEmpty ? Scopes.Peek() : new MetadataScope();
+
+    /// <summary>
+    /// Adds the given metadata to the scope.
+    /// </summary>
+    /// <param name="metadata">The metadata to add.</param>
+    public void Add(KeyValuePair<string, object?> metadata) =>
+        _metadata.Add(metadata.Key, metadata.Value);
+
+    /// <summary>
+    /// Returns the metadata in the current scope as a <see cref="IDictionary{TKey,TValue}"/>.
+    /// </summary>
+    /// <returns>A <see cref="IDictionary{TKey,TValue}"/>.</returns>
+    public IDictionary<string, object?> ToDictionary() =>
+        _metadata.ToImmutableDictionary();
+
+    static readonly string ThreadId = Guid.NewGuid().ToString("N");
+    static ImmutableStack<MetadataScope> Scopes {
+        get => CallContext<ImmutableStack<MetadataScope>>.LogicalGetData(ThreadId) ?? ImmutableStack.Create<MetadataScope>();
+        set => CallContext<ImmutableStack<MetadataScope>>.LogicalSetData(ThreadId, value);
+    }
+
+    /// <summary>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources asynchronously.</summary>
+    /// <returns>A task that represents the asynchronous dispose operation.</returns>
+    public ValueTask DisposeAsync() {
+        if (!Scopes.IsEmpty)
+            Scopes = Scopes.Pop();
+
+        return ValueTask.CompletedTask;
+    }
 }

@@ -1,5 +1,4 @@
-﻿using System.Collections.Immutable;
-using EventStore.Client;
+﻿using EventStore.Client;
 using System.Reflection;
 using System.Security.Cryptography;
 
@@ -78,11 +77,13 @@ static class Serialization {
     /// </summary>
     /// <param name="event">The event to get the metadata for.</param>
     /// <returns>A <see cref="IDictionary{TKey,TValue}"/>.</returns>
-    static IDictionary<string, object> GetEventMetadata(object @event) =>
-        @event.GetType()
-            .GetCustomAttributes<MetadataAttribute>()
-            .Aggregate(ImmutableDictionary<string, object>.Empty,
-                (metadata, attribute) => attribute.Add(metadata, @event));
+    static IDictionary<string, object?> GetEventMetadata(object @event) {
+        var scope = MetadataScope.Current;
+        foreach (var metadata in @event.GetType().GetCustomAttributes<MetadataAttribute>())
+            scope.Add(metadata.Create(@event));
+
+        return scope.ToDictionary();
+    }
 
     /// <summary>
     /// Serializes the given <paramref name="payload"/> using the given <see cref="SerializerDelegate"/>.
