@@ -1,4 +1,5 @@
-﻿using EventStore.Client;
+﻿using System.Collections.ObjectModel;
+using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using Aggregates.EventStoreDB.Extensions;
@@ -6,7 +7,7 @@ using Aggregates.EventStoreDB.Extensions;
 namespace Aggregates.EventStoreDB; 
 
 class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent> 
-    : ScopedBackgroundService<IServiceScopeFactory, ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, IReaction<TReactionEvent, TCommand, TState, TEvent>> where TReaction : IReaction<TReactionEvent, TCommand, TState, TEvent>
+    : ScopedBackgroundService<IServiceScopeFactory, ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IReaction<TReactionEvent, TCommand, TState, TEvent>> where TReaction : IReaction<TReactionEvent, TCommand, TState, TEvent>
     where TState : IState<TState, TEvent>
     where TCommand : ICommand<TCommand, TState, TEvent> {
     readonly string _persistentSubscriptionGroupName = typeof(TReaction).FullName!;
@@ -28,7 +29,7 @@ class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>
     /// <param name="reaction">The reaction to work.</param>
     /// <param name="stoppingToken">A <see cref="CancellationToken"/> that is signaled when the asynchronous operation should be stopped.</param>
     /// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-    protected override async Task ExecuteCoreAsync(IServiceScopeFactory serviceScopeFactory, ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAllAsync subscribeToAllAsync, ResolvedEventDeserializer deserializer, IReaction<TReactionEvent, TCommand, TState, TEvent> reaction, CancellationToken stoppingToken) {
+    protected override async Task ExecuteCoreAsync(IServiceScopeFactory serviceScopeFactory, ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAllAsync subscribeToAllAsync, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IReaction<TReactionEvent, TCommand, TState, TEvent> reaction, CancellationToken stoppingToken) {
         // setup a new subscription group if it doesn't exist yet
         await Task.WhenAll(
             from sub in (
@@ -61,7 +62,10 @@ class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>
             async (subscription, @event, retryCount, _) => {
                 try {
                     // react to the event and handle each command
-                    await foreach (var command in reaction.ReactAsync((TReactionEvent)deserializer.Deserialize(@event), stoppingToken)) {
+                    await foreach (var command in reaction.ReactAsync(
+                                       (TReactionEvent)deserializer.Deserialize(@event),
+                                       metadataDeserializer.Deserialize(@event),
+                                       stoppingToken)) {
                         using var scope = serviceScopeFactory.CreateScope();
                         var commandHandler = scope.ServiceProvider.GetRequiredService<ICommandHandler<TCommand, TState, TEvent>>();
                         await commandHandler.HandleAsync(command);

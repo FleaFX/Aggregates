@@ -13,8 +13,9 @@ public abstract record SqlProjection<TState, TEvent>(IDbConnectionFactory DbConn
     /// Applies the given <paramref name="event"/> to progress to a new state.
     /// </summary>
     /// <param name="event">The event to apply.</param>
+    /// <param name="metadata">A set of metadata that was saved with the event, if any.</param>
     /// <returns>The new state.</returns>
-    public abstract ICommit<TState> Apply(TEvent @event);
+    public abstract ICommit<TState> Apply(TEvent @event, IReadOnlyDictionary<string, object?>? metadata = null);
 
     /// <summary>
     /// Prepares a <see cref="ICommit{TState}"/> that will execute the given query when committed, along with any queries that were previously prepared.

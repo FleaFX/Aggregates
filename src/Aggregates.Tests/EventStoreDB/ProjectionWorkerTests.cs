@@ -1,5 +1,4 @@
-﻿using System.Data.Common;
-using Aggregates.Sql;
+﻿using Aggregates.Sql;
 using EventStore.Client;
 using FakeItEasy;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +24,7 @@ public class ProjectionWorkerTests {
         A.CallTo(() => serviceProvider.GetService(typeof(CreateToAllAsyncDelegate))).Returns(_createToAllAsync);
         A.CallTo(() => serviceProvider.GetService(typeof(SubscribeToAllAsync))).Returns(_subscribeToAllAsync);
         A.CallTo(() => serviceProvider.GetService(typeof(ResolvedEventDeserializer))).Returns(new ResolvedEventDeserializer((source, target) => null!));
+        A.CallTo(() => serviceProvider.GetService(typeof(MetadataDeserializer))).Returns(new MetadataDeserializer((source, target) => null!));
         A.CallTo(() => serviceProvider.GetService(typeof(IProjection<ExampleProjection, IExampleProjectionEvent>))).Returns(new ExampleProjection(A.Dummy<IDbConnectionFactory>()));
 
         var serviceScope = A.Dummy<IServiceScope>();
@@ -81,7 +81,7 @@ public class ProjectionWorkerTests {
     [EventContract(nameof(EventType2), @namespace: "Projections.Tests")]
     record struct EventType2(int NumberValue) : IExampleProjectionEvent;
     record ExampleProjection(IDbConnectionFactory DbConnectionFactory) : SqlProjection<ExampleProjection, IExampleProjectionEvent>(DbConnectionFactory) {
-        public override ICommit<ExampleProjection> Apply(IExampleProjectionEvent @event) =>
+        public override ICommit<ExampleProjection> Apply(IExampleProjectionEvent @event, IReadOnlyDictionary<string, object?>? metadata = null) =>
             @event switch {
                 EventType1 eventType1 => Query("").Query(""),
                 EventType2 eventType2 => Query("").Query(""),

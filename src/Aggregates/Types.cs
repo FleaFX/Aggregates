@@ -39,8 +39,9 @@ public interface IProjection<TState, in TEvent> {
     /// Applies the given <paramref name="event"/> to progress to a new state.
     /// </summary>
     /// <param name="event">The event to apply.</param>
+    /// <param name="metadata">A set of metadata that was saved with the event, if any.</param>
     /// <returns>The new state.</returns>
-    ICommit<TState> Apply(TEvent @event);
+    ICommit<TState> Apply(TEvent @event, IReadOnlyDictionary<string, object?>? metadata = null);
 }
 
 /// <summary>
@@ -57,17 +58,19 @@ public interface IReaction<in TReactionEvent, out TCommand, TState, TEvent>
     /// Asynchronously reacts to an event by producing a sequence of commands to handle.
     /// </summary>
     /// <param name="event">The instigating event.</param>
+    /// <param name="metadata">A set of metadata that was saved with the event, if any.</param>
     /// <returns>A sequence of commands.</returns>
-    IEnumerable<TCommand> React(TReactionEvent @event) =>
+    IEnumerable<TCommand> React(TReactionEvent @event, IReadOnlyDictionary<string, object?>? metadata = null) =>
         ReactAsync(@event).ToEnumerable();
 
     /// <summary>
     /// Asynchronously reacts to an event by producing a sequence of commands to handle.
     /// </summary>
     /// <param name="event">The instigating event.</param>
+    /// <param name="metadata">A set of metadata that was saved with the event, if any.</param>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous enumeration.</param>
     /// <returns>An asynchronous sequence of commands.</returns>
-    IAsyncEnumerable<TCommand> ReactAsync(TReactionEvent @event, CancellationToken cancellationToken = default) =>
+    IAsyncEnumerable<TCommand> ReactAsync(TReactionEvent @event, IReadOnlyDictionary<string, object?>? metadata = null, CancellationToken cancellationToken = default) =>
         React(@event).ToAsyncEnumerable();
 }
 

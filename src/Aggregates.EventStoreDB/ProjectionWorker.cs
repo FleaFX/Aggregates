@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates.EventStoreDB; 
 
-class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, IProjection<TState, TEvent>> where TState : IProjection<TState, TEvent> {
+class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IProjection<TState, TEvent>> where TState : IProjection<TState, TEvent> {
     readonly string _persistentSubscriptionGroupName = typeof(TState).FullName!;
 
     /// <summary>
@@ -24,7 +24,7 @@ class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncD
     /// <param name="initialState">The initial state of the projection.</param>
     /// <param name="stoppingToken">A <see cref="CancellationToken"/> that is signaled when the asynchronous operation should be stopped.</param>
     /// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAllAsync subscribeToAllAsync, ResolvedEventDeserializer deserializer, IProjection<TState, TEvent> initialState, CancellationToken stoppingToken) {
+    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAllAsync subscribeToAllAsync, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IProjection<TState, TEvent> initialState, CancellationToken stoppingToken) {
         // setup a new subscription group if it doesn't exist yet
         await Task.WhenAll(
             from sub in (
@@ -59,7 +59,7 @@ class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncD
                 try {
                     // apply and commit the projection
                     state = await state
-                        .Apply((TEvent)deserializer.Deserialize(@event))
+                        .Apply((TEvent)deserializer.Deserialize(@event), metadataDeserializer.Deserialize(@event))
                         .CommitAsync(stoppingToken);
 
                     // notify EventStoreDB that we're done
