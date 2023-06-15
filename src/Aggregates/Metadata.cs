@@ -1,5 +1,6 @@
 ﻿using Aggregates.Util;
 using System.Collections.Immutable;
+using Aggregates.Extensions;
 
 namespace Aggregates;
 
@@ -12,15 +13,15 @@ public interface IMetadataProvider<in TContext, out TValue> {
     /// <summary>
     /// Gets the value for a metadata
     /// </summary>
-    /// <param name="event">The event to provide metadata for.</param>
+    /// <param name="context">The context that may provide more information to generate the metadata value.</param>
     /// <returns>A <typeparamref name="TValue"/>.</returns>
-    TValue GetValue(TContext @event);
+    TValue GetValue(TContext context);
 }
 
 /// <summary>
 /// Enriches an event with metadata when saving.
 /// </summary>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true, Inherited = false)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true, Inherited = true)]
 public class MetadataAttribute : Attribute {
     readonly string _key;
     readonly Func<object, object?> _valueProvider;
@@ -67,7 +68,8 @@ sealed class MetadataScope : IAsyncDisposable {
     /// Initializes a new <see cref="MetadataScope"/>.
     /// </summary>
     public MetadataScope() {
-        _metadata = new Dictionary<string, object?>();
+        // attempt to copy values from outer scopes
+        _metadata = (Scopes.TryPeek()?._metadata).CopyOrEmpty();
 
         Scopes = Scopes.Push(this);
     }
@@ -76,7 +78,7 @@ sealed class MetadataScope : IAsyncDisposable {
     /// Gets the current <see cref="MetadataScope"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if there is no current scope.</exception>
-    public static MetadataScope Current => !Scopes.IsEmpty ? Scopes.Peek() : new MetadataScope();
+    public static MetadataScope Current => Scopes.TryPeek(defaultValue: new MetadataScope())!;
 
     /// <summary>
     /// Adds the given metadata to the scope.
