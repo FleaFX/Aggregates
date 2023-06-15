@@ -61,7 +61,7 @@ public interface IReaction<in TReactionEvent, out TCommand, TState, TEvent>
     /// <param name="metadata">A set of metadata that was saved with the event, if any.</param>
     /// <returns>A sequence of commands.</returns>
     IEnumerable<TCommand> React(TReactionEvent @event, IReadOnlyDictionary<string, object?>? metadata = null) =>
-        ReactAsync(@event).ToEnumerable();
+        ReactAsync(@event, metadata).ToEnumerable();
 
     /// <summary>
     /// Asynchronously reacts to an event by producing a sequence of commands to handle.
@@ -71,7 +71,7 @@ public interface IReaction<in TReactionEvent, out TCommand, TState, TEvent>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous enumeration.</param>
     /// <returns>An asynchronous sequence of commands.</returns>
     IAsyncEnumerable<TCommand> ReactAsync(TReactionEvent @event, IReadOnlyDictionary<string, object?>? metadata = null, CancellationToken cancellationToken = default) =>
-        React(@event).ToAsyncEnumerable();
+        React(@event, metadata).ToAsyncEnumerable();
 }
 
 /// <summary>
