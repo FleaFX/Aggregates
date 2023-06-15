@@ -33,6 +33,7 @@ public static class ExtensionsForProjectionsOptions {
             services.TryAddScoped<CreateToAllAsyncDelegate>(sp => sp.GetRequiredService<EventStorePersistentSubscriptionsClient>().CreateToAllAsync);
             services.TryAddScoped<SubscribeToAllAsync>(sp => sp.GetRequiredService<EventStorePersistentSubscriptionsClient>().SubscribeToAllAsync);
             services.TryAddScoped(typeof(ResolvedEventDeserializer));
+            services.TryAddScoped(typeof(MetadataDeserializer));
 
             // find all implementations of IProjection<,> and register a ProjectionWorker for it
             foreach (var (stateType, eventType) in
