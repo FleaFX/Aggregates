@@ -20,6 +20,7 @@ public static class ExtensionsForAggregatesOptions {
 
             services.TryAddScoped(typeof(IRepository<,>), typeof(EventStoreDBRepository<,>));
             services.TryAddScoped(typeof(ResolvedEventDeserializer));
+            services.TryAddScoped(typeof(MetadataDeserializer));
             services.TryAddScoped(sp =>
                 EventStoreDBCommitDelegate.Create(
                     sp.GetRequiredService<EventStoreClient>(),
