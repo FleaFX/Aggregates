@@ -47,7 +47,7 @@ sealed record AggregateRoot<TState, TEvent>(TState? State, AggregateVersion Vers
     /// <summary>
     /// Gets the current state of the aggregate.
     /// </summary>
-    TState State { get; set; } = State ?? TState.Initial;
+    public TState State { get; set; } = State ?? TState.Initial;
 
     /// <summary>
     /// Gets the sequence of changes that were applied, if any.

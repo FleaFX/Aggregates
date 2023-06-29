@@ -73,7 +73,7 @@ class ModificationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, 
     /// <param name="command">The command object to handle.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TCommand command) {
-        var aggregateRoot = await _repository.GetAsync(command);
+        var aggregateRoot = await _repository.GetAggregateRootAsync(command);
         await aggregateRoot.AcceptAsync(command);
     }
 }
@@ -134,7 +134,7 @@ class GetOrAddHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TSta
     /// <param name="command">The command object to handle.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TCommand command) {
-        var aggregateRoot = await _repository.TryGetAsync(command);
+        var aggregateRoot = await _repository.TryGetAggregateRootAsync(command);
         if (aggregateRoot is null) {
             aggregateRoot = new AggregateRoot<TState, TEvent>(TState.Initial, AggregateVersion.None);
             _repository.Add(command, aggregateRoot);
