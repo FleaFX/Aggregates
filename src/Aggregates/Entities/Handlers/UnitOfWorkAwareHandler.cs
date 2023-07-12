@@ -1,10 +1,10 @@
 ﻿using Aggregates.Types;
 
-namespace Aggregates.Entities.CommandHandlers;
+namespace Aggregates.Entities.Handlers;
 
 /// <summary>
 /// Handler that commits changes tracked by the given <see cref="UnitOfWork"/>.
-/// </summary>DefaultHandler
+/// </summary>
 class UnitOfWorkAwareHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
     where TCommand : ICommand<TCommand, TState, TEvent>
     where TState : IState<TState, TEvent> {

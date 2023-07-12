@@ -52,7 +52,7 @@ public interface IRepository<TState, TEvent> where TState : IState<TState, TEven
     /// </summary>
     /// <param name="identifier">Uniquely identifies the aggregate to retrieve.</param>
     /// <returns>An awaitable <see cref="ValueTask{TResult}"/>, which resolves to a <see cref="SagaRoot{TState,TEvent}"/> or <see langword="null"/> if it wasn't found.</returns>
-    internal ValueTask<SagaRoot<TState, TEvent>> TryGetSagaRootAsync(AggregateIdentifier identifier);
+    internal ValueTask<SagaRoot<TState, TEvent>?> TryGetSagaRootAsync(AggregateIdentifier identifier);
 
     /// <summary>
     /// Asynchronously retrieves the <see cref="SagaRoot{TState,TEvent}"/> associated with the given <paramref name="identifier"/>.

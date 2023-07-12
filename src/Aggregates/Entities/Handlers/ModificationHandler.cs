@@ -1,6 +1,6 @@
 ﻿using Aggregates.Types;
 
-namespace Aggregates.Entities.CommandHandlers;
+namespace Aggregates.Entities.Handlers;
 
 /// <summary>
 /// Handler that retrieves an existing <see cref="EntityRoot{TState,TEvent}"/> object from the repository and uses the given command to affect its state.

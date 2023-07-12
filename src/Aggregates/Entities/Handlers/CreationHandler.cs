@@ -1,6 +1,6 @@
 ﻿using Aggregates.Types;
 
-namespace Aggregates.Entities.CommandHandlers;
+namespace Aggregates.Entities.Handlers;
 
 /// <summary>
 /// Handler that creates a new <see cref="EntityRoot{TState,TEvent}"/> object and adds it to the repository.

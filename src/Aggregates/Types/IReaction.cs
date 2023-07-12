@@ -1,4 +1,6 @@
-﻿namespace Aggregates.Types;
+﻿using System.Runtime.CompilerServices;
+
+namespace Aggregates.Types;
 
 /// <summary>
 /// Reacts to an event by producing new commands to handle.
@@ -60,6 +62,9 @@ public interface IReaction<in TReactionState, in TReactionEvent, out TCommand, T
     /// <param name="metadata">A set of metadata that was saved with the event, if any.</param>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous enumeration.</param>
     /// <returns>An asynchronous sequence of commands.</returns>
-    IAsyncEnumerable<TCommand> ReactAsync(TReactionState state, TReactionEvent @event, IReadOnlyDictionary<string, object?>? metadata = null, CancellationToken cancellationToken = default) =>
-        React(state, @event, metadata).ToAsyncEnumerable();
+    async IAsyncEnumerable<TCommand> ReactAsync(TReactionState state, TReactionEvent @event, IReadOnlyDictionary<string, object?>? metadata = null, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
+        await foreach (var command in React(state, @event, metadata).ToAsyncEnumerable().WithCancellation(cancellationToken)) {
+            yield return command;
+        }
+    }
 }

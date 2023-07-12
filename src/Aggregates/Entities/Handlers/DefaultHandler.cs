@@ -1,6 +1,6 @@
 ﻿using Aggregates.Types;
 
-namespace Aggregates.Entities.CommandHandlers;
+namespace Aggregates.Entities.Handlers;
 
 /// <summary>
 /// Handler that decides whether a given command creates a new or affects an existing <see cref="EntityRoot{TState,TEvent}"/> object and acts accordingly.

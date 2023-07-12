@@ -1,6 +1,6 @@
 ﻿using Aggregates.Types;
 
-namespace Aggregates.Entities.CommandHandlers;
+namespace Aggregates.Entities.Handlers;
 
 /// <summary>
 /// Handlers that first tries to retrieve an <see cref="EntityRoot{TState,TEvent}"/> object, and if it doesn't exist yet, adds it to the repository.
