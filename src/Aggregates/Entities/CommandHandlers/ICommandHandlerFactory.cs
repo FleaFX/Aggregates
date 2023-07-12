@@ -1,6 +1,6 @@
 ﻿using Aggregates.Types;
 
-namespace Aggregates.Aggregates.CommandHandlers;
+namespace Aggregates.Entities.CommandHandlers;
 
 interface ICommandHandlerFactory {
     ICommandHandler<TCommand, TState, TEvent> Create<TCommand, TState, TEvent>()

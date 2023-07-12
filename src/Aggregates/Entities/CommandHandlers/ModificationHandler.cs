@@ -1,23 +1,23 @@
 ﻿using Aggregates.Types;
 
-namespace Aggregates.Aggregates.CommandHandlers;
+namespace Aggregates.Entities.CommandHandlers;
 
 /// <summary>
-/// Handler that creates a new <see cref="AggregateRoot{TState,TEvent}"/> object and adds it to the repository.
+/// Handler that retrieves an existing <see cref="EntityRoot{TState,TEvent}"/> object from the repository and uses the given command to affect its state.
 /// </summary>
 /// <typeparam name="TCommand">The type of the command that affects the state of the aggregate.</typeparam>
 /// <typeparam name="TState">The type of the maintained state object.</typeparam>
 /// <typeparam name="TEvent">The type of the event(s) that are applicable.</typeparam>
-class CreationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
+class ModificationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
     where TCommand : ICommand<TCommand, TState, TEvent>
     where TState : IState<TState, TEvent> {
     readonly IRepository<TState, TEvent> _repository;
 
     /// <summary>
-    /// Initializes a new <see cref="CreationHandler{TCommand,TState,TEvent}"/>.
+    /// Initializes a new <see cref="ModificationHandler{TCommand,TState,TEvent}"/>.
     /// </summary>
     /// <param name="repository">The <see cref="IRepository{TState,TEvent}"/> to use when retrieving the aggregate which is affected by the handled command.</param>
-    public CreationHandler(IRepository<TState, TEvent> repository) =>
+    public ModificationHandler(IRepository<TState, TEvent> repository) =>
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
 
     /// <summary>
@@ -26,8 +26,7 @@ class CreationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TSta
     /// <param name="command">The command object to handle.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TCommand command) {
-        var aggregateRoot = new AggregateRoot<TState, TEvent>(TState.Initial, AggregateVersion.None);
+        var aggregateRoot = await _repository.GetEntityRootAsync(command);
         await aggregateRoot.AcceptAsync(command);
-        _repository.Add(command, aggregateRoot);
     }
 }

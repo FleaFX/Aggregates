@@ -1,4 +1,4 @@
-﻿namespace Aggregates.Aggregates.CommandHandlers;
+﻿namespace Aggregates.Entities.CommandHandlers;
 
 /// <summary>
 /// Provides the type to use when checking whether commands are creation commands.

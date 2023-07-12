@@ -1,14 +1,14 @@
 ﻿using Aggregates.Extensions;
 using Aggregates.Types;
 
-namespace Aggregates.Aggregates;
+namespace Aggregates.Entities;
 
 /// <summary>
 /// Base class for domain objects that are aggregate root. 
 /// </summary>
 /// <typeparam name="TState">The type of the maintained state object.</typeparam>
 /// <typeparam name="TEvent">The type of the event(s) that are applicable.</typeparam>
-sealed record AggregateRoot<TState, TEvent>(TState? State, AggregateVersion Version) : IAggregateRoot where TState : IState<TState, TEvent> {
+sealed record EntityRoot<TState, TEvent>(TState? State, AggregateVersion Version) : IAggregateRoot where TState : IState<TState, TEvent> {
     readonly List<object> _changes = new();
 
     /// <summary>
@@ -33,5 +33,5 @@ sealed record AggregateRoot<TState, TEvent>(TState? State, AggregateVersion Vers
             .TapAsync(@event => _changes.Add(@event))
             .AggregateAsync(State, static (state, @event) => state.Apply(@event), cancellationToken: cancellationToken);
 
-    public static implicit operator TState(AggregateRoot<TState, TEvent> instance) => instance.State;
+    public static implicit operator TState(EntityRoot<TState, TEvent> instance) => instance.State;
 }

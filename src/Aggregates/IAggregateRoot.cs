@@ -1,4 +1,4 @@
-﻿namespace Aggregates.Aggregates;
+﻿namespace Aggregates;
 
 interface IAggregateRoot {
     /// <summary>

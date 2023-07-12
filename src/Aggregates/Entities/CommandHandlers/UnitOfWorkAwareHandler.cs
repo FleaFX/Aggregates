@@ -1,6 +1,6 @@
 ﻿using Aggregates.Types;
 
-namespace Aggregates.Aggregates.CommandHandlers;
+namespace Aggregates.Entities.CommandHandlers;
 
 /// <summary>
 /// Handler that commits changes tracked by the given <see cref="UnitOfWork"/>.

@@ -1,9 +1,9 @@
 ﻿using Aggregates.Types;
 
-namespace Aggregates.Aggregates.CommandHandlers;
+namespace Aggregates.Entities.CommandHandlers;
 
 /// <summary>
-/// Handler that decides whether a given command creates a new or affects an existing <see cref="AggregateRoot{TState,TEvent}"/> object and acts accordingly.
+/// Handler that decides whether a given command creates a new or affects an existing <see cref="EntityRoot{TState,TEvent}"/> object and acts accordingly.
 /// </summary>c
 class DefaultHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
     where TCommand : ICommand<TCommand, TState, TEvent>

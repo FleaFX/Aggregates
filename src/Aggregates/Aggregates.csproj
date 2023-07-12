@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Folder Include="Sagas\" />
     <Folder Include="Properties\" />
     <Folder Include="Util\" />
   </ItemGroup>

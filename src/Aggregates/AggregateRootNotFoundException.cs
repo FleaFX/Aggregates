@@ -1,10 +1,10 @@
-﻿using Aggregates.Aggregates;
+﻿using Aggregates.Entities;
 using Aggregates.Types;
 
 namespace Aggregates;
 
 /// <summary>
-/// Thrown when retrieving an <see cref="AggregateRoot{TState,TEvent}"/> for a non-existent <see cref="AggregateIdentifier"/>.
+/// Thrown when retrieving an <see cref="EntityRoot{TState,TEvent}"/> for a non-existent <see cref="AggregateIdentifier"/>.
 /// </summary>
 public class AggregateRootNotFoundException : Exception {
     /// <summary>

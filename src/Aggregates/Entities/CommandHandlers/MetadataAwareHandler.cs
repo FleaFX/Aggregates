@@ -1,8 +1,8 @@
-﻿using Aggregates.Metadata;
+﻿using System.Reflection;
+using Aggregates.Metadata;
 using Aggregates.Types;
-using System.Reflection;
 
-namespace Aggregates.Aggregates.CommandHandlers;
+namespace Aggregates.Entities.CommandHandlers;
 
 class MetadataAwareHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
     where TCommand : ICommand<TCommand, TState, TEvent>

@@ -1,5 +1,4 @@
-﻿using Aggregates.Aggregates;
-using Aggregates.Types;
+﻿using Aggregates.Types;
 
 namespace Aggregates;
 
