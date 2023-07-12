@@ -1,7 +1,6 @@
 ﻿using Aggregates.Configuration;
 using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 
 namespace Aggregates.Sagas.Handlers;
 
@@ -33,12 +32,12 @@ class DefaultHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TC
         IRepository<TReactionState, TReactionEvent> repository,
         IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> reaction,
         IServiceScopeFactory serviceScopeFactory,
-        IOptions<AggregatesOptions> aggregatesOptions
+        AggregatesOptions aggregatesOptions
     ) {
         _repository = repository;
         _reaction = reaction;
         _serviceScopeFactory = serviceScopeFactory;
-        _sagaIdMetadataKey = aggregatesOptions.Value.SagaIdKey;
+        _sagaIdMetadataKey = aggregatesOptions.SagaIdKey;
     }
 
     /// <summary>

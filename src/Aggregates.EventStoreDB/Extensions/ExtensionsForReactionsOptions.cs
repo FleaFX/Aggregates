@@ -39,7 +39,7 @@ public static class ExtensionsForReactionsOptions {
             services.TryAddScoped(typeof(ResolvedEventDeserializer));
             services.TryAddScoped(typeof(MetadataDeserializer));
 
-            // find all implementations of IProjection<,> and register a ProjectionWorker for it
+            // find all implementations of IReaction<,,,> and register a ReactionWorker for it
             foreach (var (type, reactionType, commandType, stateType, eventType) in
                      from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
                      from type in assembly.GetTypes()
@@ -51,6 +51,20 @@ public static class ExtensionsForReactionsOptions {
 
                      select (type, reactionType: genericArgs[0], commandType: genericArgs[1], stateType: genericArgs[2], eventType: genericArgs[3])) {
                 services.AddSingleton(typeof(IHostedService), typeof(ReactionWorker<,,,,>).MakeGenericType(type, reactionType, commandType, stateType, eventType));
+            }
+
+            // find all implementations of IReaction<,,,,> and register a SagaWorker for it
+            foreach (var (reactionStateType, reactionEventType, commandType, commandStateType, commandEventType) in
+                     from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+                     from type in assembly.GetTypes()
+                     where !type.IsAbstract
+
+                     from iface in type.GetInterfaces()
+                     where iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IReaction<,,,,>)
+                     let genericArgs = iface.GetGenericArguments()
+
+                     select (reactionStateType: genericArgs[0], reactionEventType: genericArgs[1], commandType: genericArgs[2], commandStateType: genericArgs[3], commandEventType: genericArgs[4])) {
+                services.AddSingleton(typeof(IHostedService), typeof(SagaWorker<,,,,>).MakeGenericType(reactionStateType, reactionEventType, commandType, commandStateType, commandEventType));
             }
         });
     }

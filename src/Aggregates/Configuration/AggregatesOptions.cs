@@ -15,7 +15,7 @@ public class AggregatesOptions {
     /// Use <see cref="AggregateCreationBehaviour.Automatic()" /> or <see cref="AggregateCreationBehaviour.UseMarkerInterface{T}()" /> to configure the desired
     /// command handler behaviour.
     /// </remarks>
-    public AggregateCreationBehaviour AggregateCreationBehaviour { get; set; }
+    public AggregateCreationBehaviour AggregateCreationBehaviour { get; set; } = AggregateCreationBehaviour.Automatic();
 
     /// <summary>
     /// Gets or sets the key by which the <see cref="AggregateIdentifier"/> of a saga will be referenced in the metadata of a stored event.

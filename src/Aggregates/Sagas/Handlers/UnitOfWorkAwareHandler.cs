@@ -5,8 +5,7 @@ namespace Aggregates.Sagas.Handlers;
 /// <summary>
 /// Handler that commits changes tracked by the given <see cref="UnitOfWork"/>.
 /// </summary>
-class UnitOfWorkAwareHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>
-    where TReactionState : IState<TReactionState, TReactionEvent>
+class UnitOfWorkAwareHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> : ISagaHandler<TReactionEvent> where TReactionState : IState<TReactionState, TReactionEvent>
     where TCommand : ICommand<TCommand, TCommandState, TCommandEvent>
     where TCommandState : IState<TCommandState, TCommandEvent> {
     readonly UnitOfWork _unitOfWork;

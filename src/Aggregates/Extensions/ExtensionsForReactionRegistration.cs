@@ -4,6 +4,8 @@ using Aggregates.Extensions;
 using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
+using Aggregates.Sagas.Handlers;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Aggregates;
 
@@ -32,7 +34,7 @@ public static class ExtensionsForReactionRegistration {
 
         options.ConfigureServices?.Invoke(services);
 
-        // find all implementations of IReaction and register them
+        // find all (simple) implementations of IReaction and register them
         foreach (var (implType, reactionEventType, commandType, stateType, eventType) in
                  from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
                  from type in assembly.GetTypes()
@@ -45,6 +47,23 @@ public static class ExtensionsForReactionRegistration {
                  select (type, genericArgs[0], genericArgs[1], genericArgs[2], genericArgs[3])) {
             services.AddScoped(typeof(IReaction<,,,>).MakeGenericType(reactionEventType, commandType, stateType, eventType), implType);
         }
+
+        // find all stateful implementations of IReaction and register them
+        foreach (var (implType, reactionStateType, reactionEventType, commandType, commandStateType, commandEventType) in
+                 from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+                 from type in assembly.GetTypes()
+
+                 from @interface in type.GetInterfaces()
+                 where @interface.IsGenericType && @interface.GetGenericTypeDefinition() == typeof(IReaction<,,,,>)
+
+                 let genericArgs = @interface.GetGenericArguments()
+
+                 select (type, genericArgs[0], genericArgs[1], genericArgs[2], genericArgs[3], genericArgs[4])) {
+            services.AddScoped(typeof(IReaction<,,,,>).MakeGenericType(reactionStateType, reactionEventType, commandType, commandStateType, commandEventType), implType);
+        }
+
+        services.TryAddScoped(typeof(DefaultHandler<,,,,>));
+        services.TryAddScoped(typeof(ISagaHandler<>), typeof(UnitOfWorkAwareHandler<,,,,>));
 
         return services;
     }

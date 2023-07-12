@@ -16,12 +16,14 @@ public static class ExtensionsForAggregatesRegistration {
     /// <returns>A <see cref="IServiceCollection"/>.</returns>
     public static IServiceCollection UseAggregates(this IServiceCollection services, Action<AggregatesOptions> configure) {
         var options = new AggregatesOptions {
-            AggregateCreationBehaviour = AggregateCreationBehaviour.Automatic()
+            AggregateCreationBehaviour = AggregateCreationBehaviour.Automatic(),
+            SagaIdKey = "SagaId"
         };
         configure(options);
 
-        options.ConfigureServices?.Invoke(services);
+        services.TryAddSingleton(options);
 
+        options.ConfigureServices?.Invoke(services);
 
         return options.AggregateCreationBehaviour.Configure(services)
             .TryAddUnitOfWork()

@@ -8,8 +8,7 @@ using Aggregates.EventStoreDB.Util;
 
 namespace Aggregates.EventStoreDB.Workers;
 
-class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IProjection<TState, TEvent>> where TState : IProjection<TState, TEvent>
-{
+class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IProjection<TState, TEvent>> where TState : IProjection<TState, TEvent> {
     readonly string _persistentSubscriptionGroupName = typeof(TState).FullName!;
 
     /// <summary>
@@ -28,8 +27,7 @@ class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncD
     /// <param name="initialState">The initial state of the projection.</param>
     /// <param name="stoppingToken">A <see cref="CancellationToken"/> that is signaled when the asynchronous operation should be stopped.</param>
     /// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAllAsync subscribeToAllAsync, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IProjection<TState, TEvent> initialState, CancellationToken stoppingToken)
-    {
+    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAllAsync subscribeToAllAsync, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IProjection<TState, TEvent> initialState, CancellationToken stoppingToken) {
         // setup a new subscription group if it doesn't exist yet
         await Task.WhenAll(
             from sub in (
@@ -46,8 +44,7 @@ class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncD
                 let attr = type.GetCustomAttribute<EventContractAttribute>()
                 where type.IsAssignableTo(typeof(TEvent)) && attr != null
                 select (type, attr)
-            ).TrySelect(tuple =>
-            {
+            ).TrySelect(tuple => {
                 var (eventType, contract) = tuple;
                 initialState.Apply((TEvent)Activator.CreateInstance(eventType)!);
                 return contract;
@@ -61,10 +58,8 @@ class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncD
         //now connect the subscription and start updating the projection state
         var state = initialState;
         using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
-            async (subscription, @event, retryCount, _) =>
-            {
-                try
-                {
+            async (subscription, @event, retryCount, _) => {
+                try {
                     // apply and commit the projection
                     state = await state
                         .Apply((TEvent)deserializer.Deserialize(@event), metadataDeserializer.Deserialize(@event))
@@ -72,9 +67,7 @@ class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncD
 
                     // notify EventStoreDB that we're done
                     await subscription.Ack(@event);
-                }
-                catch (Exception ex)
-                {
+                } catch (Exception ex) {
                     await subscription.Nack(
                         retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
                         ex.Message, @event);
