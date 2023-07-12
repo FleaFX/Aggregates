@@ -1,4 +1,4 @@
-﻿namespace Aggregates.EventStoreDB.Extensions; 
+﻿namespace Aggregates.EventStoreDB.Extensions;
 
 static class ExtensionsForIEnumerable {
     /// <summary>

@@ -1,10 +1,11 @@
 ﻿// ReSharper disable CheckNamespace
 
+using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ProtoBuf;
 using ProtoBuf.Meta;
 
-namespace Aggregates.Protobuf; 
+namespace Aggregates.Protobuf;
 
 public static class ExtensionsForAggregateOptions {
     /// <summary>

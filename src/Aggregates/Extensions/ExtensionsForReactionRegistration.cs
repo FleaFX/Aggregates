@@ -1,10 +1,11 @@
 ﻿// ReSharper disable CheckNamespace
 
 using Aggregates.Extensions;
+using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 
-namespace Aggregates; 
+namespace Aggregates;
 
 public class ReactionsOptions {
     /// <summary>

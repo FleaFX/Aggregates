@@ -1,12 +1,12 @@
-﻿using System.Collections.ObjectModel;
+﻿using Aggregates.EventStoreDB.Extensions;
+using Aggregates.Types;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
-using Aggregates.EventStoreDB.Extensions;
 
-namespace Aggregates.EventStoreDB; 
+namespace Aggregates.EventStoreDB;
 
-class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent> 
+class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>
     : ScopedBackgroundService<IServiceScopeFactory, ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IReaction<TReactionEvent, TCommand, TState, TEvent>> where TReaction : IReaction<TReactionEvent, TCommand, TState, TEvent>
     where TState : IState<TState, TEvent>
     where TCommand : ICommand<TCommand, TState, TEvent> {

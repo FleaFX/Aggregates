@@ -1,6 +1,8 @@
 ﻿// ReSharper disable CheckNamespace
 
+using Aggregates.Aggregates.CommandHandlers;
 using Aggregates.Extensions;
+using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -103,7 +105,7 @@ public static class ExtensionsForAggregatesRegistration {
 
         options.ConfigureServices?.Invoke(services);
 
-        
+
         return options.AggregateCreationBehaviour.Configure(services)
             .TryAddUnitOfWork()
             .TryAddMetadata();

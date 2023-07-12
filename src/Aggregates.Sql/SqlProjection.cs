@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using Aggregates.Types;
+using System.Data;
 
 namespace Aggregates.Sql;
 

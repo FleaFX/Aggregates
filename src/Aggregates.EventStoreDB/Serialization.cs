@@ -1,8 +1,10 @@
-﻿using EventStore.Client;
+﻿using Aggregates.Metadata;
+using Aggregates.Types;
+using EventStore.Client;
 using System.Reflection;
 using System.Security.Cryptography;
 
-namespace Aggregates.EventStoreDB; 
+namespace Aggregates.EventStoreDB;
 
 static class Serialization {
     /// <summary>
@@ -28,7 +30,7 @@ static class Serialization {
 
                 data:
                 SerializePayload(serializer, @event),
-                
+
                 metadata:
                 SerializePayload(serializer, GetEventMetadata(@event)));
 

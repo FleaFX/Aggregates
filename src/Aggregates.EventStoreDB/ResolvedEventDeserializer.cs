@@ -1,7 +1,8 @@
-﻿using EventStore.Client;
+﻿using Aggregates.Types;
+using EventStore.Client;
 using System.Reflection;
 
-namespace Aggregates.EventStoreDB; 
+namespace Aggregates.EventStoreDB;
 
 class ResolvedEventDeserializer {
     readonly DeserializerDelegate _deserializer;

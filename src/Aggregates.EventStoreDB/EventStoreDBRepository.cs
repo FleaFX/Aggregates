@@ -1,6 +1,8 @@
-﻿using EventStore.Client;
+﻿using Aggregates.Aggregates;
+using Aggregates.Types;
+using EventStore.Client;
 
-namespace Aggregates.EventStoreDB; 
+namespace Aggregates.EventStoreDB;
 
 class EventStoreDBRepository<TState, TEvent> : BaseRepository<TState, TEvent> where TState : IState<TState, TEvent> {
     readonly EventStoreClient _eventStoreClient;
@@ -30,8 +32,7 @@ class EventStoreDBRepository<TState, TEvent> : BaseRepository<TState, TEvent> wh
             var state = events.Select(_deserializer.Deserialize).Cast<TEvent>().Aggregate(TState.Initial, (state, @event) => state.Apply(@event));
 
             return new AggregateRoot<TState, TEvent>(state, new AggregateVersion(events.Length - 1L));
-        }
-        catch (StreamNotFoundException) {
+        } catch (StreamNotFoundException) {
             return null;
         }
     }

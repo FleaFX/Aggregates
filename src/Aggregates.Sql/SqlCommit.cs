@@ -1,4 +1,5 @@
-﻿using System.Collections.Immutable;
+﻿using Aggregates.Types;
+using System.Collections.Immutable;
 using System.Data;
 using System.Reflection;
 

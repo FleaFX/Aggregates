@@ -1,4 +1,7 @@
-﻿namespace Aggregates; 
+﻿using Aggregates.Aggregates;
+using Aggregates.Types;
+
+namespace Aggregates;
 
 /// <summary>
 /// Thrown when retrieving an <see cref="AggregateRoot{TState,TEvent}"/> for a non-existent <see cref="AggregateIdentifier"/>.

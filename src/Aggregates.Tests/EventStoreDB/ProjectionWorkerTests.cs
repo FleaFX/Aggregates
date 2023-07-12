@@ -1,9 +1,10 @@
 ﻿using Aggregates.Sql;
+using Aggregates.Types;
 using EventStore.Client;
 using FakeItEasy;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Aggregates.EventStoreDB; 
+namespace Aggregates.EventStoreDB;
 
 public class ProjectionWorkerTests {
     readonly IServiceScopeFactory _serviceScopeFactory;
@@ -47,7 +48,7 @@ public class ProjectionWorkerTests {
                     null, groupName,
                     null, Enumerable.Empty<PersistentSubscriptionConnectionInfo>(), null, null)
             });
-        
+
         var cts = new CancellationTokenSource();
         await _worker.StartAsync(cts.Token);
         cts.Cancel();

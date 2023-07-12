@@ -1,11 +1,12 @@
 ﻿// ReSharper disable CheckNamespace
 
+using Aggregates.Types;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
-namespace Aggregates.EventStoreDB; 
+namespace Aggregates.EventStoreDB;
 
 public static class ExtensionsForProjectionsOptions {
     /// <summary>
@@ -15,7 +16,7 @@ public static class ExtensionsForProjectionsOptions {
     /// <param name="connectionString">The connection string to use when connecting to EventStoreDB.</param>
     public static void UseEventStoreDB(this ProjectionsOptions options, string connectionString) {
         options.AddConfiguration(services => {
-            services.TryAddSingleton(_ => 
+            services.TryAddSingleton(_ =>
                 new EventStorePersistentSubscriptionsClient(EventStoreClientSettings.Create(connectionString))
             );
 

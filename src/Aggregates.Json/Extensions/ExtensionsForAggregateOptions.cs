@@ -1,9 +1,10 @@
 ﻿// ReSharper disable CheckNamespace
 
-using System.Text.Json;
+using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Text.Json;
 
-namespace Aggregates.Json; 
+namespace Aggregates.Json;
 
 public static class ExtensionsForAggregateOptions {
     /// <summary>

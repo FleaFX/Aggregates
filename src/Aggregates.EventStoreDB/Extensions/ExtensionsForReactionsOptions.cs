@@ -1,11 +1,12 @@
 ﻿// ReSharper disable CheckNamespace
 
+using Aggregates.Types;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
-namespace Aggregates.EventStoreDB; 
+namespace Aggregates.EventStoreDB;
 
 public static class ExtensionsForReactionsOptions {
     /// <summary>

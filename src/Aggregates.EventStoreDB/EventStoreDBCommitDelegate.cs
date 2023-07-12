@@ -1,6 +1,6 @@
 ﻿using EventStore.Client;
 
-namespace Aggregates.EventStoreDB; 
+namespace Aggregates.EventStoreDB;
 
 static class EventStoreDBCommitDelegate {
     /// <summary>

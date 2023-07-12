@@ -1,40 +1,7 @@
 ﻿using Aggregates.Extensions;
+using Aggregates.Types;
 
-namespace Aggregates;
-
-struct AggregateVersion {
-    readonly long _value;
-
-    /// <summary>
-    /// Version used when the aggregate has no prior existing history.
-    /// </summary>
-    public static AggregateVersion None => new(long.MinValue);
-
-    /// <summary>
-    /// Initializes a new <see cref="AggregateVersion"/>.
-    /// </summary>
-    /// <param name="value"></param>
-    public AggregateVersion(long value) => _value = value >= 0 ? value : long.MinValue;
-
-    /// <summary>
-    /// Implicitly casts the given <paramref name="instance"/> to a <see cref="long"/>.
-    /// </summary>
-    /// <param name="instance">The <see cref="AggregateVersion"/> to cast.</param>
-    public static implicit operator long(AggregateVersion instance) => instance._value;
-}
-
-interface IAggregateRoot {
-    /// <summary>
-    /// Gets the version that the aggregate instance is at.
-    /// </summary>
-    AggregateVersion Version { get; }
-
-    /// <summary>
-    /// Gets the sequence of changes that were applied, if any.
-    /// </summary>
-    /// <returns>A <see cref="IEnumerable{T}"/>.</returns>
-    IEnumerable<object> GetChanges();
-}
+namespace Aggregates.Aggregates;
 
 /// <summary>
 /// Base class for domain objects that are aggregate root. 
@@ -67,16 +34,4 @@ sealed record AggregateRoot<TState, TEvent>(TState? State, AggregateVersion Vers
             .AggregateAsync(State, static (state, @event) => state.Apply(@event), cancellationToken: cancellationToken);
 
     public static implicit operator TState(AggregateRoot<TState, TEvent> instance) => instance.State;
-}
-
-/// <summary>
-/// Ties the <paramref name="AggregateRoot"/> to its unique <paramref name="Identifier"/> within the system.
-/// </summary>
-/// <param name="Identifier">Uniquely identifies the aggregate within the system.</param>
-/// <param name="AggregateRoot">The root object of the aggregate.</param>
-readonly record struct Aggregate(AggregateIdentifier Identifier, IAggregateRoot AggregateRoot) {
-    /// <summary>
-    /// Used to check whether an aggregate was loaded.
-    /// </summary>
-    public static Aggregate None => new();
 }

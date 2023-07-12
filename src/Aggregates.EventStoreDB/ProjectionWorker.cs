@@ -1,9 +1,10 @@
-﻿using EventStore.Client;
-using System.Reflection;
-using Aggregates.EventStoreDB.Extensions;
+﻿using Aggregates.EventStoreDB.Extensions;
+using Aggregates.Types;
+using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
 
-namespace Aggregates.EventStoreDB; 
+namespace Aggregates.EventStoreDB;
 
 class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IProjection<TState, TEvent>> where TState : IProjection<TState, TEvent> {
     readonly string _persistentSubscriptionGroupName = typeof(TState).FullName!;

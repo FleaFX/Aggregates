@@ -1,4 +1,5 @@
-﻿using Aggregates.Util;
+﻿using Aggregates.Types;
+using Aggregates.Util;
 using System.Collections.Immutable;
 
 namespace Aggregates;
