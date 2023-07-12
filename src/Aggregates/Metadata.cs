@@ -67,18 +67,19 @@ sealed class MetadataScope : IAsyncDisposable {
     /// <summary>
     /// Initializes a new <see cref="MetadataScope"/>.
     /// </summary>
-    public MetadataScope() {
+    public MetadataScope(bool noPush = false) {
         // attempt to copy values from outer scopes
         _metadata = (Scopes.TryPeek()?._metadata).CopyOrEmpty();
 
-        Scopes = Scopes.Push(this);
+        if (!noPush)
+            Scopes = Scopes.Push(this);
     }
 
     /// <summary>
     /// Gets the current <see cref="MetadataScope"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown if there is no current scope.</exception>
-    public static MetadataScope Current => Scopes.TryPeek(defaultValue: new MetadataScope())!;
+    public static MetadataScope Current => Scopes.TryPeek(defaultValue: new MetadataScope(true))!;
 
     /// <summary>
     /// Adds the given metadata to the scope.
@@ -92,7 +93,7 @@ sealed class MetadataScope : IAsyncDisposable {
     /// </summary>
     /// <returns>A <see cref="IDictionary{TKey,TValue}"/>.</returns>
     public IDictionary<string, object?> ToDictionary() =>
-        _metadata.ToImmutableDictionary();
+        _metadata.AsReadOnly();
 
     static readonly string ThreadId = Guid.NewGuid().ToString("N");
     static ImmutableStack<MetadataScope> Scopes {
