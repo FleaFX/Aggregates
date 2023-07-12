@@ -2,7 +2,7 @@
 using EventStore.Client;
 using System.Collections.ObjectModel;
 
-namespace Aggregates.EventStoreDB;
+namespace Aggregates.EventStoreDB.Serialization;
 
 class MetadataDeserializer {
     readonly DeserializerDelegate _deserializer;

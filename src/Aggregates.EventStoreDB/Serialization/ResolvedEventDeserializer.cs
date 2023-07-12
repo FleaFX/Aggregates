@@ -2,7 +2,7 @@
 using EventStore.Client;
 using System.Reflection;
 
-namespace Aggregates.EventStoreDB;
+namespace Aggregates.EventStoreDB.Serialization;
 
 class ResolvedEventDeserializer {
     readonly DeserializerDelegate _deserializer;

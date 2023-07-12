@@ -1,6 +1,6 @@
 ﻿using EventStore.Client;
 
-namespace Aggregates.EventStoreDB;
+namespace Aggregates.EventStoreDB.Util;
 
 /// <summary>
 /// Asynchronously creates a filtered persistent subscription to $all.

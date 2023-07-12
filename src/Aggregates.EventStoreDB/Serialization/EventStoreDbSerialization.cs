@@ -4,9 +4,9 @@ using EventStore.Client;
 using System.Reflection;
 using System.Security.Cryptography;
 
-namespace Aggregates.EventStoreDB;
+namespace Aggregates.EventStoreDB.Serialization;
 
-static class Serialization {
+static class EventStoreDbSerialization {
     /// <summary>
     /// Returns a <see cref="Func{TResult}"/> that creates a <see cref="EventData"/> for each change.
     /// </summary>
@@ -56,7 +56,6 @@ static class Serialization {
         bufferWriter.Write(aggregate.Identifier.ToString());
         bufferWriter.Write(aggregate.AggregateRoot.Version + versionOffset);
         bufferWriter.Write(@event.GetType().Name);
-        bufferWriter.Write(@event.GetHashCode());
         bufferWriter.Flush();
         bufferWriter.BaseStream.Seek(0, SeekOrigin.Begin);
 

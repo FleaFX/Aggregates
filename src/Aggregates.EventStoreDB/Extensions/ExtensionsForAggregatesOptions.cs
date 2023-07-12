@@ -1,6 +1,7 @@
 ﻿// ReSharper disable CheckNamespace
 
 using Aggregates.Configuration;
+using Aggregates.EventStoreDB.Serialization;
 using Aggregates.Types;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,9 +25,9 @@ public static class ExtensionsForAggregatesOptions {
             services.TryAddScoped(typeof(ResolvedEventDeserializer));
             services.TryAddScoped(typeof(MetadataDeserializer));
             services.TryAddScoped(sp =>
-                EventStoreDBCommitDelegate.Create(
+                EventStoreDbCommitDelegate.Create(
                     sp.GetRequiredService<EventStoreClient>(),
-                    Serialization.CreateSerializer(sp.GetRequiredService<SerializerDelegate>())
+                    EventStoreDbSerialization.CreateSerializer(sp.GetRequiredService<SerializerDelegate>())
                 )
             );
         });

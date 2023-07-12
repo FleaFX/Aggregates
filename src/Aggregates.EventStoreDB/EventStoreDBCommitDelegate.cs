@@ -2,7 +2,7 @@
 
 namespace Aggregates.EventStoreDB;
 
-static class EventStoreDBCommitDelegate {
+static class EventStoreDbCommitDelegate {
     /// <summary>
     /// Creates a <see cref="CommitDelegate"/> that commits changes to the given <paramref name="client"/>.
     /// </summary>

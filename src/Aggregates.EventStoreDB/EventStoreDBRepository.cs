@@ -1,4 +1,5 @@
 ﻿using Aggregates.Entities;
+using Aggregates.EventStoreDB.Serialization;
 using Aggregates.Sagas;
 using Aggregates.Types;
 using EventStore.Client;

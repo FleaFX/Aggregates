@@ -1,4 +1,7 @@
-﻿using Aggregates.Sql;
+﻿using Aggregates.EventStoreDB.Serialization;
+using Aggregates.EventStoreDB.Util;
+using Aggregates.EventStoreDB.Workers;
+using Aggregates.Sql;
 using Aggregates.Types;
 using EventStore.Client;
 using FakeItEasy;

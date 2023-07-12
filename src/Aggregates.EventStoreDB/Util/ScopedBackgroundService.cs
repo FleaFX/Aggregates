@@ -1,12 +1,13 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace Aggregates.EventStoreDB;
+namespace Aggregates.EventStoreDB.Util;
 
 /// <summary>
 /// A <see cref="IHostedService"/> should normally be registered as a singleton, requiring its injected dependencies to be singletons as well. This class allows you to use dependencies that are registered as scoped.
 /// </summary>
-abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5> : BackgroundService {
+abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5> : BackgroundService
+{
     readonly IServiceScopeFactory _serviceScopeFactory;
 
     /// <summary>
@@ -23,7 +24,8 @@ abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5> : Back
     /// <param name="stoppingToken">Triggered when <see cref="M:Microsoft.Extensions.Hosting.IHostedService.StopAsync(System.Threading.CancellationToken)" /> is called.</param>
     /// <returns>A <see cref="T:System.Threading.Tasks.Task" /> that represents the long running operations.</returns>
     /// <remarks>See <see href="https://docs.microsoft.com/dotnet/core/extensions/workers">Worker Services in .NET</see> for implementation guidelines.</remarks>
-    protected sealed override async Task ExecuteAsync(CancellationToken stoppingToken) {
+    protected sealed override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
         using var scope = _serviceScopeFactory.CreateScope();
         await ExecuteCoreAsync(
             scope.ServiceProvider.GetRequiredService<TDep1>(),
@@ -50,7 +52,8 @@ abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5> : Back
 /// <summary>
 /// A <see cref="IHostedService"/> should normally be registered as a singleton, requiring its injected dependencies to be singletons as well. This class allows you to use dependencies that are registered as scoped.
 /// </summary>
-abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5, TDep6> : BackgroundService {
+abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5, TDep6> : BackgroundService
+{
     readonly IServiceScopeFactory _serviceScopeFactory;
 
     /// <summary>
@@ -67,7 +70,8 @@ abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5, TDep6>
     /// <param name="stoppingToken">Triggered when <see cref="M:Microsoft.Extensions.Hosting.IHostedService.StopAsync(System.Threading.CancellationToken)" /> is called.</param>
     /// <returns>A <see cref="T:System.Threading.Tasks.Task" /> that represents the long running operations.</returns>
     /// <remarks>See <see href="https://docs.microsoft.com/dotnet/core/extensions/workers">Worker Services in .NET</see> for implementation guidelines.</remarks>
-    protected sealed override async Task ExecuteAsync(CancellationToken stoppingToken) {
+    protected sealed override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
         using var scope = _serviceScopeFactory.CreateScope();
         await ExecuteCoreAsync(
             scope.ServiceProvider.GetRequiredService<TDep1>(),
@@ -96,7 +100,8 @@ abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5, TDep6>
 /// <summary>
 /// A <see cref="IHostedService"/> should normally be registered as a singleton, requiring its injected dependencies to be singletons as well. This class allows you to use dependencies that are registered as scoped.
 /// </summary>
-abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5, TDep6, TDep7> : BackgroundService {
+abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5, TDep6, TDep7> : BackgroundService
+{
     readonly IServiceScopeFactory _serviceScopeFactory;
 
     /// <summary>
@@ -113,7 +118,8 @@ abstract class ScopedBackgroundService<TDep1, TDep2, TDep3, TDep4, TDep5, TDep6,
     /// <param name="stoppingToken">Triggered when <see cref="M:Microsoft.Extensions.Hosting.IHostedService.StopAsync(System.Threading.CancellationToken)" /> is called.</param>
     /// <returns>A <see cref="T:System.Threading.Tasks.Task" /> that represents the long running operations.</returns>
     /// <remarks>See <see href="https://docs.microsoft.com/dotnet/core/extensions/workers">Worker Services in .NET</see> for implementation guidelines.</remarks>
-    protected sealed override async Task ExecuteAsync(CancellationToken stoppingToken) {
+    protected sealed override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
         using var scope = _serviceScopeFactory.CreateScope();
         await ExecuteCoreAsync(
             scope.ServiceProvider.GetRequiredService<TDep1>(),
