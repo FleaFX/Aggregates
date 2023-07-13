@@ -3,6 +3,8 @@ using Aggregates.Types;
 using EventStore.Client;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text;
+using Aggregates.EventStoreDB.Util;
 
 namespace Aggregates.EventStoreDB.Serialization;
 
@@ -12,7 +14,7 @@ static class EventStoreDbSerialization {
     /// </summary>
     /// <param name="serializer">The <see cref="SerializerDelegate"/> to use when serializing the event payload.</param>
     /// <returns>A <see cref="Func{TResult}"/></returns>
-    public static Func<Aggregate, object, EventData> CreateSerializer(SerializerDelegate serializer) {
+    public static Func<Aggregate, object, EventData> CreateEntitySerializer(SerializerDelegate serializer) {
         var serializedEventsPerAggregate = new Dictionary<AggregateIdentifier, int>();
 
         return (aggregate, @event) => {
@@ -30,6 +32,39 @@ static class EventStoreDbSerialization {
 
                 data:
                 SerializePayload(serializer, @event),
+
+                metadata:
+                SerializePayload(serializer, GetEventMetadata(@event)));
+
+            // next time round, the version offset for this aggregate will be incremented by one
+            serializedEventsPerAggregate[aggregate.Identifier]++;
+
+            return eventData;
+        };
+    }
+    /// <summary>
+    /// Returns a <see cref="Func{TResult}"/> that creates a <see cref="EventData"/> for each change.
+    /// </summary>
+    /// <param name="serializer">The <see cref="SerializerDelegate"/> to use when serializing the event payload.</param>
+    /// <returns>A <see cref="Func{TResult}"/></returns>
+    public static Func<Aggregate, object, EventData> CreateSagaSerializer(SerializerDelegate serializer) {
+        var serializedEventsPerAggregate = new Dictionary<AggregateIdentifier, int>();
+
+        return (aggregate, @event) => {
+            // attempt to get the version offset for this aggregate
+            // if we don't have one yet, initialize it to zero
+            if (!serializedEventsPerAggregate.TryGetValue(aggregate.Identifier, out var versionOffset))
+                serializedEventsPerAggregate[aggregate.Identifier] = versionOffset = 0;
+            
+            var eventData = new EventData(
+                eventId:
+                CreateEventId(aggregate, @event, versionOffset),
+
+                type:
+                "$>",
+
+                data:
+                Encoding.UTF8.GetBytes($"{LinkEventScope.Current!.LinkEvent.OriginalEventNumber}@{LinkEventScope.Current!.LinkEvent.OriginalStreamId}"),
 
                 metadata:
                 SerializePayload(serializer, GetEventMetadata(@event)));

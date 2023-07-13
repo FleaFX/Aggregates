@@ -1,6 +1,4 @@
-﻿using Aggregates.Types;
-
-namespace Aggregates.Entities.Handlers;
+﻿namespace Aggregates.Entities.Handlers;
 
 /// <summary>
 /// Handler that creates a new <see cref="EntityRoot{TState,TEvent}"/> object and adds it to the repository.
@@ -9,7 +7,7 @@ namespace Aggregates.Entities.Handlers;
 /// <typeparam name="TState">The type of the maintained state object.</typeparam>
 /// <typeparam name="TEvent">The type of the event(s) that are applicable.</typeparam>
 class CreationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
-    where TCommand : ICommand<TCommand, TState, TEvent>
+    where TCommand : ICommand< TState, TEvent>
     where TState : IState<TState, TEvent> {
     readonly IRepository<TState, TEvent> _repository;
 
@@ -28,6 +26,6 @@ class CreationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TSta
     public async ValueTask HandleAsync(TCommand command) {
         var aggregateRoot = new EntityRoot<TState, TEvent>(TState.Initial, AggregateVersion.None);
         await aggregateRoot.AcceptAsync(command);
-        _repository.Add(command, aggregateRoot);
+        _repository.Add(command.Id, aggregateRoot);
     }
 }

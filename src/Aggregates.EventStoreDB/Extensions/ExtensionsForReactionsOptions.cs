@@ -39,6 +39,13 @@ public static class ExtensionsForReactionsOptions {
             services.TryAddScoped(typeof(ResolvedEventDeserializer));
             services.TryAddScoped(typeof(MetadataDeserializer));
 
+            services.TryAddScoped(sp =>
+                EventStoreDbCommitDelegate.CreateSagaDelegate(
+                    sp.GetRequiredService<EventStoreClient>(),
+                    EventStoreDbSerialization.CreateSagaSerializer(sp.GetRequiredService<SerializerDelegate>())
+                )
+            );
+
             // find all implementations of IReaction<,,,> and register a ReactionWorker for it
             foreach (var (type, reactionType, commandType, stateType, eventType) in
                      from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()

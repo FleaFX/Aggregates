@@ -1,6 +1,6 @@
 ﻿using System.Runtime.CompilerServices;
 
-namespace Aggregates.Types;
+namespace Aggregates;
 
 /// <summary>
 /// Reacts to an event by producing new commands to handle.
@@ -11,7 +11,7 @@ namespace Aggregates.Types;
 /// <typeparam name="TEvent">The type of the event(s) that are applicable to the state that is acted upon by the produced commands.</typeparam>
 public interface IReaction<in TReactionEvent, out TCommand, TState, TEvent>
     where TState : IState<TState, TEvent>
-    where TCommand : ICommand<TCommand, TState, TEvent> {
+    where TCommand : ICommand<TState, TEvent> {
     /// <summary>
     /// Asynchronously reacts to an event by producing a sequence of commands to handle.
     /// </summary>
@@ -43,7 +43,7 @@ public interface IReaction<in TReactionEvent, out TCommand, TState, TEvent>
 public interface IReaction<in TReactionState, in TReactionEvent, out TCommand, TState, TEvent>
     where TReactionState : IState<TReactionState, TReactionEvent>
     where TState : IState<TState, TEvent>
-    where TCommand : ICommand<TCommand, TState, TEvent> {
+    where TCommand : ICommand<TState, TEvent> {
     /// <summary>
     /// Asynchronously reacts to an event by producing a sequence of commands to handle.
     /// </summary>

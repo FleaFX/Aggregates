@@ -7,13 +7,13 @@ namespace Aggregates.Metadata;
 /// <summary>
 /// Provides a scope object into which event metadata can be collected while handling a command.
 /// </summary>
-sealed class MetadataScope : IAsyncDisposable {
+public sealed class MetadataScope : IAsyncDisposable {
     readonly Dictionary<string, object?> _metadata;
 
     /// <summary>
     /// Initializes a new <see cref="MetadataScope"/>.
     /// </summary>
-    public MetadataScope(bool noPush = false) {
+    internal MetadataScope(bool noPush = false) {
         // attempt to copy values from outer scopes
         _metadata = (Scopes.TryPeek()?._metadata).CopyOrEmpty();
 
@@ -31,8 +31,8 @@ sealed class MetadataScope : IAsyncDisposable {
     /// Adds the given metadata to the scope.
     /// </summary>
     /// <param name="metadata">The metadata to add.</param>
-    public void Add(KeyValuePair<string, object?> metadata) =>
-        _metadata.Add(metadata.Key, metadata.Value);
+    internal void Add(KeyValuePair<string, object?> metadata) =>
+        _metadata[metadata.Key] = metadata.Value;
 
     /// <summary>
     /// Returns the metadata in the current scope as a <see cref="IDictionary{TKey,TValue}"/>.
@@ -49,7 +49,7 @@ sealed class MetadataScope : IAsyncDisposable {
 
     /// <summary>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources asynchronously.</summary>
     /// <returns>A task that represents the asynchronous dispose operation.</returns>
-    public ValueTask DisposeAsync() {
+    ValueTask IAsyncDisposable.DisposeAsync() {
         if (!Scopes.IsEmpty)
             Scopes = Scopes.Pop();
 

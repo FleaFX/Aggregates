@@ -1,6 +1,5 @@
 ﻿using Aggregates.Entities;
 using Aggregates.Sagas;
-using Aggregates.Types;
 
 namespace Aggregates;
 
@@ -50,7 +49,7 @@ abstract class BaseRepository<TState, TEvent> : IRepository<TState, TEvent> wher
     /// </summary>
     /// <param name="identifier">Uniquely identifies the aggregate to retrieve.</param>
     /// <returns>An awaitable <see cref="ValueTask{TResult}"/>, which resolves to a <see cref="SagaRoot{TState,TEvent}"/> or <see langword="null"/> if it wasn't found.</returns>
-    public async ValueTask<SagaRoot<TState, TEvent>> TryGetSagaRootAsync(AggregateIdentifier identifier) {
+    public async ValueTask<SagaRoot<TState, TEvent>?> TryGetSagaRootAsync(AggregateIdentifier identifier) {
         SagaRoot<TState, TEvent>? FromUow() {
             var aggregate = _unitOfWork.Get(identifier);
             return aggregate is { AggregateRoot: { } aggregateRoot }

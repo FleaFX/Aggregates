@@ -1,4 +1,4 @@
-﻿namespace Aggregates.Types;
+﻿namespace Aggregates;
 
 /// <summary>
 /// Configures the event type when storing.

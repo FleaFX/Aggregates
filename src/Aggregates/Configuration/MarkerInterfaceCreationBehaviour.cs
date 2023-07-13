@@ -1,5 +1,4 @@
 ﻿using Aggregates.Entities.Handlers;
-using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -21,7 +20,7 @@ class MarkerInterfaceCreationBehaviour<TInterface> : AggregateCreationBehaviour 
         public MarkerInterfaceCommandHandlerFactory(IServiceProvider serviceProvider) =>
             _serviceProvider = serviceProvider;
 
-        public ICommandHandler<TCommand, TState, TEvent> Create<TCommand, TState, TEvent>() where TCommand : ICommand<TCommand, TState, TEvent> where TState : IState<TState, TEvent> =>
+        public ICommandHandler<TCommand, TState, TEvent> Create<TCommand, TState, TEvent>() where TCommand : ICommand<TState, TEvent> where TState : IState<TState, TEvent> =>
             _serviceProvider.GetRequiredService<DefaultHandler<TCommand, TState, TEvent>>();
     }
 }

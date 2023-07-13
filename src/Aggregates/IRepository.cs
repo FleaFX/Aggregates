@@ -1,6 +1,5 @@
 ﻿using Aggregates.Entities;
 using Aggregates.Sagas;
-using Aggregates.Types;
 
 namespace Aggregates;
 

@@ -1,6 +1,4 @@
-﻿using Aggregates.Types;
-
-namespace Aggregates;
+﻿namespace Aggregates;
 
 /// <summary>
 /// Ties the <paramref name="AggregateRoot"/> to its unique <paramref name="Identifier"/> within the system.

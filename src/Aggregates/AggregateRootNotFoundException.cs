@@ -1,5 +1,4 @@
 ﻿using Aggregates.Entities;
-using Aggregates.Types;
 
 namespace Aggregates;
 

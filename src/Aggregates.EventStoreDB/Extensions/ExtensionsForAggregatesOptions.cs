@@ -25,9 +25,9 @@ public static class ExtensionsForAggregatesOptions {
             services.TryAddScoped(typeof(ResolvedEventDeserializer));
             services.TryAddScoped(typeof(MetadataDeserializer));
             services.TryAddScoped(sp =>
-                EventStoreDbCommitDelegate.Create(
+                EventStoreDbCommitDelegate.CreateEntityDelegate(
                     sp.GetRequiredService<EventStoreClient>(),
-                    EventStoreDbSerialization.CreateSerializer(sp.GetRequiredService<SerializerDelegate>())
+                    EventStoreDbSerialization.CreateEntitySerializer(sp.GetRequiredService<SerializerDelegate>())
                 )
             );
         });

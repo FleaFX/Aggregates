@@ -1,7 +1,6 @@
 ﻿// ReSharper disable CheckNamespace
 
 using Aggregates.Extensions;
-using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using Aggregates.Sagas.Handlers;
@@ -63,7 +62,8 @@ public static class ExtensionsForReactionRegistration {
         }
 
         services.TryAddScoped(typeof(DefaultHandler<,,,,>));
-        services.TryAddScoped(typeof(ISagaHandler<>), typeof(UnitOfWorkAwareHandler<,,,,>));
+        services.TryAddScoped(typeof(UnitOfWorkAwareHandler<,,,,>));
+        services.TryAddScoped(typeof(ISagaHandler<,,,,>), typeof(MetadataAwareHandler<,,,,>));
 
         return services;
     }

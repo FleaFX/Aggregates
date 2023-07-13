@@ -1,6 +1,5 @@
 ﻿using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
-using Aggregates.Types;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
@@ -8,9 +7,9 @@ using Aggregates.EventStoreDB.Extensions;
 
 namespace Aggregates.EventStoreDB.Workers;
 class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>
-    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>, ISagaHandler<TReactionEvent>>
+    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>>
     where TReactionState : IState<TReactionState, TReactionEvent>
-    where TCommand : ICommand<TCommand, TCommandState, TCommandEvent>
+    where TCommand : ICommand<TCommandState, TCommandEvent>
     where TCommandState : IState<TCommandState, TCommandEvent> {
 
     /// <summary>
@@ -19,7 +18,7 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
     /// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
     public SagaWorker(IServiceScopeFactory serviceScopeFactory) : base(serviceScopeFactory) { }
 
-    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAllAsync subscribeToAllAsync, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> reaction, ISagaHandler<TReactionEvent> sagaHandler, CancellationToken stoppingToken) {
+    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAllAsync subscribeToAllAsync, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> reaction, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> sagaHandler, CancellationToken stoppingToken) {
         // setup a new subscription group if it doesn't exist yet
         var persistentSubscriptionGroupName = reaction.GetType().FullName!;
         await Task.WhenAll(
@@ -52,6 +51,7 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
         using var _ = await subscribeToAllAsync(persistentSubscriptionGroupName,
             async (subscription, @event, retryCount, _) => {
                 try {
+                    using var linkEvent = new LinkEventScope(@event);
                     await sagaHandler.HandleAsync((TReactionEvent)deserializer.Deserialize(@event),
                         metadataDeserializer.Deserialize(@event),
                         stoppingToken);
@@ -61,7 +61,7 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
                 } catch (Exception ex) {
                     await subscription.Nack(
                         retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                        ex.Message, @event);
+                        ex.ToString(), @event);
                 }
             },
             cancellationToken: stoppingToken);

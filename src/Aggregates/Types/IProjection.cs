@@ -1,4 +1,4 @@
-﻿namespace Aggregates.Types;
+﻿namespace Aggregates;
 
 /// <summary>
 /// Marker interface for projections, which maintain a state using events sourced from multiple streams.

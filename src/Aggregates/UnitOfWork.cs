@@ -1,15 +1,21 @@
-﻿using Aggregates.Types;
-using Aggregates.Util;
+﻿using Aggregates.Util;
 using System.Collections.Immutable;
 
 namespace Aggregates;
 
 /// <summary>
-/// Asynchronously commits the changes made in the given <see cref="UnitOfWork"/>.
+/// Asynchronously commits the changes made to an entity in the given <see cref="UnitOfWork"/>.
 /// </summary>
 /// <param name="unitOfWork">The <see cref="UnitOfWork"/> that contains the changes to commit.</param>
 /// <returns>A <see cref="ValueTask"/> that represents the asynchronous commit operation.</returns>
-delegate ValueTask CommitDelegate(UnitOfWork unitOfWork);
+delegate ValueTask EntityCommitDelegate(UnitOfWork unitOfWork);
+
+/// <summary>
+/// Asynchronously commits the changes made to a saga in the given <see cref="UnitOfWork"/>.
+/// </summary>
+/// <param name="unitOfWork">The <see cref="UnitOfWork"/> that contains the changes to commit.</param>
+/// <returns>A <see cref="ValueTask"/> that represents the asynchronous commit operation.</returns>
+delegate ValueTask SagaCommitDelegate(UnitOfWork unitOfWork);
 
 sealed class UnitOfWork {
     readonly Dictionary<AggregateIdentifier, Aggregate> _aggregates = new();
@@ -53,7 +59,8 @@ sealed class UnitOfWork {
 
 sealed class UnitOfWorkScope : IAsyncDisposable {
     readonly UnitOfWork _unitOfWork;
-    readonly CommitDelegate _onCommit;
+    readonly EntityCommitDelegate? _onEntityCommit;
+    readonly SagaCommitDelegate? _onSagaCommit;
 
     bool _completed;
 
@@ -61,12 +68,25 @@ sealed class UnitOfWorkScope : IAsyncDisposable {
     /// Initializes a new <see cref="UnitOfWorkScope"/>
     /// </summary>
     /// <param name="unitOfWork">The unit of work to scope.</param>
-    /// <param name="onCommit">The <see cref="CommitDelegate"/> to call when committing changes.</param>
-    public UnitOfWorkScope(UnitOfWork unitOfWork, CommitDelegate onCommit) {
+    /// <param name="onCommit">The <see cref="EntityCommitDelegate"/> to call when committing changes in an entity.</param>
+    public UnitOfWorkScope(UnitOfWork unitOfWork, EntityCommitDelegate onCommit) {
         _unitOfWork = unitOfWork;
-        _onCommit = onCommit;
+        _onEntityCommit = onCommit;
 
         Scopes = Scopes.Push(this);
+    }
+
+    /// <summary>
+    /// Initializes a new <see cref="UnitOfWorkScope"/>
+    /// </summary>
+    /// <param name="unitOfWork">The unit of work to scope.</param>
+    /// <param name="onCommit">The <see cref="SagaCommitDelegate"/> to call when committing changes in a saga.</param>
+    public UnitOfWorkScope(UnitOfWork unitOfWork, SagaCommitDelegate onCommit) {
+        _unitOfWork = unitOfWork;
+        _onSagaCommit = onCommit;
+
+        Scopes = Scopes.Push(this);
+
     }
 
     /// <summary>
@@ -86,7 +106,8 @@ sealed class UnitOfWorkScope : IAsyncDisposable {
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous dispose operation.</returns>
     public async ValueTask DisposeAsync() {
         Scopes = Scopes.Pop(out var scope);
-        if (scope._completed) await scope._onCommit(_unitOfWork);
+        { if (scope is { _completed: true, _onEntityCommit: { } onCommit }) await onCommit(_unitOfWork); }
+        { if (scope is { _completed: true, _onSagaCommit: { } onCommit }) await onCommit(_unitOfWork); }
         scope._unitOfWork.Clear();
     }
 }

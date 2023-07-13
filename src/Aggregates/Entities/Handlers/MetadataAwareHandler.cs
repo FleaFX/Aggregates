@@ -1,11 +1,10 @@
 ﻿using Aggregates.Metadata;
-using Aggregates.Types;
 using System.Reflection;
 
 namespace Aggregates.Entities.Handlers;
 
 class MetadataAwareHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
-    where TCommand : ICommand<TCommand, TState, TEvent>
+    where TCommand : ICommand<TState, TEvent>
     where TState : IState<TState, TEvent> {
     readonly UnitOfWorkAwareHandler<TCommand, TState, TEvent> _handler;
 

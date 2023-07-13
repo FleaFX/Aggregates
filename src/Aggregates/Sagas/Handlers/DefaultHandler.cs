@@ -1,5 +1,4 @@
 ﻿using Aggregates.Configuration;
-using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates.Sagas.Handlers;
@@ -12,9 +11,9 @@ namespace Aggregates.Sagas.Handlers;
 /// <typeparam name="TCommand">The type of the produced commands.</typeparam>
 /// <typeparam name="TCommandState">The type of the state object that is acted upon by the produced commands.</typeparam>
 /// <typeparam name="TCommandEvent">The type of the event(s) that are applicable to the state that is acted upon by the produced commands.</typeparam>
-class DefaultHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>
+class DefaultHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> : ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>
     where TReactionState : IState<TReactionState, TReactionEvent>
-    where TCommand : ICommand<TCommand, TCommandState, TCommandEvent>
+    where TCommand : ICommand<TCommandState, TCommandEvent>
     where TCommandState : IState<TCommandState, TCommandEvent> {
     readonly IRepository<TReactionState, TReactionEvent> _repository;
     readonly IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> _reaction;
@@ -48,10 +47,9 @@ class DefaultHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TC
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous operation.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TReactionEvent @event, IReadOnlyDictionary<string, object?>? metadata, CancellationToken cancellationToken) {
-        if (metadata is null ||
-            !metadata.TryGetValue(_sagaIdMetadataKey, out var objSagaId) ||
-            objSagaId is not string sagaId) return;
+        if (metadata is null || !metadata.TryGetValue(_sagaIdMetadataKey, out var objSagaId)) return;
 
+        var sagaId = objSagaId?.ToString() ?? string.Empty;
         var aggregateRoot = await _repository.TryGetSagaRootAsync(sagaId);
         if (aggregateRoot is null) {
             aggregateRoot = new SagaRoot<TReactionState, TReactionEvent>(TReactionState.Initial, AggregateVersion.None);

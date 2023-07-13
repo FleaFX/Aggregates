@@ -1,26 +1,25 @@
-﻿using Aggregates.Types;
-
-namespace Aggregates.Sagas.Handlers;
+﻿namespace Aggregates.Sagas.Handlers;
 
 /// <summary>
 /// Handler that commits changes tracked by the given <see cref="UnitOfWork"/>.
 /// </summary>
-class UnitOfWorkAwareHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> : ISagaHandler<TReactionEvent> where TReactionState : IState<TReactionState, TReactionEvent>
-    where TCommand : ICommand<TCommand, TCommandState, TCommandEvent>
+class UnitOfWorkAwareHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> : ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>
+    where TReactionState : IState<TReactionState, TReactionEvent>
+    where TCommand : ICommand<TCommandState, TCommandEvent>
     where TCommandState : IState<TCommandState, TCommandEvent> {
     readonly UnitOfWork _unitOfWork;
-    readonly CommitDelegate _commitDelegate;
+    readonly SagaCommitDelegate _commitDelegate;
     readonly DefaultHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> _handler;
 
     /// <summary>
     /// Initializes a new <see cref="UnitOfWorkAwareHandler{TReactionState,TReactionEvent,TCommand,TCommandState,TCommandEvent}"/>.
     /// </summary>
     /// <param name="unitOfWork">The <see cref="UnitOfWork"/> that tracks changes.</param>
-    /// <param name="commitDelegate">The <see cref="CommitDelegate"/> that commits the changes made.</param>
-    /// <param name="handler">THe handler that performs the actual work.</param>
+    /// <param name="commitDelegate">The <see cref="SagaCommitDelegate"/> that commits the changes made.</param>
+    /// <param name="handler">The handler that performs the actual work.</param>
     public UnitOfWorkAwareHandler(
         UnitOfWork unitOfWork,
-        CommitDelegate commitDelegate,
+        SagaCommitDelegate commitDelegate,
         DefaultHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> handler) {
         _unitOfWork = unitOfWork;
         _commitDelegate = commitDelegate;

@@ -1,4 +1,4 @@
-﻿namespace Aggregates.Types;
+﻿namespace Aggregates;
 
 /// <summary>
 /// Provides an origin and a function to apply an event to the current state.

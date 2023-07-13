@@ -4,7 +4,12 @@
 /// Marker interface for saga handlers.
 /// </summary>
 /// <typeparam name="TReactionEvent">The type of the event(s) to react to.</typeparam>
-interface ISagaHandler<in TReactionEvent> {
+#pragma warning disable CS1712
+interface ISagaHandler<TReactionState, in TReactionEvent, TCommand, TCommandState, TCommandEvent>
+    where TReactionState : IState<TReactionState, TReactionEvent>
+    where TCommand : ICommand<TCommandState, TCommandEvent>
+    where TCommandState : IState<TCommandState, TCommandEvent> {
+#pragma warning restore CS1712
     /// <summary>
     /// Asynchronously handles the given <paramref name="event"/>.
     /// </summary>

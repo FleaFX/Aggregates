@@ -1,12 +1,10 @@
-﻿using Aggregates.Types;
-
-namespace Aggregates.Entities.Handlers;
+﻿namespace Aggregates.Entities.Handlers;
 
 /// <summary>
 /// Handlers that first tries to retrieve an <see cref="EntityRoot{TState,TEvent}"/> object, and if it doesn't exist yet, adds it to the repository.
 /// </summary>
 class GetOrAddHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
-    where TCommand : ICommand<TCommand, TState, TEvent>
+    where TCommand : ICommand<TState, TEvent>
     where TState : IState<TState, TEvent> {
     readonly IRepository<TState, TEvent> _repository;
 
@@ -23,10 +21,10 @@ class GetOrAddHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TSta
     /// <param name="command">The command object to handle.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TCommand command) {
-        var aggregateRoot = await _repository.TryGetEntityRootAsync(command);
+        var aggregateRoot = await _repository.TryGetEntityRootAsync(command.Id);
         if (aggregateRoot is null) {
             aggregateRoot = new EntityRoot<TState, TEvent>(TState.Initial, AggregateVersion.None);
-            _repository.Add(command, aggregateRoot);
+            _repository.Add(command.Id, aggregateRoot);
         }
         await aggregateRoot.AcceptAsync(command);
     }

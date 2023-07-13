@@ -29,7 +29,7 @@ class ResolvedEventDeserializer {
     public object Deserialize(ResolvedEvent resolvedEvent) {
         // try to find the contract
         var contract = _eventContracts.Value.FirstOrDefault(c => GetEventType(c) == resolvedEvent.Event.EventType);
-        if (contract == null) throw new ArgumentOutOfRangeException();
+        if (contract == null) throw new ArgumentOutOfRangeException(nameof(resolvedEvent), $"No contract found for event type {resolvedEvent.Event.EventType}");
 
         // deserialization works using streams, read the payload byte array into a memory stream
         using var stream = new MemoryStream();

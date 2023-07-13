@@ -1,6 +1,4 @@
-﻿using Aggregates.Types;
-
-namespace Aggregates.Entities.Handlers;
+﻿namespace Aggregates.Entities.Handlers;
 
 /// <summary>
 /// Handler that retrieves an existing <see cref="EntityRoot{TState,TEvent}"/> object from the repository and uses the given command to affect its state.
@@ -9,7 +7,7 @@ namespace Aggregates.Entities.Handlers;
 /// <typeparam name="TState">The type of the maintained state object.</typeparam>
 /// <typeparam name="TEvent">The type of the event(s) that are applicable.</typeparam>
 class ModificationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
-    where TCommand : ICommand<TCommand, TState, TEvent>
+    where TCommand : ICommand<TState, TEvent>
     where TState : IState<TState, TEvent> {
     readonly IRepository<TState, TEvent> _repository;
 
@@ -26,7 +24,7 @@ class ModificationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, 
     /// <param name="command">The command object to handle.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TCommand command) {
-        var aggregateRoot = await _repository.GetEntityRootAsync(command);
+        var aggregateRoot = await _repository.GetEntityRootAsync(command.Id);
         await aggregateRoot.AcceptAsync(command);
     }
 }

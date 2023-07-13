@@ -1,4 +1,4 @@
-﻿namespace Aggregates.Types;
+﻿namespace Aggregates;
 
 /// <summary>
 /// Uniquely identifies an aggregate within the system.

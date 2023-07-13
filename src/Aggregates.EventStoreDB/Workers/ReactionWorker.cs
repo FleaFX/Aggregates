@@ -11,7 +11,7 @@ namespace Aggregates.EventStoreDB.Workers;
 class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>
     : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IReaction<TReactionEvent, TCommand, TState, TEvent>> where TReaction : IReaction<TReactionEvent, TCommand, TState, TEvent>
     where TState : IState<TState, TEvent>
-    where TCommand : ICommand<TCommand, TState, TEvent> {
+    where TCommand : ICommand<TState, TEvent> {
     readonly string _persistentSubscriptionGroupName = typeof(TReaction).FullName!;
 
     /// <summary>

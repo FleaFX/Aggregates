@@ -1,14 +1,17 @@
-﻿namespace Aggregates.Types;
+﻿namespace Aggregates;
 
 /// <summary>
 /// Decides which events are required to progress a state object as a result of executing a command.
 /// </summary>
-/// <typeparam name="TCommand">The type of the command itself.</typeparam>
 /// <typeparam name="TState">The type of the maintained state object.</typeparam>
 /// <typeparam name="TEvent">The type of the event(s) that are applicable.</typeparam>
-public interface ICommand<in TCommand, in TState, out TEvent>
-    where TState : IState<TState, TEvent>
-    where TCommand : ICommand<TCommand, TState, TEvent> {
+public interface ICommand<in TState, out TEvent>
+    where TState : IState<TState, TEvent> {
+    /// <summary>
+    /// Gets the <see cref="AggregateIdentifier"/> that identifies the aggregate for which the command is intended.
+    /// </summary>
+    public AggregateIdentifier Id { get; }
+
     /// <summary>
     /// Accepts the <paramref name="state"/> to produce a sequence of events that will progress it to a new state.
     /// </summary>
@@ -25,10 +28,4 @@ public interface ICommand<in TCommand, in TState, out TEvent>
     /// <returns>An asynchronous sequence of events.</returns>
     IAsyncEnumerable<TEvent> ProgressAsync(TState state, CancellationToken cancellationToken = default) =>
         Progress(state).ToAsyncEnumerable();
-
-    /// <summary>
-    /// Implicitly casts the given <typeparamref name="TCommand"/> to an <see cref="AggregateIdentifier"/>.
-    /// </summary>
-    /// <param name="instance">The command to cast.</param>
-    static abstract implicit operator AggregateIdentifier(TCommand instance);
 }

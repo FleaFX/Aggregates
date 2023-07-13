@@ -1,4 +1,4 @@
-﻿namespace Aggregates.Types;
+﻿namespace Aggregates;
 
 /// <summary>
 /// Represents the changes that are made to a projection, but have not been committed yet.

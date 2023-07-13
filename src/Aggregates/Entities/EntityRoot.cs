@@ -1,5 +1,6 @@
 ﻿using Aggregates.Extensions;
-using Aggregates.Types;
+using Aggregates.Metadata;
+using System.Reflection;
 
 namespace Aggregates.Entities;
 
@@ -30,10 +31,17 @@ sealed record EntityRoot<TState, TEvent>(TState? State, AggregateVersion Version
     /// <param name="command">The command to accept.</param>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous operation.</param>
     public async ValueTask AcceptAsync<TCommand>(TCommand command, CancellationToken cancellationToken = default)
-        where TCommand : ICommand<TCommand, TState, TEvent> =>
+        where TCommand : ICommand<TState, TEvent> =>
         State = await command.ProgressAsync(State, cancellationToken)
             .TapAsync(@event => _changes.Add(@event))
-            .AggregateAsync(State, static (state, @event) => state.Apply(@event), cancellationToken: cancellationToken);
+            .AggregateAsync(State, static (state, @event) => SetMetadata(state.Apply(@event)), cancellationToken: cancellationToken);
+
+    static TState SetMetadata(TState state) {
+        foreach (var metadata in state.GetType().GetCustomAttributes<MetadataAttribute>())
+            MetadataScope.Current.Add(metadata.Create(state));
+
+        return state;
+    }
 
     public static implicit operator TState(EntityRoot<TState, TEvent> instance) => instance.State;
 }

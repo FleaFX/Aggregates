@@ -1,6 +1,4 @@
-﻿using Aggregates.Types;
-
-namespace Aggregates.Sagas;
+﻿namespace Aggregates.Sagas;
 
 /// <summary>
 /// The root of a saga aggregate.
@@ -25,7 +23,7 @@ sealed record SagaRoot<TState, TEvent>(TState State, AggregateVersion Version) :
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous operation.</param>
     /// <returns></returns>
     public IAsyncEnumerable<TCommand> AcceptAsync<TCommand, TCommandState, TCommandEvent>(IReaction<TState, TEvent, TCommand, TCommandState, TCommandEvent> reaction, TEvent @event, IReadOnlyDictionary<string, object?> metadata, CancellationToken cancellationToken = default)
-        where TCommand : ICommand<TCommand, TCommandState, TCommandEvent>
+        where TCommand : ICommand<TCommandState, TCommandEvent>
         where TCommandState : IState<TCommandState, TCommandEvent> {
         _changes.Add(@event);
         return reaction.ReactAsync(State, @event, metadata, cancellationToken);

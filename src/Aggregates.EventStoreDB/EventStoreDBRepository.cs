@@ -48,7 +48,7 @@ class EventStoreDbRepository<TState, TEvent> : BaseRepository<TState, TEvent> wh
         if (identifier.Value.StartsWith('$')) throw new InvalidOperationException("Repository shouldn't be reading a system stream.");
 
         try {
-            var events = await _eventStoreClient.ReadStreamAsync(Direction.Forwards, identifier.Value, StreamPosition.Start).ToArrayAsync();
+            var events = await _eventStoreClient.ReadStreamAsync(Direction.Forwards, identifier.Value, StreamPosition.Start, resolveLinkTos: true).ToArrayAsync();
             var state = events.Select(_deserializer.Deserialize).Cast<TEvent>().Aggregate(TState.Initial, (state, @event) => state.Apply(@event));
 
             return new SagaRoot<TState, TEvent>(state, new AggregateVersion(events.Length - 1L));

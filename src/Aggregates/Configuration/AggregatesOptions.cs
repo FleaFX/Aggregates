@@ -1,5 +1,4 @@
 ﻿using Aggregates.Extensions;
-using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates.Configuration;
