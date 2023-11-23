@@ -1,11 +1,14 @@
 ﻿// ReSharper disable CheckNamespace
 
-using Aggregates.Types;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates.Sql;
 
 public static class ExtensionsForProjectionOptions {
+    /// <summary>
+    /// Adds configuration to use projections to SQL.
+    /// </summary>
+    /// <param name="options">The <see cref="ProjectionsOptions"/> to configure.</param>
     public static void UseSql(this ProjectionsOptions options) {
         options.AddConfiguration(services => {
             // find all implementations of SqlProjection and register them
@@ -21,4 +24,13 @@ public static class ExtensionsForProjectionOptions {
             }
         });
     }
+
+    /// <summary>
+    /// Creates a <see cref="ISqlCommit{TState}"/> to use when projecting to SQL.
+    /// </summary>
+    /// <param name="state">The originating state, to be returned after committing the changes.</param>
+    /// <param name="dbConnectionFactory">The <see cref="IDbConnectionFactory"/> to use when creating a connection to the database.</param>
+    /// <returns>A <see cref="ISqlCommit{TState}"/>.</returns>
+    public static ISqlCommit<TState> UseSql<TState, TEvent>(this Projection<TState, TEvent> state, IDbConnectionFactory dbConnectionFactory) where TState : Projection<TState, TEvent> =>
+        new SqlCommit<TState>((TState)state, dbConnectionFactory);
 }
