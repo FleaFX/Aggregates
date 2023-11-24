@@ -7,7 +7,8 @@ namespace Aggregates.Sql;
 /// </summary>
 /// <typeparam name="TState">The type of the maintained state.</typeparam>
 /// <typeparam name="TEvent">The type of the events that are handled.</typeparam>
-public abstract record SqlProjection<TState, TEvent>(IDbConnectionFactory DbConnectionFactory) : IProjection<TState, TEvent>
+[Obsolete("Use Aggregates.Projections.Projection<,> together with UseSql() instead.")]
+public abstract record SqlProjection<TState, TEvent>(IDbConnectionFactory DbConnectionFactory, IsolationLevel IsolationLevel = IsolationLevel.Unspecified) : IProjection<TState, TEvent>
     where TState : SqlProjection<TState, TEvent> {
     /// <summary>
     /// Applies the given <paramref name="event"/> to progress to a new state.
@@ -25,11 +26,11 @@ public abstract record SqlProjection<TState, TEvent>(IDbConnectionFactory DbConn
     /// <param name="commandType">The type of command to execute. Defaults to <c>CommandType.Text</c>.</param>
     /// <returns></returns>
     protected ISqlCommit<TState> Query(string sql, object? parameters = null, CommandType commandType = CommandType.Text) =>
-        new SqlCommit<TState>((TState)this, DbConnectionFactory).Query(sql, parameters, commandType);
+        new SqlCommit<TState>((TState)this, DbConnectionFactory, IsolationLevel).Query(sql, parameters, commandType);
 
     /// <summary>
     /// Provides an empty commit to use as the seed when you need to fold over a collection to produce a <see cref="ICommit{TState}"/>.
     /// </summary>
     protected ISqlCommit<TState> Seed =>
-        new SqlCommit<TState>((TState)this, DbConnectionFactory);
+        new SqlCommit<TState>((TState)this, DbConnectionFactory, IsolationLevel);
 }

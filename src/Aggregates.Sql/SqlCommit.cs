@@ -25,8 +25,9 @@ public interface ISqlCommit<TState> : ICommit<TState> {
 /// </summary>
 /// <param name="Origin">The originating state, to be returned after committing the changes.</param>
 /// <param name="DbConnectionFactory">The <see cref="IDbConnectionFactory"/> to use when creating a connection to the database.</param>
+/// <param name="IsolationLevel">The transaction locking behaviour.</param>
 /// <typeparam name="TState">The type of the state returned after committing.</typeparam>
-readonly record struct SqlCommit<TState>(TState Origin, IDbConnectionFactory DbConnectionFactory) : ISqlCommit<TState> {
+readonly record struct SqlCommit<TState>(TState Origin, IDbConnectionFactory DbConnectionFactory, IsolationLevel IsolationLevel) : ISqlCommit<TState> {
     ImmutableQueue<Query> UncommittedQueries { get; init; } = ImmutableQueue<Query>.Empty;
 
     /// <summary>
@@ -47,7 +48,7 @@ readonly record struct SqlCommit<TState>(TState Origin, IDbConnectionFactory DbC
     async ValueTask<TState> ICommit<TState>.CommitAsync(CancellationToken cancellationToken) {
         await using var connection = DbConnectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
-        await using var tx = await connection.BeginTransactionAsync(cancellationToken);
+        await using var tx = await connection.BeginTransactionAsync(IsolationLevel, cancellationToken);
 
         try {
             var uncommittedQueries = UncommittedQueries;

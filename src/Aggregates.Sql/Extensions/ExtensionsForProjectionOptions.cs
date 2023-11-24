@@ -1,5 +1,6 @@
 ﻿// ReSharper disable CheckNamespace
 
+using System.Data;
 using Aggregates.Projections;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -31,7 +32,8 @@ public static class ExtensionsForProjectionOptions {
     /// </summary>
     /// <param name="state">The originating state, to be returned after committing the changes.</param>
     /// <param name="dbConnectionFactory">The <see cref="IDbConnectionFactory"/> to use when creating a connection to the database.</param>
+    /// <param name="isolationLevel">The transaction locking behaviour to use.</param>
     /// <returns>A <see cref="ISqlCommit{TState}"/>.</returns>
-    public static ISqlCommit<TState> UseSql<TState, TEvent>(this Projection<TState, TEvent> state, IDbConnectionFactory dbConnectionFactory) where TState : Projection<TState, TEvent> =>
-        new SqlCommit<TState>((TState)state, dbConnectionFactory);
+    public static ISqlCommit<TState> UseSql<TState, TEvent>(this Projection<TState, TEvent> state, IDbConnectionFactory dbConnectionFactory, IsolationLevel isolationLevel = IsolationLevel.Unspecified) where TState : Projection<TState, TEvent> =>
+        new SqlCommit<TState>((TState)state, dbConnectionFactory, isolationLevel);
 }
