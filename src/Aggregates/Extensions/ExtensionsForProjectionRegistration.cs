@@ -3,6 +3,7 @@
 using Aggregates.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
+using Aggregates.Projections;
 
 namespace Aggregates;
 
@@ -30,6 +31,19 @@ public static class ExtensionsForProjectionRegistration {
     /// <returns>A <see cref="IServiceCollection"/>.</returns>
     public static IServiceCollection UseProjections(this IServiceCollection services, Action<ProjectionsOptions> configure) {
         var options = new ProjectionsOptions();
+        options.AddConfiguration(svc => {
+            foreach (var (implType, stateType, eventType) in
+                     from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+                     from type in assembly.GetTypes()
+                     where !type.IsAbstract && (type.BaseType?.IsGenericType ?? false) && type.BaseType.GetGenericTypeDefinition() == typeof(Projection<,>)
+
+                     let genericArgs = type.BaseType.GetGenericArguments()
+
+                     select (type, genericArgs[0], genericArgs[1])) {
+                svc.AddScoped(typeof(IProjection<,>).MakeGenericType(stateType, eventType), implType);
+            }
+        });
+
         configure(options);
 
         options.ConfigureServices?.Invoke(services);
