@@ -1,6 +1,6 @@
 ﻿using System.Collections.Immutable;
 
-namespace Aggregates;
+namespace Aggregates.Projections;
 
 /// <summary>
 /// Base projection implementation that can be configured with different types of <see cref="ICommit{TState}"/> seeds.
@@ -13,8 +13,8 @@ public abstract record Projection<TState, TEvent> : IProjection<TState, TEvent>
     /// <summary>
     /// Collects a list of <see cref="ICommit{TState}"/> to perform.
     /// </summary>
-    /// <param name="Origin"></param>
-    /// <param name="Commits"></param>
+    /// <param name="Origin">The state object to return after all the commits have been executed.</param>
+    /// <param name="Commits">The sequence of commits to execute.</param>
     protected record Commit(TState Origin, ImmutableArray<ICommit<TState>> Commits) : ICommit<TState> {
         /// <summary>
         /// Produces a <see cref="Commit"/> that uses the given <paramref name="applicator"/> to produce the appropriate <see cref="ICommit{TState}"/>.
@@ -23,6 +23,15 @@ public abstract record Projection<TState, TEvent> : IProjection<TState, TEvent>
         /// <returns>A <see cref="Commit"/>.</returns>
         public Commit Use(Func<TState, ICommit<TState>> applicator) =>
             this with { Commits = Commits.Add(applicator(Origin)) };
+
+        /// <summary>
+        /// Produces a <see cref="Commit"/> that adds a deferred commit to the sequence of commits to execute.
+        /// </summary>
+        /// <typeparam name="TCommit"></typeparam>
+        /// <param name="factory"></param>
+        /// <returns></returns>
+        public Commit Use<TCommit>(Func<TState, CancellationToken, ValueTask<TCommit>> factory) where TCommit : ICommit<TState> =>
+            Use(state => new DeferredCommit<TState, TCommit>(state, factory));
 
         async ValueTask<TState> ICommit<TState>.CommitAsync(CancellationToken cancellationToken) {
             async ValueTask<TState> CommitAllAsync(ICommit<TState>[] commits, TState state) =>
@@ -42,6 +51,15 @@ public abstract record Projection<TState, TEvent> : IProjection<TState, TEvent>
     /// <returns>A <see cref="Commit"/>.</returns>
     protected Commit Use(Func<TState, ICommit<TState>> applicator) =>
         new Commit((TState)this, ImmutableArray<ICommit<TState>>.Empty).Use(applicator);
+
+    /// <summary>
+    /// Defers the creation of the commit until the projection is ready to be committed.
+    /// </summary>
+    /// <typeparam name="TCommit">The type of the commit to create.</typeparam>
+    /// <param name="factory">The factory that creates the <see cref="ICommit{TState}"/> to execute.</param>
+    /// <returns>A <see cref="Commit"/>.</returns>
+    protected Commit Use<TCommit>(Func<TState, CancellationToken, ValueTask<TCommit>> factory) where TCommit : ICommit<TState> =>
+        Use(state => new DeferredCommit<TState, TCommit>(state, factory));
 
     /// <summary>
     /// Applies the given <paramref name="event"/> to progress to a new state.

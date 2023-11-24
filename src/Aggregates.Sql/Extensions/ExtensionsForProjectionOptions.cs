@@ -1,5 +1,6 @@
 ﻿// ReSharper disable CheckNamespace
 
+using Aggregates.Projections;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates.Sql;
