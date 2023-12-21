@@ -1,4 +1,6 @@
-﻿namespace Aggregates.Metadata;
+﻿using System.Reflection;
+
+namespace Aggregates.Metadata;
 
 /// <summary>
 /// Enriches an event with metadata when saving.
@@ -21,7 +23,34 @@ public class MetadataAttribute : Attribute {
         var candidate = (
             from iface in valueProviderType.GetInterfaces()
             where iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IMetadataProvider<,>)
-            let getValueMethod = iface.GetMethod("GetValue")
+            let metaDataType = iface.GetGenericArguments()[0]
+            let getValueMethod = iface.GetMethod("GetValue", BindingFlags.Instance | BindingFlags.Public, new[] { metaDataType })
+            let instance = Activator.CreateInstance(valueProviderType)
+            select new Func<object, object?>(@event => getValueMethod.Invoke(instance, new[] { @event }))
+        ).FirstOrDefault();
+        if (!(candidate is { } valueProvider)) throw new ArgumentOutOfRangeException(nameof(valueProviderType));
+
+        _key = key;
+        _valueProvider = valueProvider;
+    }
+
+    /// <summary>
+    /// Initializes a new <see cref="MetadataAttribute"/>. Use this constructor when your metadata provider can provide metadata for different context types.
+    /// </summary>
+    /// <param name="key">A <see cref="string"/> by which the metadata entry will be accessible.</param>
+    /// <param name="valueProviderType">The <see cref="Type"/> of the class that implements <see cref="IMetadataProvider{TEvent,TValue}"/> to provide the value of the metadata.</param>
+    /// <param name="contextType">The type of the context object.</param>
+    public MetadataAttribute(string key, Type valueProviderType, Type contextType) {
+        if (string.IsNullOrWhiteSpace(key)) throw new ArgumentNullException(nameof(key));
+        if (valueProviderType == null) throw new ArgumentNullException(nameof(valueProviderType));
+
+        // validate that the value provider implements IMetadataProvider
+        var candidate = (
+            from iface in valueProviderType.GetInterfaces()
+            where iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IMetadataProvider<,>)
+            where iface.GetGenericArguments()[0].IsAssignableTo(contextType)
+            let metaDataType = iface.GetGenericArguments()[0]
+            let getValueMethod = iface.GetMethod("GetValue", BindingFlags.Instance | BindingFlags.Public, new[] { metaDataType })
             let instance = Activator.CreateInstance(valueProviderType)
             select new Func<object, object?>(@event => getValueMethod.Invoke(instance, new[] { @event }))
         ).FirstOrDefault();
