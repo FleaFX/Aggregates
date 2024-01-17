@@ -62,6 +62,13 @@ public abstract record Projection<TState, TEvent> : IProjection<TState, TEvent>
         Use(state => new DeferredCommit<TState, TCommit>(state, factory));
 
     /// <summary>
+    /// Produces a <see cref="Commit"/> that doesn't change the state of the projection.
+    /// </summary>
+    /// <returns>A <see cref="Commit"/>.</returns>
+    protected Commit Ignore() =>
+        new((TState)this, ImmutableArray<ICommit<TState>>.Empty);
+
+    /// <summary>
     /// Applies the given <paramref name="event"/> to progress to a new state.
     /// </summary>
     /// <param name="event">The event to apply.</param>
