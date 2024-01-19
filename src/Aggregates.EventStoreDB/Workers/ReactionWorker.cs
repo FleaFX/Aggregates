@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
+using Aggregates.Metadata;
 
 namespace Aggregates.EventStoreDB.Workers;
 
@@ -63,6 +64,7 @@ class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>
             async (subscription, @event, retryCount, _) => {
                 try {
                     // react to the event and handle each command
+                    await using var metadataScope = new MetadataScope();
                     await foreach (var command in reaction.ReactAsync(
                                        (TReactionEvent)deserializer.Deserialize(@event),
                                        metadataDeserializer.Deserialize(@event),
