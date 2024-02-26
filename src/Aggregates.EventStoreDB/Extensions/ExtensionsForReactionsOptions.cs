@@ -49,6 +49,7 @@ public static class ExtensionsForReactionsOptions {
             // find all implementations of IReaction<,,,> and register a ReactionWorker for it
             foreach (var (type, reactionType, commandType, stateType, eventType) in
                      from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+                     where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                      from type in assembly.GetTypes()
                      where !type.IsAbstract
 
@@ -63,6 +64,7 @@ public static class ExtensionsForReactionsOptions {
             // find all implementations of IReaction<,,,,> and register a SagaWorker for it
             foreach (var (reactionStateType, reactionEventType, commandType, commandStateType, commandEventType) in
                      from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+                     where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                      from type in assembly.GetTypes()
                      where !type.IsAbstract
 

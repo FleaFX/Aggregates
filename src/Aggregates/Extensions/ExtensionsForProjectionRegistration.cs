@@ -34,6 +34,7 @@ public static class ExtensionsForProjectionRegistration {
         options.AddConfiguration(svc => {
             foreach (var (implType, stateType, eventType) in
                      from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+                     where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                      from type in assembly.GetTypes()
                      where !type.IsAbstract && (type.BaseType?.IsGenericType ?? false) && type.BaseType.GetGenericTypeDefinition() == typeof(Projection<,>)
 

@@ -36,6 +36,7 @@ public static class ExtensionsForReactionRegistration {
         // find all (simple) implementations of IReaction and register them
         foreach (var (implType, reactionEventType, commandType, stateType, eventType) in
                  from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+                 where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                  from type in assembly.GetTypes()
 
                  from @interface in type.GetInterfaces()
@@ -50,6 +51,7 @@ public static class ExtensionsForReactionRegistration {
         // find all stateful implementations of IReaction and register them
         foreach (var (implType, reactionStateType, reactionEventType, commandType, commandStateType, commandEventType) in
                  from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+                 where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                  from type in assembly.GetTypes()
 
                  from @interface in type.GetInterfaces()

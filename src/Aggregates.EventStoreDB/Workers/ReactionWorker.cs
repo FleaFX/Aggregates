@@ -44,6 +44,7 @@ class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>
             // find applicable event types by tentatively applying them to the state
             let eventTypes = (
                 from assembly in AppDomain.CurrentDomain.GetAssemblies()
+                where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                 from type in assembly.GetTypes()
                 let attr = type.GetCustomAttribute<EventContractAttribute>()
                 where type.IsAssignableTo(typeof(TReactionEvent)) && attr != null

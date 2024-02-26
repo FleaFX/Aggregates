@@ -40,6 +40,7 @@ class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncD
             // find applicable event types by tentatively applying them to the state
             let eventTypes = (
                 from assembly in AppDomain.CurrentDomain.GetAssemblies()
+                where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                 from type in assembly.GetTypes()
                 let attr = type.GetCustomAttribute<EventContractAttribute>()
                 where type.IsAssignableTo(typeof(TEvent)) && attr != null

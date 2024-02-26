@@ -32,6 +32,7 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
             // find applicable event types by tentatively applying them to both the state
             let eventTypes = (
                 from assembly in AppDomain.CurrentDomain.GetAssemblies()
+                where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                 from type in assembly.GetTypes()
                 let attr = type.GetCustomAttribute<EventContractAttribute>()
                 where type.IsAssignableTo(typeof(TReactionEvent)) && attr != null

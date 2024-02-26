@@ -14,6 +14,7 @@ class ResolvedEventDeserializer {
         // find all types that are attributed with EventContract
         _eventContracts = new Lazy<Type[]>(() => (
             from assembly in AppDomain.CurrentDomain.GetAssemblies()
+            where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
             from type in assembly.GetTypes()
             let attr = type.GetCustomAttribute<EventContractAttribute>()
             where attr != null
