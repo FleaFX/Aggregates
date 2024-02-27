@@ -3,7 +3,7 @@
 /// <summary>
 /// Tracks the version of an aggregate.
 /// </summary>
-readonly struct AggregateVersion {
+public readonly struct AggregateVersion {
     readonly long _value;
 
     /// <summary>

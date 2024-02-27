@@ -7,7 +7,7 @@
 /// <typeparam name="TEvent">The type of the event(s) that are applicable.</typeparam>
 /// <param name="State">The state of the aggregate.</param>
 /// <param name="Version">The version of the aggregate when it was loaded.</param>
-sealed record SagaRoot<TState, TEvent>(TState State, AggregateVersion Version) : IAggregateRoot
+public sealed record SagaRoot<TState, TEvent>(TState State, AggregateVersion Version) : IAggregateRoot
     where TState : IState<TState, TEvent> {
     readonly List<object> _changes = new();
 

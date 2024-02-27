@@ -13,4 +13,4 @@ public delegate void SerializerDelegate(Stream destination, object payload);
 /// <param name="source">The <see cref="Stream"/> to read the serialized payload from.</param>
 /// <param name="target">The target type to deserialize to.</param>
 /// <returns>A <see cref="object"/>.</returns>
-delegate object DeserializerDelegate(Stream source, Type target);
+public delegate object DeserializerDelegate(Stream source, Type target);

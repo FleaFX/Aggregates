@@ -16,7 +16,7 @@ public class ReactionsOptions {
 
     internal Action<IServiceCollection>? ConfigureServices { get; private set; }
 
-    internal void AddConfiguration(Action<IServiceCollection> configuration) =>
+    public void AddConfiguration(Action<IServiceCollection> configuration) =>
         ConfigureServices = ConfigureServices.AndThen(configuration);
 }
 

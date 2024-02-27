@@ -5,7 +5,7 @@
 /// </summary>
 /// <typeparam name="TReactionEvent">The type of the event(s) to react to.</typeparam>
 #pragma warning disable CS1712
-interface ISagaHandler<TReactionState, in TReactionEvent, TCommand, TCommandState, TCommandEvent>
+public interface ISagaHandler<TReactionState, in TReactionEvent, TCommand, TCommandState, TCommandEvent>
     where TReactionState : IState<TReactionState, TReactionEvent>
     where TCommand : ICommand<TCommandState, TCommandEvent>
     where TCommandState : IState<TCommandState, TCommandEvent> {

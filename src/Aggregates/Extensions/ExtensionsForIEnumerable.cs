@@ -2,7 +2,7 @@
 
 namespace Aggregates.Extensions;
 
-static class ExtensionsForIEnumerable {
+public static class ExtensionsForIEnumerable {
     /// <summary>
     /// Performs a side effect for each element in the sequence.
     /// </summary>

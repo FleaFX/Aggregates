@@ -1,6 +1,6 @@
 ﻿namespace Aggregates;
 
-interface IAggregateRoot {
+public interface IAggregateRoot {
     /// <summary>
     /// Gets the version that the aggregate instance is at.
     /// </summary>

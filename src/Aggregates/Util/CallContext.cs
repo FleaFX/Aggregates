@@ -2,7 +2,7 @@
 
 namespace Aggregates.Util;
 
-static class CallContext<T> {
+public static class CallContext<T> {
     static readonly ConcurrentDictionary<string, AsyncLocal<T>> State = new();
 
     /// <summary>
