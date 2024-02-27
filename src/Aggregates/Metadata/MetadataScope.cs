@@ -36,7 +36,7 @@ public sealed class MetadataScope : IAsyncDisposable {
     /// Adds the given metadata to the scope.
     /// </summary>
     /// <param name="metadata">The metadata to add.</param>
-    internal void Add(KeyValuePair<string, object?> metadata) =>
+    public void Add(KeyValuePair<string, object?> metadata) =>
         _metadata[metadata.Key] = metadata.Value;
 
     /// <summary>

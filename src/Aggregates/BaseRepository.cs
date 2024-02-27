@@ -3,7 +3,12 @@ using Aggregates.Sagas;
 
 namespace Aggregates;
 
-abstract class BaseRepository<TState, TEvent> : IRepository<TState, TEvent> where TState : IState<TState, TEvent> {
+/// <summary>
+/// Repository base class.
+/// </summary>
+/// <typeparam name="TState">The type of the state object.</typeparam>
+/// <typeparam name="TEvent">The type of the event object.</typeparam>
+public abstract class BaseRepository<TState, TEvent> : IRepository<TState, TEvent> where TState : IState<TState, TEvent> {
     readonly UnitOfWork _unitOfWork;
 
     /// <summary>

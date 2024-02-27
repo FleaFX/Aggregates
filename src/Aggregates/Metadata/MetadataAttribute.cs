@@ -65,6 +65,6 @@ public class MetadataAttribute : Attribute {
     /// </summary>
     /// <param name="context">A context object that may provide more information to create the metadata.</param>
     /// <returns></returns>
-    internal KeyValuePair<string, object?> Create(object context) =>
+    public KeyValuePair<string, object?> Create(object context) =>
         new(_key, _valueProvider(context));
 }

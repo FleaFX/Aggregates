@@ -8,16 +8,16 @@ namespace Aggregates;
 /// </summary>
 /// <param name="unitOfWork">The <see cref="UnitOfWork"/> that contains the changes to commit.</param>
 /// <returns>A <see cref="ValueTask"/> that represents the asynchronous commit operation.</returns>
-delegate ValueTask EntityCommitDelegate(UnitOfWork unitOfWork);
+public delegate ValueTask EntityCommitDelegate(UnitOfWork unitOfWork);
 
 /// <summary>
 /// Asynchronously commits the changes made to a saga in the given <see cref="UnitOfWork"/>.
 /// </summary>
 /// <param name="unitOfWork">The <see cref="UnitOfWork"/> that contains the changes to commit.</param>
 /// <returns>A <see cref="ValueTask"/> that represents the asynchronous commit operation.</returns>
-delegate ValueTask SagaCommitDelegate(UnitOfWork unitOfWork);
+public delegate ValueTask SagaCommitDelegate(UnitOfWork unitOfWork);
 
-sealed class UnitOfWork {
+public sealed class UnitOfWork {
     readonly Dictionary<AggregateIdentifier, Aggregate> _aggregates = new();
 
     /// <summary>

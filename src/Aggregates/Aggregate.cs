@@ -5,7 +5,7 @@
 /// </summary>
 /// <param name="Identifier">Uniquely identifies the aggregate within the system.</param>
 /// <param name="AggregateRoot">The root object of the aggregate.</param>
-readonly record struct Aggregate(AggregateIdentifier Identifier, IAggregateRoot AggregateRoot) {
+public readonly record struct Aggregate(AggregateIdentifier Identifier, IAggregateRoot AggregateRoot) {
     /// <summary>
     /// Used to check whether an aggregate was loaded.
     /// </summary>
