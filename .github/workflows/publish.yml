@@ -29,25 +29,25 @@ jobs:
           run: dotnet nuget push src/Aggregates/bin/Release/Aggregates.*.nupkg -k ${{ secrets.NUGETAPIKEY }} -s ${{ vars.NUGETPUSHSOURCE }} --skip-duplicate
 
         - name: Pack Aggregates.EventStoreDB
-          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESEVENTSTOREDB }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESEVENTSTOREDB }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release src/Aggregates.EventStoreDB/
+          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESEVENTSTOREDB }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESEVENTSTOREDB }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release --no-restore src/Aggregates.EventStoreDB/
 
         - name: Push Aggregates.EventStoreDB
           run: dotnet nuget push src/Aggregates.EventStoreDB/bin/Release/Aggregates.EventStoreDB.*.nupkg -k ${{ secrets.NUGETAPIKEY }} -s ${{ vars.NUGETPUSHSOURCE }} --skip-duplicate
 
         - name: Pack Aggregates.Sql
-          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESSQL }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESSQL }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release src/Aggregates.Sql/
+          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESSQL }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESSQL }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release --no-restore src/Aggregates.Sql/
 
         - name: Push Aggregates.Sql
           run: dotnet nuget push src/Aggregates.Sql/bin/Release/Aggregates.Sql.*.nupkg -k ${{ secrets.NUGETAPIKEY }} -s ${{ vars.NUGETPUSHSOURCE }} --skip-duplicate
 
         - name: Pack Aggregates.Json
-          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESJSON }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESJSON }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release src/Aggregates.Json/
+          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESJSON }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESJSON }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release --no-restore src/Aggregates.Json/
 
         - name: Push Aggregates.Json
           run: dotnet nuget push src/Aggregates.Json/bin/Release/Aggregates.Json.*.nupkg -k ${{ secrets.NUGETAPIKEY }} -s ${{ vars.NUGETPUSHSOURCE }} --skip-duplicate
 
         - name: Pack Aggregates.Protobuf
-          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESPROTOBUF }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESPROTOBUF }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release src/Aggregates.Protobuf/
+          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESPROTOBUF }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESPROTOBUF }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release --no-restore src/Aggregates.Protobuf/
 
         - name: Push Aggregates.Protobuf
           run: dotnet nuget push src/Aggregates.Protobuf/bin/Release/Aggregates.Protobuf.*.nupkg -k ${{ secrets.NUGETAPIKEY }} -s ${{ vars.NUGETPUSHSOURCE }} --skip-duplicate
