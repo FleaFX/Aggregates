@@ -7,7 +7,7 @@ namespace Aggregates.Metadata;
 /// <summary>
 /// Provides a scope object into which event metadata can be collected while handling a command.
 /// </summary>
-public sealed class MetadataScope : IAsyncDisposable {
+public sealed class MetadataScope : IAsyncDisposable, IDisposable {
     readonly Dictionary<string, object?> _metadata;
 
     /// <summary>
@@ -63,9 +63,17 @@ public sealed class MetadataScope : IAsyncDisposable {
     /// <summary>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources asynchronously.</summary>
     /// <returns>A task that represents the asynchronous dispose operation.</returns>
     ValueTask IAsyncDisposable.DisposeAsync() {
-        if (!Scopes.IsEmpty)
-            Scopes = Scopes.Pop();
+        Dispose();
 
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <exception cref="NotImplementedException"></exception>
+    public void Dispose() {
+        if (!Scopes.IsEmpty)
+            Scopes = Scopes.Pop();
     }
 }
