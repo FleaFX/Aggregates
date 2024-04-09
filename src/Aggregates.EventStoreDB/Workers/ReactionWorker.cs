@@ -63,12 +63,17 @@ class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>
         // now connect the subscription and start updating the projection state
         using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
             async (subscription, @event, retryCount, _) => {
+                // react to the event and handle each command
                 try {
-                    // react to the event and handle each command
                     await using var metadataScope = new MetadataScope();
+                    var metadata = metadataDeserializer.Deserialize(@event);
+                    foreach (var pair in metadata ?? new Dictionary<string, object?>()) {
+                        metadataScope.Add(pair);
+                    }
+
                     await foreach (var command in reaction.ReactAsync(
                                        (TReactionEvent)deserializer.Deserialize(@event),
-                                       metadataDeserializer.Deserialize(@event),
+                                       metadata,
                                        stoppingToken)) {
                         using var scope = ServiceScopeFactory.CreateScope();
                         var commandHandler = scope.ServiceProvider.GetRequiredService<ICommandHandler<TCommand, TState, TEvent>>();
