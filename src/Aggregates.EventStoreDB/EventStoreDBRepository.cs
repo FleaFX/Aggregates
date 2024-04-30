@@ -1,25 +1,19 @@
 ﻿using Aggregates.Entities;
 using Aggregates.EventStoreDB.Serialization;
 using Aggregates.Sagas;
-using Aggregates.Types;
 using EventStore.Client;
 
 namespace Aggregates.EventStoreDB;
 
-class EventStoreDbRepository<TState, TEvent> : BaseRepository<TState, TEvent> where TState : IState<TState, TEvent> {
-    readonly EventStoreClient _eventStoreClient;
-    readonly ResolvedEventDeserializer _deserializer;
-
-    /// <summary>
-    /// Initializes a new <see cref="EventStoreDbRepository{TState,TEvent}"/>.
-    /// </summary>
-    /// <param name="unitOfWork">The <see cref="UnitOfWork"/> to track changes.</param>
-    /// <param name="eventStoreClient">The <see cref="EventStoreClient"/> to use.</param>
-    /// <param name="deserializer">A <see cref="ResolvedEventDeserializer"/> that deserializes a <see cref="ResolvedEvent"/>.</param>
-    public EventStoreDbRepository(UnitOfWork unitOfWork, EventStoreClient eventStoreClient, ResolvedEventDeserializer deserializer) : base(unitOfWork) {
-        _eventStoreClient = eventStoreClient ?? throw new ArgumentNullException(nameof(eventStoreClient));
-        _deserializer = deserializer ?? throw new ArgumentNullException(nameof(deserializer));
-    }
+/// <summary>
+/// Initializes a new <see cref="EventStoreDbRepository{TState,TEvent}"/>.
+/// </summary>
+/// <param name="unitOfWork">The <see cref="UnitOfWork"/> to track changes.</param>
+/// <param name="eventStoreClient">The <see cref="EventStoreClient"/> to use.</param>
+/// <param name="deserializer">A <see cref="ResolvedEventDeserializer"/> that deserializes a <see cref="ResolvedEvent"/>.</param>
+class EventStoreDbRepository<TState, TEvent>(UnitOfWork unitOfWork, EventStoreClient eventStoreClient, ResolvedEventDeserializer deserializer) : BaseRepository<TState, TEvent>(unitOfWork) where TState : IState<TState, TEvent> {
+    readonly EventStoreClient _eventStoreClient = eventStoreClient ?? throw new ArgumentNullException(nameof(eventStoreClient));
+    readonly ResolvedEventDeserializer _deserializer = deserializer ?? throw new ArgumentNullException(nameof(deserializer));
 
     /// <summary>
     /// Asynchronously retrieves the <see cref="EntityRoot{TState,TEvent}"/> associated with the given <paramref name="identifier"/>.
