@@ -3,17 +3,14 @@
 /// <summary>
 /// Handlers that first tries to retrieve an <see cref="EntityRoot{TState,TEvent}"/> object, and if it doesn't exist yet, adds it to the repository.
 /// </summary>
-class GetOrAddHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
+/// <remarks>
+/// Initializes a new <see cref="GetOrAddHandler{TCommand,TState,TEvent}"/>.
+/// </remarks>
+/// <param name="repository">The <see cref="IRepository{TState,TEvent}"/> to use when interacting with the aggregate which is affected by the handled command.</param>
+class GetOrAddHandler<TCommand, TState, TEvent>(IRepository<TState, TEvent> repository) : ICommandHandler<TCommand, TState, TEvent>
     where TCommand : ICommand<TState, TEvent>
     where TState : IState<TState, TEvent> {
-    readonly IRepository<TState, TEvent> _repository;
-
-    /// <summary>
-    /// Initializes a new <see cref="GetOrAddHandler{TCommand,TState,TEvent}"/>.
-    /// </summary>
-    /// <param name="repository">The <see cref="IRepository{TState,TEvent}"/> to use when interacting with the aggregate which is affected by the handled command.</param>
-    public GetOrAddHandler(IRepository<TState, TEvent> repository) =>
-        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+    readonly IRepository<TState, TEvent> _repository = repository ?? throw new ArgumentNullException(nameof(repository));
 
     /// <summary>
     /// Asynchronously handles the given <paramref name="command"/>.

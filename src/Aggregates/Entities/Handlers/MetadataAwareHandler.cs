@@ -3,17 +3,13 @@ using System.Reflection;
 
 namespace Aggregates.Entities.Handlers;
 
-class MetadataAwareHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
+/// <summary>
+/// Initializes a new <see cref="MetadataAwareHandler{TCommand,TState,TEvent}"/>.
+/// </summary>
+/// <param name="handler">The <see cref="UnitOfWorkAwareHandler{TCommand,TState,TEvent}"/> to delegate to.</param>
+class MetadataAwareHandler<TCommand, TState, TEvent>(UnitOfWorkAwareHandler<TCommand, TState, TEvent> handler) : ICommandHandler<TCommand, TState, TEvent>
     where TCommand : ICommand<TState, TEvent>
     where TState : IState<TState, TEvent> {
-    readonly UnitOfWorkAwareHandler<TCommand, TState, TEvent> _handler;
-
-    /// <summary>
-    /// Initializes a new <see cref="MetadataAwareHandler{TCommand,TState,TEvent}"/>.
-    /// </summary>
-    /// <param name="handler">The <see cref="UnitOfWorkAwareHandler{TCommand,TState,TEvent}"/> to delegate to.</param>
-    public MetadataAwareHandler(UnitOfWorkAwareHandler<TCommand, TState, TEvent> handler) =>
-        _handler = handler;
 
     /// <summary>
     /// Asynchronously handles the given <paramref name="command"/>.
@@ -27,6 +23,6 @@ class MetadataAwareHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand,
         foreach (var metadata in command.GetType().GetCustomAttributes<MetadataAttribute>())
             scope.Add(metadata.Create(command));
 
-        await _handler.HandleAsync(command);
+        await handler.HandleAsync(command);
     }
 }

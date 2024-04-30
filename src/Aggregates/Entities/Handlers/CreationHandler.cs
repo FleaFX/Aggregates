@@ -6,17 +6,14 @@
 /// <typeparam name="TCommand">The type of the command that affects the state of the aggregate.</typeparam>
 /// <typeparam name="TState">The type of the maintained state object.</typeparam>
 /// <typeparam name="TEvent">The type of the event(s) that are applicable.</typeparam>
-class CreationHandler<TCommand, TState, TEvent> : ICommandHandler<TCommand, TState, TEvent>
+/// <remarks>
+/// Initializes a new <see cref="CreationHandler{TCommand,TState,TEvent}"/>.
+/// </remarks>
+/// <param name="repository">The <see cref="IRepository{TState,TEvent}"/> to use when retrieving the aggregate which is affected by the handled command.</param>
+class CreationHandler<TCommand, TState, TEvent>(IRepository<TState, TEvent> repository) : ICommandHandler<TCommand, TState, TEvent>
     where TCommand : ICommand< TState, TEvent>
     where TState : IState<TState, TEvent> {
-    readonly IRepository<TState, TEvent> _repository;
-
-    /// <summary>
-    /// Initializes a new <see cref="CreationHandler{TCommand,TState,TEvent}"/>.
-    /// </summary>
-    /// <param name="repository">The <see cref="IRepository{TState,TEvent}"/> to use when retrieving the aggregate which is affected by the handled command.</param>
-    public CreationHandler(IRepository<TState, TEvent> repository) =>
-        _repository = repository ?? throw new ArgumentNullException(nameof(repository));
+    readonly IRepository<TState, TEvent> _repository = repository ?? throw new ArgumentNullException(nameof(repository));
 
     /// <summary>
     /// Asynchronously handles the given <paramref name="command"/>.
