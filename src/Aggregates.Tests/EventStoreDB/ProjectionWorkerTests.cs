@@ -2,12 +2,9 @@
 using Aggregates.EventStoreDB.Util;
 using Aggregates.EventStoreDB.Workers;
 using Aggregates.Sql;
-using Aggregates.Types;
 using EventStore.Client;
 using FakeItEasy;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using static EventStore.Client.StreamMessage;
 
 namespace Aggregates.EventStoreDB;
 
@@ -16,19 +13,19 @@ public class ProjectionWorkerTests {
 
     readonly ListToAllAsyncDelegate _listToAllAsync;
     readonly CreateToAllAsyncDelegate _createToAllAsync;
-    readonly SubscribeToAllAsync _subscribeToAllAsync;
+    readonly SubscribeToAll _subscribeToAll;
 
     readonly ProjectionWorker<ExampleProjection, IExampleProjectionEvent> _worker;
 
     public ProjectionWorkerTests() {
         _listToAllAsync = A.Fake<ListToAllAsyncDelegate>();
         _createToAllAsync = A.Fake<CreateToAllAsyncDelegate>();
-        _subscribeToAllAsync = A.Fake<SubscribeToAllAsync>();
+        _subscribeToAll = A.Fake<SubscribeToAll>();
 
         var serviceProvider = A.Dummy<IServiceProvider>();
         A.CallTo(() => serviceProvider.GetService(typeof(ListToAllAsyncDelegate))).Returns(_listToAllAsync);
         A.CallTo(() => serviceProvider.GetService(typeof(CreateToAllAsyncDelegate))).Returns(_createToAllAsync);
-        A.CallTo(() => serviceProvider.GetService(typeof(SubscribeToAllAsync))).Returns(_subscribeToAllAsync);
+        A.CallTo(() => serviceProvider.GetService(typeof(SubscribeToAll))).Returns(_subscribeToAll);
         A.CallTo(() => serviceProvider.GetService(typeof(ResolvedEventDeserializer))).Returns(new ResolvedEventDeserializer((source, target) => null!));
         A.CallTo(() => serviceProvider.GetService(typeof(MetadataDeserializer))).Returns(new MetadataDeserializer((source, target) => null!));
         A.CallTo(() => serviceProvider.GetService(typeof(IProjection<ExampleProjection, IExampleProjectionEvent>))).Returns(new ExampleProjection(A.Dummy<IDbConnectionFactory>()));

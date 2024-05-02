@@ -12,11 +12,11 @@ namespace Aggregates.EventStoreDB.Workers;
 /// </summary>
 /// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
 class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>(IServiceScopeFactory serviceScopeFactory, ILogger<SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>> logger)
-    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>>(serviceScopeFactory)
+    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAll, ResolvedEventDeserializer, MetadataDeserializer, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>>(serviceScopeFactory)
     where TReactionState : IState<TReactionState, TReactionEvent>
     where TCommand : ICommand<TCommandState, TCommandEvent>
     where TCommandState : IState<TCommandState, TCommandEvent> {
-    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAllAsync subscribeToAllAsync, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> reaction, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> sagaHandler, CancellationToken stoppingToken) {
+    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAll subscribeToAll, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> reaction, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> sagaHandler, CancellationToken stoppingToken) {
         // setup a new subscription group if it doesn't exist yet
         var persistentSubscriptionGroupName = reaction.GetType().FullName!;
         await Task.WhenAll(
@@ -49,24 +49,35 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
         // now connect the subscription and start the saga
         await Task.Run(async () => {
             do {
-                using var _ = await subscribeToAllAsync(persistentSubscriptionGroupName,
-                    async (subscription, @event, retryCount, _) => {
-                        try {
-                            using var linkEvent = new LinkEventScope(@event);
-                            await sagaHandler.HandleAsync((TReactionEvent)deserializer.Deserialize(@event),
-                                metadataDeserializer.Deserialize(@event),
-                                stoppingToken);
+                await using var subscription = subscribeToAll(persistentSubscriptionGroupName);
+                await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
+                    switch (message) {
+                        case PersistentSubscriptionMessage.Event @event: {
+                            try {
+                                using var linkEvent = new LinkEventScope(@event.ResolvedEvent);
+                                await sagaHandler.HandleAsync((TReactionEvent)deserializer.Deserialize(@event.ResolvedEvent),
+                                    metadataDeserializer.Deserialize(@event.ResolvedEvent),
+                                    stoppingToken);
 
-                            // notify EventStoreDB that we're done
-                            await subscription.Ack(@event);
-                        } catch (Exception ex) {
-                            await subscription.Nack(
-                                retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                                ex.ToString(), @event);
+                                // notify EventStoreDB that we're done
+                                await subscription.Ack(@event.ResolvedEvent);
+                            } catch (Exception ex) {
+                                await subscription.Nack(
+                                    @event.RetryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
+                                    ex.ToString(),
+                                    @event.ResolvedEvent);
+                            }
                         }
-                    },
-                    (subscription, reason, _) => logger.LogWarning($"Subscription was dropped in {GetType().Name} (Subscription id: {subscription.SubscriptionId}). Reason: {reason}"),
-                    cancellationToken: stoppingToken);
+                        break;
+
+                        case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
+                            logger.LogInformation($"Subscription to {confirmation.SubscriptionId} has been confirmed. Saga started.");
+                            break;
+                    }
+                }
+
+                if (!stoppingToken.IsCancellationRequested) logger.LogWarning("Subscription has ended or has been dropped. Reconnecting.");
+
             } while (!stoppingToken.IsCancellationRequested);
         }, stoppingToken);
 
