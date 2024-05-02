@@ -6,20 +6,19 @@ using System.Reflection;
 using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
 using Aggregates.Metadata;
+using Microsoft.Extensions.Logging;
 
 namespace Aggregates.EventStoreDB.Workers;
 
-class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>
-    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IReaction<TReactionEvent, TCommand, TState, TEvent>> where TReaction : IReaction<TReactionEvent, TCommand, TState, TEvent>
+/// <summary>
+/// Initializes a new <see cref="ReactionWorker{TReaction,TReactionEvent,TCommand,TState,TEvent}"/>.
+/// </summary>
+/// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
+class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>(IServiceScopeFactory serviceScopeFactory, ILogger<ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>> logger)
+    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IReaction<TReactionEvent, TCommand, TState, TEvent>>(serviceScopeFactory) where TReaction : IReaction<TReactionEvent, TCommand, TState, TEvent>
     where TState : IState<TState, TEvent>
     where TCommand : ICommand<TState, TEvent> {
     readonly string _persistentSubscriptionGroupName = typeof(TReaction).FullName!;
-
-    /// <summary>
-    /// Initializes a new <see cref="ReactionWorker{TReaction,TReactionEvent,TCommand,TState,TEvent}"/>.
-    /// </summary>
-    /// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
-    public ReactionWorker(IServiceScopeFactory serviceScopeFactory) : base(serviceScopeFactory) { }
 
     /// <summary>
     /// Implement this method rather than <see cref="ScopedBackgroundService{TDep1,TDep2,TDep3,TDep4,TDep5}.ExecuteAsync"/>. The required dependencies are passed in.
@@ -61,34 +60,37 @@ class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>
         );
 
         // now connect the subscription and start updating the projection state
-        using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
-            async (subscription, @event, retryCount, _) => {
-                // react to the event and handle each command
-                try {
-                    await using var metadataScope = new MetadataScope();
-                    var metadata = metadataDeserializer.Deserialize(@event);
-                    foreach (var pair in metadata ?? new Dictionary<string, object?>()) {
-                        metadataScope.Add(pair);
-                    }
+        while (!stoppingToken.IsCancellationRequested) {
+            using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
+                async (subscription, @event, retryCount, _) => {
+                    // react to the event and handle each command
+                    try {
+                        await using var metadataScope = new MetadataScope();
+                        var metadata = metadataDeserializer.Deserialize(@event);
+                        foreach (var pair in metadata ?? new Dictionary<string, object?>()) {
+                            metadataScope.Add(pair);
+                        }
 
-                    await foreach (var command in reaction.ReactAsync(
-                                       (TReactionEvent)deserializer.Deserialize(@event),
-                                       metadata,
-                                       stoppingToken)) {
-                        using var scope = ServiceScopeFactory.CreateScope();
-                        var commandHandler = scope.ServiceProvider.GetRequiredService<ICommandHandler<TCommand, TState, TEvent>>();
-                        await commandHandler.HandleAsync(command);
-                    }
+                        await foreach (var command in reaction.ReactAsync(
+                                           (TReactionEvent)deserializer.Deserialize(@event),
+                                           metadata,
+                                           stoppingToken)) {
+                            using var scope = ServiceScopeFactory.CreateScope();
+                            var commandHandler = scope.ServiceProvider.GetRequiredService<ICommandHandler<TCommand, TState, TEvent>>();
+                            await commandHandler.HandleAsync(command);
+                        }
 
-                    // notify EventStoreDB that we're done
-                    await subscription.Ack(@event);
-                } catch (Exception ex) {
-                    await subscription.Nack(
-                        retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                        ex.Message, @event);
-                }
-            },
-            cancellationToken: stoppingToken);
+                        // notify EventStoreDB that we're done
+                        await subscription.Ack(@event);
+                    } catch (Exception ex) {
+                        await subscription.Nack(
+                            retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
+                            ex.Message, @event);
+                    }
+                },
+                (subscription, reason, _) => logger.LogWarning($"Subscription was dropped in {GetType().Name} (Subscription id: {subscription.SubscriptionId}). Reason: {reason}"),
+                cancellationToken: stoppingToken);
+        }
 
         await stoppingToken;
     }

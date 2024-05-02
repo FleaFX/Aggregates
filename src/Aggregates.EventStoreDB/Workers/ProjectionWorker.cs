@@ -5,17 +5,16 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
+using Microsoft.Extensions.Logging;
 
 namespace Aggregates.EventStoreDB.Workers;
 
-class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IProjection<TState, TEvent>> where TState : IProjection<TState, TEvent> {
+/// <summary>
+/// Initializes a new <see cref="ProjectionWorker{TState,TEvent}"/>.
+/// </summary>
+/// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
+class ProjectionWorker<TState, TEvent>(IServiceScopeFactory serviceScopeFactory, ILogger<ProjectionWorker<TState, TEvent>> logger) : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IProjection<TState, TEvent>>(serviceScopeFactory) where TState : IProjection<TState, TEvent> {
     readonly string _persistentSubscriptionGroupName = typeof(TState).FullName!;
-
-    /// <summary>
-    /// Initializes a new <see cref="ProjectionWorker{TState,TEvent}"/>.
-    /// </summary>
-    /// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
-    public ProjectionWorker(IServiceScopeFactory serviceScopeFactory) : base(serviceScopeFactory) { }
 
     /// <summary>
     /// Implement this method rather than <see cref="ScopedBackgroundService{TDep1,TDep2,TDep3,TDep4,TDep5}.ExecuteAsync"/>. The required dependencies are passed in.
@@ -53,28 +52,31 @@ class ProjectionWorker<TState, TEvent> : ScopedBackgroundService<ListToAllAsyncD
 
             // finally create a persistent subscription with a filter on event type
             let filter = string.Join('|', eventTypes.Select(eventType => eventType.ToString().Replace(".", @"\.")))
-            select createToAllAsync(_persistentSubscriptionGroupName, EventTypeFilter.RegularExpression($"^(?:{filter})$"), new PersistentSubscriptionSettings(), cancellationToken: stoppingToken)
+            select createToAllAsync(_persistentSubscriptionGroupName, EventTypeFilter.RegularExpression($"^(?:{filter})$"), new PersistentSubscriptionSettings() , cancellationToken: stoppingToken)
         );
 
-        //now connect the subscription and start updating the projection state
-        var state = initialState;
-        using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
-            async (subscription, @event, retryCount, _) => {
-                try {
-                    // apply and commit the projection
-                    state = await state
-                        .Apply((TEvent)deserializer.Deserialize(@event), metadataDeserializer.Deserialize(@event))
-                        .CommitAsync(stoppingToken);
+        // now connect the subscription and start updating the projection state
+        while (!stoppingToken.IsCancellationRequested) {
+            var state = initialState;
+            using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
+                async (subscription, @event, retryCount, _) => {
+                    try {
+                        // apply and commit the projection
+                        state = await state
+                            .Apply((TEvent)deserializer.Deserialize(@event), metadataDeserializer.Deserialize(@event))
+                            .CommitAsync(stoppingToken);
 
-                    // notify EventStoreDB that we're done
-                    await subscription.Ack(@event);
-                } catch (Exception ex) {
-                    await subscription.Nack(
-                        retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                        ex.Message, @event);
-                }
-            },
-            cancellationToken: stoppingToken);
+                        // notify EventStoreDB that we're done
+                        await subscription.Ack(@event);
+                    } catch (Exception ex) {
+                        await subscription.Nack(
+                            retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
+                            ex.Message, @event);
+                    }
+                },
+                (subscription, reason, _) => logger.LogWarning($"Subscription was dropped in {GetType().Name} (Subscription id: {subscription.SubscriptionId}). Reason: {reason}"),
+                cancellationToken: stoppingToken);
+        }
 
         await stoppingToken;
     }
