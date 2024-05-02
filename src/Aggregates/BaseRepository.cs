@@ -35,13 +35,7 @@ public abstract class BaseRepository<TState, TEvent>(UnitOfWork unitOfWork) : IR
             return aggregate;
         }
 
-        var root = FromUow() ?? await FromCore();
-
-        // provide opportunity for state object to produce some metadata
-        foreach (var metadata in root?.State.GetType().GetCustomAttributes<MetadataAttribute>() ?? [])
-            MetadataScope.Current.Add(metadata.Create(root!.State));
-
-        return root;
+        return FromUow() ?? await FromCore();
     }
 
     /// <summary>
@@ -78,13 +72,7 @@ public abstract class BaseRepository<TState, TEvent>(UnitOfWork unitOfWork) : IR
             return aggregate;
         }
 
-        var root = FromUow() ?? await FromCore();
-
-        // provide opportunity for state object to produce some metadata
-        foreach (var metadata in root?.State.GetType().GetCustomAttributes<MetadataAttribute>() ?? [])
-            MetadataScope.Current.Add(metadata.Create(root!.State));
-
-        return root;
+        return FromUow() ?? await FromCore();
     }
 
     /// <summary>
@@ -92,13 +80,8 @@ public abstract class BaseRepository<TState, TEvent>(UnitOfWork unitOfWork) : IR
     /// </summary>
     /// <param name="identifier">Uniquely identifies the aggregate.</param>
     /// <param name="sagaRoot">The <see cref="SagaRoot{TState,TEvent}"/> to add.</param>
-    public void Add(AggregateIdentifier identifier, SagaRoot<TState, TEvent> sagaRoot) {
-        // provide opportunity for state object to produce some metadata
-        foreach (var metadata in sagaRoot.State.GetType().GetCustomAttributes<MetadataAttribute>())
-            MetadataScope.Current.Add(metadata.Create(sagaRoot.State));
-
+    public void Add(AggregateIdentifier identifier, SagaRoot<TState, TEvent> sagaRoot) =>
         unitOfWork.Attach(new Aggregate(identifier, sagaRoot));
-    }
 
     /// <summary>
     /// Asynchronously retrieves the <see cref="EntityRoot{TState,TEvent}"/> associated with the given <paramref name="identifier"/>.

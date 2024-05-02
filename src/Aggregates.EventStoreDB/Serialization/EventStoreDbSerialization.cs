@@ -34,7 +34,7 @@ static class EventStoreDbSerialization {
                 SerializePayload(serializer, @event),
 
                 metadata:
-                SerializePayload(serializer, GetEventMetadata(@event)));
+                SerializePayload(serializer, MetadataScope.Current.ToDictionary()));
 
             // next time round, the version offset for this aggregate will be incremented by one
             serializedEventsPerAggregate[aggregate.Identifier]++;
@@ -67,7 +67,7 @@ static class EventStoreDbSerialization {
                 Encoding.UTF8.GetBytes($"{LinkEventScope.Current!.LinkEvent.OriginalEventNumber}@{LinkEventScope.Current!.LinkEvent.OriginalStreamId}"),
 
                 metadata:
-                SerializePayload(serializer, GetEventMetadata(@event)));
+                SerializePayload(serializer, MetadataScope.Current.ToDictionary()));
 
             // next time round, the version offset for this aggregate will be incremented by one
             serializedEventsPerAggregate[aggregate.Identifier]++;
@@ -87,15 +87,16 @@ static class EventStoreDbSerialization {
         // event id will be a hash of aggregate id, version, event type and event hashcode, in order to ensure idempotence
         // use MD5 to compute the hash since it provides us with a 16-byte hash, which is convenient since that's the 
         // exact length of a GUID ¯\_(ツ)_/¯
-        var bufferWriter = new BinaryWriter(new MemoryStream());
+        using var stream = new MemoryStream();
+
+        var bufferWriter = new BinaryWriter(stream);
         bufferWriter.Write(aggregate.Identifier.ToString());
         bufferWriter.Write(aggregate.AggregateRoot.Version + versionOffset);
         bufferWriter.Write(@event.GetType().Name);
         bufferWriter.Flush();
-        bufferWriter.BaseStream.Seek(0, SeekOrigin.Begin);
+        stream.Seek(0, SeekOrigin.Begin);
 
-        var bufferReader = new BinaryReader(bufferWriter.BaseStream);
-        return Uuid.FromGuid(new Guid(MD5.Create().ComputeHash(bufferReader.ReadBytes((int)bufferReader.BaseStream.Length))));
+        return Uuid.FromGuid(new Guid(MD5.HashData(stream)));
     }
 
     /// <summary>
@@ -109,21 +110,9 @@ static class EventStoreDbSerialization {
     }
 
     /// <summary>
-    /// Gets the metadata to be saved with the event.
-    /// </summary>
-    /// <param name="event">The event to get the metadata for.</param>
-    /// <returns>A <see cref="IDictionary{TKey,TValue}"/>.</returns>
-    static IDictionary<string, object?> GetEventMetadata(object @event) {
-        var scope = MetadataScope.Current;
-        foreach (var metadata in @event.GetType().GetCustomAttributes<MetadataAttribute>())
-            scope.Add(metadata.Create(@event));
-
-        return scope.ToDictionary();
-    }
-
-    /// <summary>
     /// Serializes the given <paramref name="payload"/> using the given <see cref="SerializerDelegate"/>.
     /// </summary>
+    /// <param name="serialize">The <see cref="SerializerDelegate"/> that writes the serialized payload.</param>
     /// <param name="payload">The payload to serialize.</param>
     /// <returns>A byte array.</returns>
     static byte[] SerializePayload(SerializerDelegate serialize, object payload) {
