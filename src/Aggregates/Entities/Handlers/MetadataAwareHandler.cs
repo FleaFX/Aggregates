@@ -5,11 +5,9 @@ namespace Aggregates.Entities.Handlers;
 /// <summary>
 /// Initializes a new <see cref="MetadataAwareHandler{TCommand,TState,TEvent}"/>.
 /// </summary>
-/// <param name="handlerFactory">Provides the <see cref="ICommandHandler{TCommand,TState,TEvent}"/> that performs the actual work.</param>
-class MetadataAwareHandler<TCommand, TState, TEvent>(ICommandHandlerFactory handlerFactory) : ICommandHandler<TCommand, TState, TEvent>
+class MetadataAwareHandler<TCommand, TState, TEvent>(UnitOfWorkAwareHandler<TCommand, TState, TEvent> handler) : ICommandHandler<TCommand, TState, TEvent>
     where TCommand : ICommand<TState, TEvent>
     where TState : IState<TState, TEvent> {
-    readonly ICommandHandler<TCommand, TState, TEvent> _handler = handlerFactory.Create<TCommand, TState, TEvent>();
 
     /// <summary>
     /// Asynchronously handles the given <paramref name="command"/>.
@@ -19,6 +17,6 @@ class MetadataAwareHandler<TCommand, TState, TEvent>(ICommandHandlerFactory hand
     public async ValueTask HandleAsync(TCommand command) {
         await using var scope = new MetadataScope();
         
-        await _handler.HandleAsync(command);
+        await handler.HandleAsync(command);
     }
 }
