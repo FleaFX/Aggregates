@@ -21,3 +21,9 @@ delegate Task<PersistentSubscription> SubscribeToAllAsync(string groupName,
     Action<PersistentSubscription, SubscriptionDroppedReason, Exception?>? subscriptionDropped = null,
     UserCredentials? credentials = null, int bufferSize = 10,
     CancellationToken cancellationToken = default);
+
+delegate EventStorePersistentSubscriptionsClient.PersistentSubscriptionResult SubscribeToAll(
+    string groupName,
+    int bufferSize = 10,
+    UserCredentials? userCredentials = null,
+    CancellationToken cancellationToken = default (CancellationToken));

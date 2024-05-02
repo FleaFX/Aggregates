@@ -3,7 +3,6 @@
 using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
 using Aggregates.EventStoreDB.Workers;
-using Aggregates.Types;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -35,7 +34,7 @@ public static class ExtensionsForProjectionsOptions {
                 };
             });
             services.TryAddScoped<CreateToAllAsyncDelegate>(sp => sp.GetRequiredService<EventStorePersistentSubscriptionsClient>().CreateToAllAsync);
-            services.TryAddScoped<SubscribeToAllAsync>(sp => sp.GetRequiredService<EventStorePersistentSubscriptionsClient>().SubscribeToAllAsync);
+            services.TryAddScoped<SubscribeToAll>(sp => sp.GetRequiredService<EventStorePersistentSubscriptionsClient>().SubscribeToAll);
             services.TryAddScoped(typeof(ResolvedEventDeserializer));
             services.TryAddScoped(typeof(MetadataDeserializer));
 

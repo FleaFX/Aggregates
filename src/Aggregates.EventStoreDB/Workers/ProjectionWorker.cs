@@ -1,5 +1,4 @@
 ﻿using Aggregates.EventStoreDB.Extensions;
-using Aggregates.Types;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
@@ -13,7 +12,7 @@ namespace Aggregates.EventStoreDB.Workers;
 /// Initializes a new <see cref="ProjectionWorker{TState,TEvent}"/>.
 /// </summary>
 /// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
-class ProjectionWorker<TState, TEvent>(IServiceScopeFactory serviceScopeFactory, ILogger<ProjectionWorker<TState, TEvent>> logger) : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAllAsync, ResolvedEventDeserializer, MetadataDeserializer, IProjection<TState, TEvent>>(serviceScopeFactory) where TState : IProjection<TState, TEvent> {
+class ProjectionWorker<TState, TEvent>(IServiceScopeFactory serviceScopeFactory, ILogger<ProjectionWorker<TState, TEvent>> logger) : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAll, ResolvedEventDeserializer, MetadataDeserializer, IProjection<TState, TEvent>>(serviceScopeFactory) where TState : IProjection<TState, TEvent> {
     readonly string _persistentSubscriptionGroupName = typeof(TState).FullName!;
 
     /// <summary>
@@ -21,12 +20,12 @@ class ProjectionWorker<TState, TEvent>(IServiceScopeFactory serviceScopeFactory,
     /// </summary>
     /// <param name="listToAllAsync">Asynchronously lists persistent subscriptions to $all.</param>
     /// <param name="createToAllAsync">Asynchronously creates a filtered persistent subscription to $all.</param>
-    /// <param name="subscribeToAllAsync">Asynchronously subscribes to a persistent subscription to $all.</param>
+    /// <param name="subscribeToAll">Asynchronously subscribes to a persistent subscription to $all.</param>
     /// <param name="deserializer">Deserializes a <see cref="ResolvedEvent"/>.</param>
     /// <param name="initialState">The initial state of the projection.</param>
     /// <param name="stoppingToken">A <see cref="CancellationToken"/> that is signaled when the asynchronous operation should be stopped.</param>
     /// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAllAsync subscribeToAllAsync, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IProjection<TState, TEvent> initialState, CancellationToken stoppingToken) {
+    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAll subscribeToAll, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IProjection<TState, TEvent> initialState, CancellationToken stoppingToken) {
         // setup a new subscription group if it doesn't exist yet
         await Task.WhenAll(
             from sub in (
@@ -59,24 +58,35 @@ class ProjectionWorker<TState, TEvent>(IServiceScopeFactory serviceScopeFactory,
         await Task.Run(async () => {
             do {
                 var state = initialState;
-                using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
-                    async (subscription, @event, retryCount, _) => {
-                        try {
-                            // apply and commit the projection
-                            state = await state
-                                .Apply((TEvent)deserializer.Deserialize(@event), metadataDeserializer.Deserialize(@event))
-                                .CommitAsync(stoppingToken);
+                await using var subscription = subscribeToAll(_persistentSubscriptionGroupName);
+                await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
+                    switch (message) {
+                        case PersistentSubscriptionMessage.Event @event: {
+                            try {
+                                // apply and commit the projection
+                                state = await state
+                                    .Apply((TEvent)deserializer.Deserialize(@event.ResolvedEvent), metadataDeserializer.Deserialize(@event.ResolvedEvent))
+                                    .CommitAsync(stoppingToken);
 
-                            // notify EventStoreDB that we're done
-                            await subscription.Ack(@event);
-                        } catch (Exception ex) {
-                            await subscription.Nack(
-                                retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                                ex.Message, @event);
+                                // notify EventStoreDB that we're done
+                                await subscription.Ack(@event.ResolvedEvent);
+                            } catch (Exception ex) {
+                                await subscription.Nack(
+                                    @event.RetryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
+                                    ex.Message,
+                                    @event.ResolvedEvent
+                                );
+                            }
                         }
-                    },
-                    (subscription, reason, _) => logger.LogWarning($"Subscription was dropped in {GetType().Name} (Subscription id: {subscription.SubscriptionId}). Reason: {reason}"),
-                    cancellationToken: stoppingToken);
+                        break;
+
+                        case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
+                            logger.LogInformation($"Subscription to {confirmation.SubscriptionId} has been confirmed. Projection started.");
+                            break;
+                    }
+                }
+
+                if (!stoppingToken.IsCancellationRequested) logger.LogWarning("Subscription has ended or has been dropped. Reconnecting.");
             } while (!stoppingToken.IsCancellationRequested);
         }, stoppingToken);
 
