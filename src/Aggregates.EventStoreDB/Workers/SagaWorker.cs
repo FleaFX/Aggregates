@@ -47,26 +47,28 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
         );
 
         // now connect the subscription and start the saga
-        while (!stoppingToken.IsCancellationRequested) {
-            using var _ = await subscribeToAllAsync(persistentSubscriptionGroupName,
-                async (subscription, @event, retryCount, _) => {
-                    try {
-                        using var linkEvent = new LinkEventScope(@event);
-                        await sagaHandler.HandleAsync((TReactionEvent)deserializer.Deserialize(@event),
-                            metadataDeserializer.Deserialize(@event),
-                            stoppingToken);
+        await Task.Run(async () => {
+            do {
+                using var _ = await subscribeToAllAsync(persistentSubscriptionGroupName,
+                    async (subscription, @event, retryCount, _) => {
+                        try {
+                            using var linkEvent = new LinkEventScope(@event);
+                            await sagaHandler.HandleAsync((TReactionEvent)deserializer.Deserialize(@event),
+                                metadataDeserializer.Deserialize(@event),
+                                stoppingToken);
 
-                        // notify EventStoreDB that we're done
-                        await subscription.Ack(@event);
-                    } catch (Exception ex) {
-                        await subscription.Nack(
-                            retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                            ex.ToString(), @event);
-                    }
-                },
-                (subscription, reason, _) => logger.LogWarning($"Subscription was dropped in {GetType().Name} (Subscription id: {subscription.SubscriptionId}). Reason: {reason}"),
-                cancellationToken: stoppingToken);
-        }
+                            // notify EventStoreDB that we're done
+                            await subscription.Ack(@event);
+                        } catch (Exception ex) {
+                            await subscription.Nack(
+                                retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
+                                ex.ToString(), @event);
+                        }
+                    },
+                    (subscription, reason, _) => logger.LogWarning($"Subscription was dropped in {GetType().Name} (Subscription id: {subscription.SubscriptionId}). Reason: {reason}"),
+                    cancellationToken: stoppingToken);
+            } while (!stoppingToken.IsCancellationRequested);
+        }, stoppingToken);
 
         await stoppingToken;
     }

@@ -39,7 +39,7 @@ public class ProjectionWorkerTests {
         _serviceScopeFactory = A.Dummy<IServiceScopeFactory>();
         A.CallTo(() => _serviceScopeFactory.CreateScope()).Returns(serviceScope);
 
-        _worker = new ProjectionWorker<ExampleProjection, IExampleProjectionEvent>(_serviceScopeFactory, A.Dummy<ILogger<ProjectionWorker<ExampleProjection, IExampleProjectionEvent>>>());
+        _worker = new ProjectionWorker<ExampleProjection, IExampleProjectionEvent>(_serviceScopeFactory, null!);
     }
 
 
