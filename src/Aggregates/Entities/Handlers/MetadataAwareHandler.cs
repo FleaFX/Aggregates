@@ -18,11 +18,13 @@ class MetadataAwareHandler<TCommand, TState, TEvent>(UnitOfWorkAwareHandler<TCom
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TCommand command) {
         await using var scope = new MetadataScope();
-
+        
+        await handler.HandleAsync(command);
+        
         // commands may provide a context for metadata, they should be attributed with the MetadataAttributes to achieve this
+        // we're requesting the command to create the metadata AFTER it's been handled, because the command might fail and any
+        // metadata might be meaningless in that case and no events would be stored anyway
         foreach (var metadata in command.GetType().GetCustomAttributes<MetadataAttribute>())
             scope.Add(metadata.Create(command));
-
-        await handler.HandleAsync(command);
     }
 }
