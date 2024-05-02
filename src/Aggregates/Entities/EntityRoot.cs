@@ -31,17 +31,29 @@ public sealed record EntityRoot<TState, TEvent>(TState? State, AggregateVersion 
     /// <param name="command">The command to accept.</param>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous operation.</param>
     public async ValueTask AcceptAsync<TCommand>(TCommand command, CancellationToken cancellationToken = default)
-        where TCommand : ICommand<TState, TEvent> =>
+        where TCommand : ICommand<TState, TEvent> {
         State = await command.ProgressAsync(State, cancellationToken)
             .TapAsync(@event => _changes.Add(@event))
             .AggregateAsync(State, static (state, @event) => SetMetadata(state.Apply(@event)), cancellationToken: cancellationToken);
 
-    static TState SetMetadata(TState state) {
-        foreach (var metadata in state.GetType().GetCustomAttributes<MetadataAttribute>())
-            MetadataScope.Current.Add(metadata.Create(state));
-
-        return state;
+        // provide opportunity for command to provide metadata
+        SetMetadata(command);
+         
+        // set metadata for each event
+        _changes.ForEach(change => SetMetadata(change));
     }
 
+    static TOwner SetMetadata<TOwner>(TOwner owner) {
+        foreach (var metadata in owner!.GetType().GetCustomAttributes<MetadataAttribute>())
+            MetadataScope.Current.Add(metadata.Create(owner));
+
+        return owner;
+    }
+
+    /// <summary>
+    /// Casts the given <see cref="EntityRoot{TState,TEvent}"/> to a <typeparamref name="TState"/>.
+    /// </summary>
+    /// <param name="instance">The instance to cast.</param>
+    /// <returns>A <typeparamref name="TState"/>.</returns>
     public static implicit operator TState(EntityRoot<TState, TEvent> instance) => instance.State;
 }
