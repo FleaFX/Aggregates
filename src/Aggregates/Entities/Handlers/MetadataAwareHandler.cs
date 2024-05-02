@@ -7,9 +7,10 @@ namespace Aggregates.Entities.Handlers;
 /// Initializes a new <see cref="MetadataAwareHandler{TCommand,TState,TEvent}"/>.
 /// </summary>
 /// <param name="handler">The <see cref="UnitOfWorkAwareHandler{TCommand,TState,TEvent}"/> to delegate to.</param>
-class MetadataAwareHandler<TCommand, TState, TEvent>(UnitOfWorkAwareHandler<TCommand, TState, TEvent> handler) : ICommandHandler<TCommand, TState, TEvent>
+class MetadataAwareHandler<TCommand, TState, TEvent>(ICommandHandlerFactory handlerFactory) : ICommandHandler<TCommand, TState, TEvent>
     where TCommand : ICommand<TState, TEvent>
     where TState : IState<TState, TEvent> {
+    readonly ICommandHandler<TCommand, TState, TEvent> _handler = handlerFactory.Create<TCommand, TState, TEvent>();
 
     /// <summary>
     /// Asynchronously handles the given <paramref name="command"/>.
@@ -19,7 +20,7 @@ class MetadataAwareHandler<TCommand, TState, TEvent>(UnitOfWorkAwareHandler<TCom
     public async ValueTask HandleAsync(TCommand command) {
         await using var scope = new MetadataScope();
         
-        await handler.HandleAsync(command);
+        await _handler.HandleAsync(command);
         
         // commands may provide a context for metadata, they should be attributed with the MetadataAttributes to achieve this
         // we're requesting the command to create the metadata AFTER it's been handled, because the command might fail and any
