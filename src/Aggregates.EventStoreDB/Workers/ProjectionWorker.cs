@@ -56,27 +56,29 @@ class ProjectionWorker<TState, TEvent>(IServiceScopeFactory serviceScopeFactory,
         );
 
         // now connect the subscription and start updating the projection state
-        while (!stoppingToken.IsCancellationRequested) {
-            var state = initialState;
-            using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
-                async (subscription, @event, retryCount, _) => {
-                    try {
-                        // apply and commit the projection
-                        state = await state
-                            .Apply((TEvent)deserializer.Deserialize(@event), metadataDeserializer.Deserialize(@event))
-                            .CommitAsync(stoppingToken);
+        await Task.Run(async () => {
+            do {
+                var state = initialState;
+                using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
+                    async (subscription, @event, retryCount, _) => {
+                        try {
+                            // apply and commit the projection
+                            state = await state
+                                .Apply((TEvent)deserializer.Deserialize(@event), metadataDeserializer.Deserialize(@event))
+                                .CommitAsync(stoppingToken);
 
-                        // notify EventStoreDB that we're done
-                        await subscription.Ack(@event);
-                    } catch (Exception ex) {
-                        await subscription.Nack(
-                            retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                            ex.Message, @event);
-                    }
-                },
-                (subscription, reason, _) => logger.LogWarning($"Subscription was dropped in {GetType().Name} (Subscription id: {subscription.SubscriptionId}). Reason: {reason}"),
-                cancellationToken: stoppingToken);
-        }
+                            // notify EventStoreDB that we're done
+                            await subscription.Ack(@event);
+                        } catch (Exception ex) {
+                            await subscription.Nack(
+                                retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
+                                ex.Message, @event);
+                        }
+                    },
+                    (subscription, reason, _) => logger.LogWarning($"Subscription was dropped in {GetType().Name} (Subscription id: {subscription.SubscriptionId}). Reason: {reason}"),
+                    cancellationToken: stoppingToken);
+            } while (!stoppingToken.IsCancellationRequested);
+        }, stoppingToken);
 
         await stoppingToken;
     }

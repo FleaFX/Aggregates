@@ -60,37 +60,39 @@ class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>(IServi
         );
 
         // now connect the subscription and start updating the projection state
-        while (!stoppingToken.IsCancellationRequested) {
-            using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
-                async (subscription, @event, retryCount, _) => {
-                    // react to the event and handle each command
-                    try {
-                        await using var metadataScope = new MetadataScope();
-                        var metadata = metadataDeserializer.Deserialize(@event);
-                        foreach (var pair in metadata ?? new Dictionary<string, object?>()) {
-                            metadataScope.Add(pair);
-                        }
+        await Task.Run(async () => {
+            do {
+                using var _ = await subscribeToAllAsync(_persistentSubscriptionGroupName,
+                    async (subscription, @event, retryCount, _) => {
+                        // react to the event and handle each command
+                        try {
+                            await using var metadataScope = new MetadataScope();
+                            var metadata = metadataDeserializer.Deserialize(@event);
+                            foreach (var pair in metadata ?? new Dictionary<string, object?>()) {
+                                metadataScope.Add(pair);
+                            }
 
-                        await foreach (var command in reaction.ReactAsync(
-                                           (TReactionEvent)deserializer.Deserialize(@event),
-                                           metadata,
-                                           stoppingToken)) {
-                            using var scope = ServiceScopeFactory.CreateScope();
-                            var commandHandler = scope.ServiceProvider.GetRequiredService<ICommandHandler<TCommand, TState, TEvent>>();
-                            await commandHandler.HandleAsync(command);
-                        }
+                            await foreach (var command in reaction.ReactAsync(
+                                               (TReactionEvent)deserializer.Deserialize(@event),
+                                               metadata,
+                                               stoppingToken)) {
+                                using var scope = ServiceScopeFactory.CreateScope();
+                                var commandHandler = scope.ServiceProvider.GetRequiredService<ICommandHandler<TCommand, TState, TEvent>>();
+                                await commandHandler.HandleAsync(command);
+                            }
 
-                        // notify EventStoreDB that we're done
-                        await subscription.Ack(@event);
-                    } catch (Exception ex) {
-                        await subscription.Nack(
-                            retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                            ex.Message, @event);
-                    }
-                },
-                (subscription, reason, _) => logger.LogWarning($"Subscription was dropped in {GetType().Name} (Subscription id: {subscription.SubscriptionId}). Reason: {reason}"),
-                cancellationToken: stoppingToken);
-        }
+                            // notify EventStoreDB that we're done
+                            await subscription.Ack(@event);
+                        } catch (Exception ex) {
+                            await subscription.Nack(
+                                retryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
+                                ex.Message, @event);
+                        }
+                    },
+                    (subscription, reason, _) => logger.LogWarning($"Subscription was dropped in {GetType().Name} (Subscription id: {subscription.SubscriptionId}). Reason: {reason}"),
+                    cancellationToken: stoppingToken);
+            } while (!stoppingToken.IsCancellationRequested);
+        }, stoppingToken);
 
         await stoppingToken;
     }
