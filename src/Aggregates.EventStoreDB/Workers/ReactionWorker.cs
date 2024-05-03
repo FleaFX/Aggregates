@@ -5,6 +5,7 @@ using System.Reflection;
 using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
 using Aggregates.Metadata;
+using Grpc.Core;
 using Microsoft.Extensions.Logging;
 
 namespace Aggregates.EventStoreDB.Workers;
@@ -62,40 +63,50 @@ class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>(IServi
         await Task.Run(async () => {
             do {
                 await using var subscription = subscribeToAll(_persistentSubscriptionGroupName);
-                await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
-                    switch (message) {
-                        case PersistentSubscriptionMessage.Event @event: {
-                            // react to the event and handle each command
-                            try {
-                                await using var metadataScope = new MetadataScope();
-                                var metadata = metadataDeserializer.Deserialize(@event.ResolvedEvent);
-                                foreach (var pair in metadata ?? new Dictionary<string, object?>()) {
-                                    metadataScope.Add(pair);
-                                }
 
-                                await foreach (var command in reaction.ReactAsync(
-                                                   (TReactionEvent)deserializer.Deserialize(@event.ResolvedEvent),
-                                                   metadata,
-                                                   stoppingToken)) {
-                                    using var scope = ServiceScopeFactory.CreateScope();
-                                    var commandHandler = scope.ServiceProvider.GetRequiredService<ICommandHandler<TCommand, TState, TEvent>>();
-                                    await commandHandler.HandleAsync(command);
-                                }
+                try {
+                    await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
+                        switch (message) {
+                            case PersistentSubscriptionMessage.Event @event: {
+                                // react to the event and handle each command
+                                try {
+                                    await using var metadataScope = new MetadataScope();
+                                    var metadata = metadataDeserializer.Deserialize(@event.ResolvedEvent);
+                                    foreach (var pair in metadata ?? new Dictionary<string, object?>()) {
+                                        metadataScope.Add(pair);
+                                    }
 
-                                // notify EventStoreDB that we're done
-                                await subscription.Ack(@event.ResolvedEvent);
-                            } catch (Exception ex) {
-                                await subscription.Nack(
-                                    @event.RetryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                                    ex.Message, @event.ResolvedEvent);
+                                    await foreach (var command in reaction.ReactAsync(
+                                                       (TReactionEvent)deserializer.Deserialize(@event.ResolvedEvent),
+                                                       metadata, stoppingToken)) {
+                                        using var scope = ServiceScopeFactory.CreateScope();
+                                        var commandHandler = scope.ServiceProvider
+                                            .GetRequiredService<ICommandHandler<TCommand, TState, TEvent>>();
+                                        await commandHandler.HandleAsync(command);
+                                    }
+
+                                    // notify EventStoreDB that we're done
+                                    await subscription.Ack(@event.ResolvedEvent);
+                                }
+                                catch (Exception ex) {
+                                    await subscription.Nack(
+                                        @event.RetryCount < 5
+                                            ? PersistentSubscriptionNakEventAction.Retry
+                                            : PersistentSubscriptionNakEventAction.Park, ex.Message,
+                                        @event.ResolvedEvent);
+                                }
                             }
-                        }
-                        break;
+                                break;
 
-                        case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
-                            logger.LogInformation($"Subscription to {confirmation.SubscriptionId} has been confirmed. Reaction started.");
-                            break;
+                            case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
+                                logger.LogInformation(
+                                    $"Subscription to {confirmation.SubscriptionId} has been confirmed. Reaction started.");
+                                break;
+                        }
                     }
+                }
+                catch (RpcException e) {
+                    logger.LogError(e, e?.Message);
                 }
 
                 if (!stoppingToken.IsCancellationRequested) logger.LogWarning("Subscription has ended or has been dropped. Reconnecting.");

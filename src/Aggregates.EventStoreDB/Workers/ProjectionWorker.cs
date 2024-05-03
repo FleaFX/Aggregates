@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
+using Grpc.Core;
 using Microsoft.Extensions.Logging;
 
 namespace Aggregates.EventStoreDB.Workers;
@@ -59,31 +60,38 @@ class ProjectionWorker<TState, TEvent>(IServiceScopeFactory serviceScopeFactory,
             do {
                 var state = initialState;
                 await using var subscription = subscribeToAll(_persistentSubscriptionGroupName);
-                await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
-                    switch (message) {
-                        case PersistentSubscriptionMessage.Event @event: {
-                            try {
-                                // apply and commit the projection
-                                state = await state
-                                    .Apply((TEvent)deserializer.Deserialize(@event.ResolvedEvent), metadataDeserializer.Deserialize(@event.ResolvedEvent))
-                                    .CommitAsync(stoppingToken);
 
-                                // notify EventStoreDB that we're done
-                                await subscription.Ack(@event.ResolvedEvent);
-                            } catch (Exception ex) {
-                                await subscription.Nack(
-                                    @event.RetryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                                    ex.Message,
-                                    @event.ResolvedEvent
-                                );
+                try {
+                    await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
+                        switch (message) {
+                            case PersistentSubscriptionMessage.Event @event: {
+                                try {
+                                    // apply and commit the projection
+                                    state = await state.Apply((TEvent)deserializer.Deserialize(@event.ResolvedEvent),
+                                            metadataDeserializer.Deserialize(@event.ResolvedEvent))
+                                        .CommitAsync(stoppingToken);
+
+                                    // notify EventStoreDB that we're done
+                                    await subscription.Ack(@event.ResolvedEvent);
+                                }
+                                catch (Exception ex) {
+                                    await subscription.Nack(
+                                        @event.RetryCount < 5
+                                            ? PersistentSubscriptionNakEventAction.Retry
+                                            : PersistentSubscriptionNakEventAction.Park, ex.Message,
+                                        @event.ResolvedEvent);
+                                }
                             }
+                                break;
+                            case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
+                                logger.LogInformation(
+                                    $"Subscription to {confirmation.SubscriptionId} has been confirmed. Projection started.");
+                                break;
                         }
-                        break;
-
-                        case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
-                            logger.LogInformation($"Subscription to {confirmation.SubscriptionId} has been confirmed. Projection started.");
-                            break;
                     }
+                }
+                catch (RpcException e) {
+                    logger.LogError(e, e?.Message);
                 }
 
                 if (!stoppingToken.IsCancellationRequested) logger.LogWarning("Subscription has ended or has been dropped. Reconnecting.");
