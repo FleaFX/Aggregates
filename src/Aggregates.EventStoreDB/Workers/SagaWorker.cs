@@ -4,6 +4,7 @@ using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using Aggregates.EventStoreDB.Extensions;
+using Grpc.Core;
 using Microsoft.Extensions.Logging;
 
 namespace Aggregates.EventStoreDB.Workers;
@@ -50,30 +51,39 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
         await Task.Run(async () => {
             do {
                 await using var subscription = subscribeToAll(persistentSubscriptionGroupName);
-                await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
-                    switch (message) {
-                        case PersistentSubscriptionMessage.Event @event: {
-                            try {
-                                using var linkEvent = new LinkEventScope(@event.ResolvedEvent);
-                                await sagaHandler.HandleAsync((TReactionEvent)deserializer.Deserialize(@event.ResolvedEvent),
-                                    metadataDeserializer.Deserialize(@event.ResolvedEvent),
-                                    stoppingToken);
 
-                                // notify EventStoreDB that we're done
-                                await subscription.Ack(@event.ResolvedEvent);
-                            } catch (Exception ex) {
-                                await subscription.Nack(
-                                    @event.RetryCount < 5 ? PersistentSubscriptionNakEventAction.Retry : PersistentSubscriptionNakEventAction.Park,
-                                    ex.ToString(),
-                                    @event.ResolvedEvent);
+                try {
+                    await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
+                        switch (message) {
+                            case PersistentSubscriptionMessage.Event @event: {
+                                try {
+                                    using var linkEvent = new LinkEventScope(@event.ResolvedEvent);
+                                    await sagaHandler.HandleAsync(
+                                        (TReactionEvent)deserializer.Deserialize(@event.ResolvedEvent),
+                                        metadataDeserializer.Deserialize(@event.ResolvedEvent), stoppingToken);
+
+                                    // notify EventStoreDB that we're done
+                                    await subscription.Ack(@event.ResolvedEvent);
+                                }
+                                catch (Exception ex) {
+                                    await subscription.Nack(
+                                        @event.RetryCount < 5
+                                            ? PersistentSubscriptionNakEventAction.Retry
+                                            : PersistentSubscriptionNakEventAction.Park, ex.ToString(),
+                                        @event.ResolvedEvent);
+                                }
                             }
-                        }
-                        break;
+                                break;
 
-                        case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
-                            logger.LogInformation($"Subscription to {confirmation.SubscriptionId} has been confirmed. Saga started.");
-                            break;
+                            case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
+                                logger.LogInformation(
+                                    $"Subscription to {confirmation.SubscriptionId} has been confirmed. Saga started.");
+                                break;
+                        }
                     }
+                }
+                catch (RpcException e) {
+                    logger.LogError(e, e?.Message);
                 }
 
                 if (!stoppingToken.IsCancellationRequested) logger.LogWarning("Subscription has ended or has been dropped. Reconnecting.");
