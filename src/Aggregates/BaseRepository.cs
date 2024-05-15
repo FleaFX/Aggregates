@@ -47,7 +47,7 @@ public abstract class BaseRepository<TState, TEvent>(UnitOfWork unitOfWork) : IR
     public void Add(AggregateIdentifier identifier, EntityRoot<TState, TEvent> entityRoot) {
         // provide opportunity for state object to produce some metadata
         foreach (var metadata in entityRoot.State.GetType().GetCustomAttributes<MetadataAttribute>())
-            MetadataScope.Current.Add(metadata.Create(entityRoot.State));
+            MetadataScope.Current.Add(metadata.Create(entityRoot.State), metadata.Multiplicity);
 
         unitOfWork.Attach(new Aggregate(identifier, entityRoot));
     }
