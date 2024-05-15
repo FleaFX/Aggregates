@@ -17,13 +17,12 @@ class MetadataAwareHandler<TReactionState, TReactionEvent, TCommand, TCommandSta
         _handler = handler;
 
     /// <summary>
-    /// 
+    /// Asynchronously handles the given <paramref name="event"/>.
     /// </summary>
-    /// <param name="event"></param>
-    /// <param name="metadata"></param>
-    /// <param name="cancellationToken"></param>
-    /// <returns></returns>
-    /// <exception cref="NotImplementedException"></exception>
+    /// <param name="event">The event to handle.</param>
+    /// <param name="metadata">The metadata associated with the event.</param>
+    /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous operation.</param>
+    /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation.</returns>
     public async ValueTask HandleAsync(TReactionEvent @event, IReadOnlyDictionary<string, object?>? metadata, CancellationToken cancellationToken) {
         await using var scope = new MetadataScope();
 
