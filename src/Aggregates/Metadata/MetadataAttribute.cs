@@ -5,7 +5,7 @@ namespace Aggregates.Metadata;
 /// <summary>
 /// Enriches an event with metadata when saving.
 /// </summary>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true, Inherited = true)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true)]
 public class MetadataAttribute : Attribute {
     readonly string _key;
     readonly Func<object, object?> _valueProvider;

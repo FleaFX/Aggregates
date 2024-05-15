@@ -1,6 +1,7 @@
 ﻿using Aggregates.Extensions;
 using Aggregates.Metadata;
 using System.Reflection;
+using Aggregates.Sagas;
 
 namespace Aggregates.Entities;
 
@@ -40,7 +41,7 @@ public sealed record EntityRoot<TState, TEvent>(TState? State, AggregateVersion 
         SetMetadata(command);
          
         // set metadata for each event
-        _changes.ForEach(change => SetMetadata(change));
+        _changes.ForEach(change => SetSagaMetadata(SetMetadata(change)));
     }
 
     static TOwner SetMetadata<TOwner>(TOwner owner) {
@@ -48,6 +49,11 @@ public sealed record EntityRoot<TState, TEvent>(TState? State, AggregateVersion 
             MetadataScope.Current.Add(metadata.Create(owner));
 
         return owner;
+    }
+
+    static void SetSagaMetadata<TOwner>(TOwner owner) {
+        foreach (var sagaMetadata in owner!.GetType().GetCustomAttributes<SagaAttribute>()) 
+            MetadataScope.Current.Add(sagaMetadata.Create(owner));
     }
 
     /// <summary>

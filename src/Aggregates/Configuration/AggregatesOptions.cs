@@ -19,7 +19,7 @@ public class AggregatesOptions {
     /// <summary>
     /// Gets or sets the key by which the <see cref="AggregateIdentifier"/> of a saga will be referenced in the metadata of a stored event.
     /// </summary>
-    public string SagaIdKey { get; set; } = "SagaId";
+    public string SagaKey { get; set; } = "Saga";
 
     internal Action<IServiceCollection>? ConfigureServices { get; private set; }
 
