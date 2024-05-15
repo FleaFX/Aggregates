@@ -17,7 +17,7 @@ public static class ExtensionsForAggregatesRegistration {
     public static IServiceCollection UseAggregates(this IServiceCollection services, Action<AggregatesOptions> configure) {
         var options = new AggregatesOptions {
             AggregateCreationBehaviour = AggregateCreationBehaviour.Automatic(),
-            SagaIdKey = "SagaId"
+            SagaKey = "Saga"
         };
         configure(options);
 

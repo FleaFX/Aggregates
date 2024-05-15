@@ -37,7 +37,12 @@ public sealed class MetadataScope : IAsyncDisposable, IDisposable {
     /// </summary>
     /// <param name="metadata">The metadata to add.</param>
     public void Add(KeyValuePair<string, object?> metadata) =>
-        _metadata[metadata.Key] = metadata.Value;
+        _metadata[metadata.Key] =
+            _metadata.TryGetValue(metadata.Key, out var existingValue) && existingValue is not null
+                ? !existingValue.GetType().IsArray
+                    ? [existingValue, metadata.Value]
+                    : (object?[]) [..(Array)existingValue, metadata.Value]
+                : metadata.Value;
 
     /// <summary>
     /// Adds the given metadata to the scope.
