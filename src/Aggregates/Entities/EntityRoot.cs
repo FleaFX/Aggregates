@@ -46,14 +46,14 @@ public sealed record EntityRoot<TState, TEvent>(TState? State, AggregateVersion 
 
     static TOwner SetMetadata<TOwner>(TOwner owner) {
         foreach (var metadata in owner!.GetType().GetCustomAttributes<MetadataAttribute>())
-            MetadataScope.Current.Add(metadata.Create(owner));
+            MetadataScope.Current.Add(metadata.Create(owner), metadata.Multiplicity);
 
         return owner;
     }
 
     static void SetSagaMetadata<TOwner>(TOwner owner) {
         foreach (var sagaMetadata in owner!.GetType().GetCustomAttributes<SagaAttribute>()) 
-            MetadataScope.Current.Add(sagaMetadata.Create(owner));
+            MetadataScope.Current.Add(sagaMetadata.Create(owner), MetadataMultiplicity.Multiple);
     }
 
     /// <summary>

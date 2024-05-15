@@ -36,12 +36,17 @@ public sealed class MetadataScope : IAsyncDisposable, IDisposable {
     /// Adds the given metadata to the scope.
     /// </summary>
     /// <param name="metadata">The metadata to add.</param>
-    public void Add(KeyValuePair<string, object?> metadata) =>
+    /// <param name="multiplicity">Indicates whether a value overwrites or compliments existing values for the given key.</param>
+    public void Add(KeyValuePair<string, object?> metadata, MetadataMultiplicity multiplicity = MetadataMultiplicity.Single) =>
         _metadata[metadata.Key] =
             _metadata.TryGetValue(metadata.Key, out var existingValue) && existingValue is not null
-                ? !existingValue.GetType().IsArray
-                    ? [existingValue, metadata.Value]
-                    : (object?[]) [..(Array)existingValue, metadata.Value]
+                ? multiplicity switch {
+                    MetadataMultiplicity.Single => metadata.Value,
+                    MetadataMultiplicity.Multiple => !existingValue.GetType().IsArray
+                        ? [existingValue, metadata.Value]
+                        : (object?[]) [..(Array)existingValue, metadata.Value],
+                    _ => throw new ArgumentOutOfRangeException(nameof(multiplicity), multiplicity, null)
+                }
                 : metadata.Value;
 
     /// <summary>
@@ -49,8 +54,9 @@ public sealed class MetadataScope : IAsyncDisposable, IDisposable {
     /// </summary>
     /// <param name="key">The key by which the metadata will be referable.</param>
     /// <param name="value">The value of the metadata.</param>
-    public void Add(string key, object? value) =>
-        Add(new KeyValuePair<string, object?>(key, value));
+    /// <param name="multiplicity">Indicates whether a value overwrites or compliments existing values for the given key.</param>
+    public void Add(string key, object? value, MetadataMultiplicity multiplicity = MetadataMultiplicity.Single) =>
+        Add(new KeyValuePair<string, object?>(key, value), multiplicity);
 
     /// <summary>
     /// Returns the metadata in the current scope as a <see cref="IDictionary{TKey,TValue}"/>.
