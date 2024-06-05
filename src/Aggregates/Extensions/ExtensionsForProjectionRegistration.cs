@@ -4,6 +4,7 @@ using Aggregates.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using Aggregates.Projections;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Aggregates;
 
@@ -12,7 +13,7 @@ namespace Aggregates;
 /// </summary>
 public class ProjectionsOptions {
     /// <summary>
-    /// Gets or sets the set of <see cref="Assembly"/> to scan for projection types.
+    /// Gets or sets the set of <see cref="Assembly"/> to scan for projection and event types.
     /// </summary>
     public Assembly[]? Assemblies { get; set; }
 
@@ -48,6 +49,8 @@ public static class ExtensionsForProjectionRegistration {
         configure(options);
 
         options.ConfigureServices?.Invoke(services);
+
+        services.TryAddSingleton(options);
 
         return services;
     }
