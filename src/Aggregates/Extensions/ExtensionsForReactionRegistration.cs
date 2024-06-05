@@ -10,7 +10,7 @@ namespace Aggregates;
 
 public class ReactionsOptions {
     /// <summary>
-    /// Gets or sets the set of <see cref="Assembly"/> to scan for reaction types.
+    /// Gets or sets the set of <see cref="Assembly"/> to scan for reaction and event types.
     /// </summary>
     public Assembly[]? Assemblies { get; set; }
 
@@ -66,6 +66,8 @@ public static class ExtensionsForReactionRegistration {
         services.TryAddScoped(typeof(DefaultHandler<,,,,>));
         services.TryAddScoped(typeof(UnitOfWorkAwareHandler<,,,,>));
         services.TryAddScoped(typeof(ISagaHandler<,,,,>), typeof(MetadataAwareHandler<,,,,>));
+
+        services.TryAddSingleton(options);
 
         return services;
     }

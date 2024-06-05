@@ -15,7 +15,7 @@ namespace Aggregates.EventStoreDB.Workers;
 /// </summary>
 /// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
 class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>(IServiceScopeFactory serviceScopeFactory, ILogger<ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>> logger)
-    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAll, ResolvedEventDeserializer, MetadataDeserializer, IReaction<TReactionEvent, TCommand, TState, TEvent>>(serviceScopeFactory) where TReaction : IReaction<TReactionEvent, TCommand, TState, TEvent>
+    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAll, ResolvedEventDeserializer, MetadataDeserializer, ReactionsOptions, IReaction<TReactionEvent, TCommand, TState, TEvent>>(serviceScopeFactory) where TReaction : IReaction<TReactionEvent, TCommand, TState, TEvent>
     where TState : IState<TState, TEvent>
     where TCommand : ICommand<TState, TEvent> {
     readonly string _persistentSubscriptionGroupName = typeof(TReaction).FullName!;
@@ -30,7 +30,7 @@ class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>(IServi
     /// <param name="reaction">The reaction to work.</param>
     /// <param name="stoppingToken">A <see cref="CancellationToken"/> that is signaled when the asynchronous operation should be stopped.</param>
     /// <returns>A <see cref="Task"/> that represents the asynchronous operation.</returns>
-    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAll subscribeToAll, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, IReaction<TReactionEvent, TCommand, TState, TEvent> reaction, CancellationToken stoppingToken) {
+    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAll subscribeToAll, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, ReactionsOptions options, IReaction<TReactionEvent, TCommand, TState, TEvent> reaction, CancellationToken stoppingToken) {
         // setup a new subscription group if it doesn't exist yet
         await Task.WhenAll(
             from sub in (
@@ -42,7 +42,7 @@ class ReactionWorker<TReaction, TReactionEvent, TCommand, TState, TEvent>(IServi
 
             // find applicable event types by tentatively applying them to the state
             let eventTypes = (
-                from assembly in AppDomain.CurrentDomain.GetAssemblies()
+                from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
                 where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                 from type in assembly.GetTypes()
                 let attr = type.GetCustomAttribute<EventContractAttribute>()

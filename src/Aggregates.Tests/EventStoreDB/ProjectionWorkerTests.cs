@@ -28,6 +28,7 @@ public class ProjectionWorkerTests {
         A.CallTo(() => serviceProvider.GetService(typeof(SubscribeToAll))).Returns(_subscribeToAll);
         A.CallTo(() => serviceProvider.GetService(typeof(ResolvedEventDeserializer))).Returns(new ResolvedEventDeserializer((source, target) => null!));
         A.CallTo(() => serviceProvider.GetService(typeof(MetadataDeserializer))).Returns(new MetadataDeserializer((source, target) => null!));
+        A.CallTo(() => serviceProvider.GetService(typeof(ProjectionsOptions))).Returns(new ProjectionsOptions());
         A.CallTo(() => serviceProvider.GetService(typeof(IProjection<ExampleProjection, IExampleProjectionEvent>))).Returns(new ExampleProjection(A.Dummy<IDbConnectionFactory>()));
 
         var serviceScope = A.Dummy<IServiceScope>();
