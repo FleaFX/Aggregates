@@ -1,4 +1,5 @@
-﻿using Aggregates.EventStoreDB.Serialization;
+﻿using Aggregates.Configuration;
+using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
 using Aggregates.EventStoreDB.Workers;
 using Aggregates.Sql;
@@ -26,9 +27,9 @@ public class ProjectionWorkerTests {
         A.CallTo(() => serviceProvider.GetService(typeof(ListToAllAsyncDelegate))).Returns(_listToAllAsync);
         A.CallTo(() => serviceProvider.GetService(typeof(CreateToAllAsyncDelegate))).Returns(_createToAllAsync);
         A.CallTo(() => serviceProvider.GetService(typeof(SubscribeToAll))).Returns(_subscribeToAll);
-        A.CallTo(() => serviceProvider.GetService(typeof(ResolvedEventDeserializer))).Returns(new ResolvedEventDeserializer((source, target) => null!));
+        A.CallTo(() => serviceProvider.GetService(typeof(ResolvedEventDeserializer))).Returns(new ResolvedEventDeserializer((source, target) => null!, new AggregatesOptions()));
         A.CallTo(() => serviceProvider.GetService(typeof(MetadataDeserializer))).Returns(new MetadataDeserializer((source, target) => null!));
-        A.CallTo(() => serviceProvider.GetService(typeof(ProjectionsOptions))).Returns(new ProjectionsOptions());
+        A.CallTo(() => serviceProvider.GetService(typeof(AggregatesOptions))).Returns(new AggregatesOptions());
         A.CallTo(() => serviceProvider.GetService(typeof(IProjection<ExampleProjection, IExampleProjectionEvent>))).Returns(new ExampleProjection(A.Dummy<IDbConnectionFactory>()));
 
         var serviceScope = A.Dummy<IServiceScope>();
@@ -49,12 +50,12 @@ public class ProjectionWorkerTests {
             .Returns(new[] {
                 new PersistentSubscriptionInfo(
                     null, groupName,
-                    null, Enumerable.Empty<PersistentSubscriptionConnectionInfo>(), null, null)
+                    null, [], null, null)
             });
 
         var cts = new CancellationTokenSource();
         await _worker.StartAsync(cts.Token);
-        cts.Cancel();
+        await cts.CancelAsync();
 
         A.CallTo(_createToAllAsync).MustNotHaveHappened();
     }
@@ -64,11 +65,11 @@ public class ProjectionWorkerTests {
         var groupName = typeof(ExampleProjection).FullName;
 
         A.CallTo(() => _listToAllAsync(A<TimeSpan?>._, A<UserCredentials?>._, A<CancellationToken>._))
-            .Returns(Enumerable.Empty<PersistentSubscriptionInfo>());
+            .Returns([]);
 
         var cts = new CancellationTokenSource();
         await _worker.StartAsync(cts.Token);
-        cts.Cancel();
+        await cts.CancelAsync();
 
         A.CallTo(() => _createToAllAsync(
                 groupName,

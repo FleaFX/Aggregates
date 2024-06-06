@@ -14,14 +14,8 @@ delegate Task CreateToAllAsyncDelegate(string groupName, IEventFilter eventFilte
 delegate Task<IEnumerable<PersistentSubscriptionInfo>> ListToAllAsyncDelegate(TimeSpan? deadline = null, UserCredentials? credentials = null, CancellationToken cancellationToken = default);
 
 /// <summary>
-/// Asynchronously subscribes to a persistent subscription to $all.
+/// Subscribes to a persistent subscription to $all.
 /// </summary>
-delegate Task<PersistentSubscription> SubscribeToAllAsync(string groupName,
-    Func<PersistentSubscription, ResolvedEvent, int?, CancellationToken, Task> eventAppeared,
-    Action<PersistentSubscription, SubscriptionDroppedReason, Exception?>? subscriptionDropped = null,
-    UserCredentials? credentials = null, int bufferSize = 10,
-    CancellationToken cancellationToken = default);
-
 delegate EventStorePersistentSubscriptionsClient.PersistentSubscriptionResult SubscribeToAll(
     string groupName,
     int bufferSize = 10,

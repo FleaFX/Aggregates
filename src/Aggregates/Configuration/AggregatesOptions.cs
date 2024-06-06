@@ -1,5 +1,6 @@
 ﻿using Aggregates.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
 
 namespace Aggregates.Configuration;
 
@@ -17,12 +18,21 @@ public class AggregatesOptions {
     public AggregateCreationBehaviour AggregateCreationBehaviour { get; set; } = AggregateCreationBehaviour.Automatic();
 
     /// <summary>
+    /// Gets or sets the set of <see cref="Assembly"/> to scan for projection and event types.
+    /// </summary>
+    public Assembly[]? Assemblies { get; set; }
+
+    /// <summary>
     /// Gets or sets the key by which the <see cref="AggregateIdentifier"/> of a saga will be referenced in the metadata of a stored event.
     /// </summary>
     public string SagaKey { get; set; } = "Saga";
 
     internal Action<IServiceCollection>? ConfigureServices { get; private set; }
 
-    public void AddConfiguration(Action<IServiceCollection> configuration) =>
+    internal AggregatesOptions AddConfiguration(Action<IServiceCollection> configuration) {
         ConfigureServices = ConfigureServices.AndThen(configuration);
+
+        return this;
+    }
+        
 }
