@@ -1,26 +1,18 @@
 ﻿using Aggregates.Types;
 using EventStore.Client;
 using System.Reflection;
+using Aggregates.Configuration;
 
 namespace Aggregates.EventStoreDB.Serialization;
 
-class ResolvedEventDeserializer {
-    readonly DeserializerDelegate _deserializer;
-    readonly Lazy<Type[]> _eventContracts;
-
-    public ResolvedEventDeserializer(DeserializerDelegate deserializer) {
-        _deserializer = deserializer ?? throw new ArgumentNullException(nameof(deserializer));
-
-        // find all types that are attributed with EventContract
-        _eventContracts = new Lazy<Type[]>(() => (
-            from assembly in AppDomain.CurrentDomain.GetAssemblies()
-            where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
-            from type in assembly.GetTypes()
-            let attr = type.GetCustomAttribute<EventContractAttribute>()
-            where attr != null
-            select type
-        ).ToArray());
-    }
+class ResolvedEventDeserializer(DeserializerDelegate deserializer, AggregatesOptions options) {
+    readonly Lazy<Type[]> _eventContracts = new(() => (
+        from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+        from type in assembly.GetTypes()
+        let attr = type.GetCustomAttribute<EventContractAttribute>()
+        where attr != null
+        select type
+    ).ToArray());
 
     /// <summary>
     /// Deserializes the event contained in the given <paramref name="resolvedEvent"/>.
@@ -38,7 +30,7 @@ class ResolvedEventDeserializer {
         stream.Seek(0, SeekOrigin.Begin);
 
         // attempt to upgrade the event when necessary
-        return UpgradeEvent(_deserializer(stream, contract));
+        return UpgradeEvent(deserializer(stream, contract));
     }
 
     static string GetEventType(Type contractType) {

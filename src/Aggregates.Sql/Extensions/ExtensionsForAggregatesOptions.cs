@@ -1,22 +1,22 @@
 ﻿// ReSharper disable CheckNamespace
 
 using System.Data;
+using Aggregates.Configuration;
 using Aggregates.Projections;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates.Sql;
 
-public static class ExtensionsForProjectionOptions {
+public static class ExtensionsForAggregatesOptions {
     /// <summary>
     /// Adds configuration to use projections to SQL.
     /// </summary>
-    /// <param name="options">The <see cref="ProjectionsOptions"/> to configure.</param>
-    public static void UseSql(this ProjectionsOptions options) {
+    /// <param name="options">The <see cref="AggregatesOptions"/> to configure.</param>
+    public static void UseSql(this AggregatesOptions options) {
         options.AddConfiguration(services => {
             // find all implementations of SqlProjection and register them
             foreach (var (implType, stateType, eventType) in
                      from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
-                     where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                      from type in assembly.GetTypes()
                      where !type.IsAbstract && (type.BaseType?.IsGenericType ?? false) && type.BaseType.GetGenericTypeDefinition() == typeof(SqlProjection<,>)
 

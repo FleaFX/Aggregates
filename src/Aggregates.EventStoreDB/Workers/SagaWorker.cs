@@ -6,6 +6,7 @@ using System.Reflection;
 using Aggregates.EventStoreDB.Extensions;
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
+using Aggregates.Configuration;
 
 namespace Aggregates.EventStoreDB.Workers;
 /// <summary>
@@ -13,11 +14,11 @@ namespace Aggregates.EventStoreDB.Workers;
 /// </summary>
 /// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
 class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>(IServiceScopeFactory serviceScopeFactory, ILogger<SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>> logger)
-    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAll, ResolvedEventDeserializer, MetadataDeserializer, ReactionsOptions, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>>(serviceScopeFactory)
+    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAll, ResolvedEventDeserializer, MetadataDeserializer, AggregatesOptions, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>>(serviceScopeFactory)
     where TReactionState : IState<TReactionState, TReactionEvent>
     where TCommand : ICommand<TCommandState, TCommandEvent>
     where TCommandState : IState<TCommandState, TCommandEvent> {
-    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAll subscribeToAll, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, ReactionsOptions options, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> reaction, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> sagaHandler, CancellationToken stoppingToken) {
+    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAll subscribeToAll, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, AggregatesOptions options, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> reaction, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> sagaHandler, CancellationToken stoppingToken) {
         // setup a new subscription group if it doesn't exist yet
         var persistentSubscriptionGroupName = reaction.GetType().FullName!;
         await Task.WhenAll(
@@ -31,7 +32,6 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
             // find applicable event types by tentatively applying them to both the state
             let eventTypes = (
                 from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
-                where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
                 from type in assembly.GetTypes()
                 let attr = type.GetCustomAttribute<EventContractAttribute>()
                 where type.IsAssignableTo(typeof(TReactionEvent)) && attr != null
