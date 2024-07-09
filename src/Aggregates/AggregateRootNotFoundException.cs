@@ -16,4 +16,9 @@ public class AggregateRootNotFoundException : Exception {
     /// </summary>
     /// <param name="identifier">The <see cref="AggregateIdentifier"/> that was used to retrieve the aggregate root object.</param>
     public AggregateRootNotFoundException(AggregateIdentifier identifier) => Identifier = identifier;
+
+    /// <summary>
+    /// Initializes a new <see cref="AggregateRootNotFoundException"/>
+    /// </summary>
+    public AggregateRootNotFoundException() { }
 }
