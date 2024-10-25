@@ -44,7 +44,7 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
 
             // finally create a persistent subscription with a filter on event type
             let filter = string.Join('|', eventTypes.Select(eventType => eventType.ToString().Replace(".", @"\.")))
-            select createToAllAsync(persistentSubscriptionGroupName, EventTypeFilter.RegularExpression($"^(?:{filter})$"), new PersistentSubscriptionSettings(), cancellationToken: stoppingToken)
+            select createToAllAsync(persistentSubscriptionGroupName, EventTypeFilter.RegularExpression($"^(?:{filter})$"), new PersistentSubscriptionSettings(startFrom: Position.Start), cancellationToken: stoppingToken)
         );
 
         // now connect the subscription and start the saga
