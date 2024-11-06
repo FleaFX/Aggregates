@@ -1,4 +1,4 @@
-﻿namespace Aggregates.Projections; 
+﻿namespace Aggregates.Projections;
 
 /// <summary>
 /// Defers the creation of the commit until the projection is ready to be committed..

@@ -34,13 +34,13 @@ public abstract record Projection<TState, TEvent> : IProjection<TState, TEvent>
             Use(state => new DeferredCommit<TState, TCommit>(state, factory));
 
         async ValueTask<TState> ICommit<TState>.CommitAsync(CancellationToken cancellationToken) {
+            return await CommitAllAsync(Commits.ToArray(), Origin);
+
             async ValueTask<TState> CommitAllAsync(ICommit<TState>[] commits, TState state) =>
                 commits switch {
                     [var commit, ..] => await CommitAllAsync(commits[1..], await commit.CommitAsync(cancellationToken)),
                     [] => state
                 };
-
-            return await CommitAllAsync(Commits.ToArray(), Origin);
         }
     }
 
