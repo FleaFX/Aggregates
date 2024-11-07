@@ -10,6 +10,13 @@
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
 public class ProjectionContractAttribute(string name, int version = 1, string? @namespace = null, string? continueFrom = null) : Attribute {
     /// <summary>
+    /// Returns the fully qualified name of the preceding projection contract, if any.
+    /// </summary>
+    public string? ContinueFrom => continueFrom ?? (version > 1
+        ? new ProjectionContractAttribute(name, version - 1, @namespace).ToString()
+        : null);
+
+    /// <summary>
     /// Returns the projection contract name.
     /// </summary>
     /// <returns>A <see cref="string"/>.</returns>
