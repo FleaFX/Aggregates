@@ -18,6 +18,19 @@ public abstract record Projection<TState, TEvent> : IProjection<TState, TEvent>
     /// <param name="Commits">The sequence of commits to execute.</param>
     protected record Commit(TState Origin, ImmutableArray<ICommit<TState>> Commits) : ICommit<TState> {
         /// <summary>
+        /// Not supported on a stateful <see cref="Commit"/>.
+        /// </summary>
+        public ICommit Use(Func<ICommit> applicator) =>
+            throw new NotSupportedException();
+
+        /// <summary>
+        /// Not supported on a stateful <see cref="Commit"/>.
+        /// </summary>
+        /// <exception cref="NotSupportedException"></exception>
+        public ICommit Use<TCommit1>(Func<CancellationToken, ValueTask<TCommit1>> factory) where TCommit1 : ICommit =>
+            throw new NotSupportedException();
+
+        /// <summary>
         /// Produces a <see cref="Commit"/> that uses the given <paramref name="applicator"/> to produce the appropriate <see cref="ICommit{TState}"/>.
         /// </summary>
         /// <param name="applicator">A function that produces a <see cref="ICommit{TState}"/>.</param>

@@ -57,8 +57,7 @@ class ProjectionDelegateWorker<TProjection, TEvent>(IServiceScopeFactory service
                             }
                                 break;
                             case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
-                                logger.LogInformation(
-                                    $"Subscription to {confirmation.SubscriptionId} has been confirmed. Projection started.");
+                                logger.LogInformation($"Subscription to {confirmation.SubscriptionId} has been confirmed. Projection started.");
                                 break;
                         }
                     }

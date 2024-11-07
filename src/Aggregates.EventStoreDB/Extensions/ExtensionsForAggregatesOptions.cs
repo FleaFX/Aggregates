@@ -91,19 +91,19 @@ public static class ExtensionsForAggregatesOptions {
                 var target = sp.GetRequiredService(type);
                 foreach (var eventType in
                          from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                         where method.IsGenericMethod && method.GetGenericArguments().Length == 1
-                         let delegateType = typeof(ProjectionDelegate<>).MakeGenericType(method.GetGenericArguments()[0])
+                         where method.GetParameters().Length == 2 && method.ReturnType == typeof(ICommit)
+                         let delegateType = typeof(ProjectionDelegate<>).MakeGenericType(method.GetParameters()[0].ParameterType)
                          where method.IsDelegate(delegateType, target)
-                         select method.GetGenericArguments()[0]
+                         select method.GetParameters()[0].ParameterType
                         ) {
                     services.AddSingleton(typeof(IHostedService), typeof(ProjectionDelegateWorker<,>).MakeGenericType(type, eventType));
                 }
                 foreach (var eventType in
                          from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                         where method.IsGenericMethod && method.GetGenericArguments().Length == 1
-                         let delegateType = typeof(ProjectionAsyncDelegate<>).MakeGenericType(method.GetGenericArguments()[0])
+                         where method.GetParameters().Length == 2 && method.ReturnType == typeof(ValueTask<ICommit>)
+                         let delegateType = typeof(ProjectionAsyncDelegate<>).MakeGenericType(method.GetParameters()[0].ParameterType)
                          where method.IsDelegate(delegateType, target)
-                         select method.GetGenericArguments()[0]
+                         select method.GetParameters()[0].ParameterType
                         ) {
                     services.AddSingleton(typeof(IHostedService), typeof(ProjectionAsyncDelegateWorker<,>).MakeGenericType(type, eventType));
                 }
