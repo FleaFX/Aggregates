@@ -9,7 +9,6 @@
 /// <returns>The <see cref="ICommit"/> that represents the changes needed to progress to the new state.</returns>
 public delegate ICommit ProjectionDelegate<in TEvent>(TEvent @event, IReadOnlyDictionary<string, object?>? metadata = null);
 
-
 /// <summary>
 /// Applies the given <paramref name="event"/> to progress a projection to a new state.
 /// </summary>

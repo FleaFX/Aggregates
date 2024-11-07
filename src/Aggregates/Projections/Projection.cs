@@ -7,6 +7,7 @@ namespace Aggregates.Projections;
 /// </summary>
 /// <typeparam name="TState">The type of the state that is maintained.</typeparam>
 /// <typeparam name="TEvent">The type of the event that is being projected.</typeparam>
+[Obsolete("Use the new ProjectionContract attribute instead.", false)]
 public abstract record Projection<TState, TEvent> : IProjection<TState, TEvent>
     where TState : Projection<TState, TEvent> {
 

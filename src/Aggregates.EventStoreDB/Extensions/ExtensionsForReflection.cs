@@ -18,4 +18,19 @@ static class ExtensionsForReflection {
             return false;
         }
     }
+
+    /// <summary>
+    /// Returns whether the given <paramref name="methodInfo"/> can be used to create a <typeparamref name="TDelegate"/>.
+    /// </summary>
+    /// <param name="methodInfo"></param>
+    /// <param name="target"></param>
+    /// <returns></returns>
+    public static bool IsDelegate(this MethodInfo methodInfo, Type delegateType, object? target) {
+        try {
+            methodInfo.CreateDelegate(delegateType, target);
+            return true;
+        }  catch (Exception) {
+            return false;
+        }
+    }
 }

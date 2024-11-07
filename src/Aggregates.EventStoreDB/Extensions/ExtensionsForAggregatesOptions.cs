@@ -1,9 +1,12 @@
 ﻿// ReSharper disable CheckNamespace
 
+using System.Reflection;
 using Aggregates.Configuration;
+using Aggregates.EventStoreDB.Extensions;
 using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
 using Aggregates.EventStoreDB.Workers;
+using Aggregates.Projections;
 using Aggregates.Types;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,6 +54,7 @@ public static class ExtensionsForAggregatesOptions {
                 };
             });
             services.TryAddScoped<CreateToAllAsyncDelegate>(sp => sp.GetRequiredService<EventStorePersistentSubscriptionsClient>().CreateToAllAsync);
+            services.TryAddScoped<DeleteToAllAsyncDelegate>(sp => sp.GetRequiredService<EventStorePersistentSubscriptionsClient>().DeleteToAllAsync);
             services.TryAddScoped<SubscribeToAll>(sp => sp.GetRequiredService<EventStorePersistentSubscriptionsClient>().SubscribeToAll);
             services.TryAddScoped(typeof(ResolvedEventDeserializer));
             services.TryAddScoped(typeof(MetadataDeserializer));
@@ -68,6 +72,41 @@ public static class ExtensionsForAggregatesOptions {
 
                      select (stateType: genericArgs[0], eventType: genericArgs[1])) {
                 services.AddSingleton(typeof(IHostedService), typeof(ProjectionWorker<,>).MakeGenericType(stateType, eventType));
+            }
+
+            // find all classes that are attributed with a ProjectionContract
+            foreach (var type in
+                     from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+                     where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
+                     from type in assembly.GetTypes()
+                     where !type.IsAbstract
+
+                     let attr = type.GetCustomAttribute<ProjectionContractAttribute>()
+                     where attr is not null
+                     select type) {
+                services.AddTransient(type);
+
+                // find suitable Projection(Async)Delegate methods and register workers for it
+                var sp = services.BuildServiceProvider();
+                var target = sp.GetRequiredService(type);
+                foreach (var eventType in
+                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         where method.IsGenericMethod && method.GetGenericArguments().Length == 1
+                         let delegateType = typeof(ProjectionDelegate<>).MakeGenericType(method.GetGenericArguments()[0])
+                         where method.IsDelegate(delegateType, target)
+                         select method.GetGenericArguments()[0]
+                        ) {
+                    services.AddSingleton(typeof(IHostedService), typeof(ProjectionDelegateWorker<,>).MakeGenericType(type, eventType));
+                }
+                foreach (var eventType in
+                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         where method.IsGenericMethod && method.GetGenericArguments().Length == 1
+                         let delegateType = typeof(ProjectionAsyncDelegate<>).MakeGenericType(method.GetGenericArguments()[0])
+                         where method.IsDelegate(delegateType, target)
+                         select method.GetGenericArguments()[0]
+                        ) {
+                    services.AddSingleton(typeof(IHostedService), typeof(ProjectionAsyncDelegateWorker<,>).MakeGenericType(type, eventType));
+                }
             }
         })
         .AddConfiguration(services => {

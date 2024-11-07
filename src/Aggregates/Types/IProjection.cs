@@ -5,6 +5,7 @@ namespace Aggregates;
 /// <summary>
 /// Marker interface for projections, which maintain a state using events sourced from multiple streams.
 /// </summary>
+[Obsolete("Use the new ProjectionContract attribute instead.", false)]
 public interface IProjection<TState, in TEvent> {
     /// <summary>
     /// Applies the given <paramref name="event"/> to progress to a new state.
