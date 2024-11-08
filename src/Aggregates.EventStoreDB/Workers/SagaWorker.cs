@@ -91,10 +91,15 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
 
         // find saga delegate
         var @delegate = (
-            from method in ownerType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-            where method.IsDelegate<SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(owner)
-            select method.CreateDelegate<SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(owner)
-        ).SingleOrDefault();
+                from method in ownerType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                where method.IsDelegate<SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(owner)
+                select method.CreateDelegate<SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(owner)
+            ).Concat(
+                from method in ownerType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                where method.IsDelegate<SagaDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(owner)
+                let dlgt = method.CreateDelegate<SagaDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(owner)
+                select new SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>((state, @event, metadata, _) => dlgt(state, @event, metadata).ToAsyncEnumerable())
+            ).SingleOrDefault();
         if (@delegate is null)
             return (null, null);
 

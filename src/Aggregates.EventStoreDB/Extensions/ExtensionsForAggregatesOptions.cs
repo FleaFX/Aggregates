@@ -156,9 +156,9 @@ public static class ExtensionsForAggregatesOptions {
                 var target = type.BuildWithStubDependencies();
                 foreach (var (TSagaState, TSagaEvent, TCommand, TState, TEvent) in
                          from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                         where method.GetParameters().Length == 4 &&
+                         where method.GetParameters().Length >= 3 &&
                                method.ReturnType.IsGenericType &&
-                               method.ReturnType.GetGenericTypeDefinition() == typeof(IAsyncEnumerable<>) &&
+                               (method.ReturnType.GetGenericTypeDefinition() == typeof(IAsyncEnumerable<>) || method.ReturnType.GetGenericTypeDefinition() == typeof(IEnumerable<>)) &&
                                method.ReturnType.GetGenericArguments()[0].IsGenericType && 
                                method.ReturnType.GetGenericArguments()[0].GetGenericTypeDefinition() == typeof(ICommand<,>)
                          let TSagaState = method.GetParameters()[0].ParameterType
@@ -166,8 +166,9 @@ public static class ExtensionsForAggregatesOptions {
                          let TCommand = method.ReturnType.GetGenericArguments()[0]
                          let TState = TCommand.GenericTypeArguments[0]
                          let TEvent = TCommand.GenericTypeArguments[1]
-                         let delegateType = typeof(SagaAsyncDelegate<,,,,>).MakeGenericType(TSagaState, TSagaEvent, TCommand, TState, TEvent)
-                         where method.IsDelegate(delegateType, target)
+                         let asyncDelegateType = typeof(SagaAsyncDelegate<,,,,>).MakeGenericType(TSagaState, TSagaEvent, TCommand, TState, TEvent)
+                         let delegateType = typeof(SagaDelegate<,,,,>).MakeGenericType(TSagaState, TSagaEvent, TCommand, TState, TEvent)
+                         where method.IsDelegate(asyncDelegateType, target) || method.IsDelegate(delegateType, target)
                          select (TSagaState, TSagaEvent, TCommand, TState, TEvent)
                         ) {
                     services.AddSingleton(typeof(IHostedService), typeof(SagaWorker<,,,,,>).MakeGenericType(type, TSagaState, TSagaEvent, TCommand, TState, TEvent));
