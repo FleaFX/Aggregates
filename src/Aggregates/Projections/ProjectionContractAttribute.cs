@@ -6,7 +6,7 @@
 /// <param name="name">The name of the projection.</param>
 /// <param name="version">The version of the projection. You should only ever have one version for every <paramref name="name"/> in your codebase.</param>
 /// <param name="namespace">Optional. A namespace to prepend to the name of your projection.</param>
-/// <param name="continueFrom">Optional. Specifies the name of a previous version of the projection to continue projecting from. The name should be in the format namespace.name@version.</param>
+/// <param name="continueFrom">Optional. Specifies the name of a previous version of the projection to continue projecting from.</param>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
 public class ProjectionContractAttribute(string name, int version = 1, string? @namespace = null, string? continueFrom = null) : Attribute {
     /// <summary>

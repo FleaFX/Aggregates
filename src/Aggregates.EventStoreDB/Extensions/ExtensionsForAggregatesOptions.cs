@@ -1,5 +1,7 @@
 ﻿// ReSharper disable CheckNamespace
 
+using System.Collections.Generic;
+using System.Data;
 using System.Reflection;
 using Aggregates.Configuration;
 using Aggregates.EventStoreDB.Extensions;
@@ -7,6 +9,7 @@ using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
 using Aggregates.EventStoreDB.Workers;
 using Aggregates.Projections;
+using Aggregates.Sagas;
 using Aggregates.Types;
 using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
@@ -87,8 +90,7 @@ public static class ExtensionsForAggregatesOptions {
                 services.AddTransient(type);
 
                 // find suitable Projection(Async)Delegate methods and register workers for it
-                var sp = services.BuildServiceProvider();
-                var target = sp.GetRequiredService(type);
+                var target = type.BuildWithStubDependencies();
                 foreach (var eventType in
                          from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                          where method.GetParameters().Length == 2 && method.ReturnType == typeof(ICommit)
@@ -137,6 +139,41 @@ public static class ExtensionsForAggregatesOptions {
                 )
             );
 
+            // find all classes that are attributed with a SagaContract
+            foreach (var type in
+                     from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+                     where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
+                     from type in assembly.GetTypes()
+                     where !type.IsAbstract
+
+                     let attr = type.GetCustomAttribute<SagaContractAttribute>()
+                     where attr is not null
+                     select type) {
+                
+                services.AddTransient(type);
+
+                // find suitable SagaAsyncDelegate methods and register workers for it
+                var target = type.BuildWithStubDependencies();
+                foreach (var (TSagaState, TSagaEvent, TCommand, TState, TEvent) in
+                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         where method.GetParameters().Length == 4 &&
+                               method.ReturnType.IsGenericType &&
+                               method.ReturnType.GetGenericTypeDefinition() == typeof(IAsyncEnumerable<>) &&
+                               method.ReturnType.GetGenericArguments()[0].IsGenericType && 
+                               method.ReturnType.GetGenericArguments()[0].GetGenericTypeDefinition() == typeof(ICommand<,>)
+                         let TSagaState = method.GetParameters()[0].ParameterType
+                         let TSagaEvent = method.GetParameters()[1].ParameterType
+                         let TCommand = method.ReturnType.GetGenericArguments()[0]
+                         let TState = TCommand.GenericTypeArguments[0]
+                         let TEvent = TCommand.GenericTypeArguments[1]
+                         let delegateType = typeof(SagaAsyncDelegate<,,,,>).MakeGenericType(TSagaState, TSagaEvent, TCommand, TState, TEvent)
+                         where method.IsDelegate(delegateType, target)
+                         select (TSagaState, TSagaEvent, TCommand, TState, TEvent)
+                        ) {
+                    services.AddSingleton(typeof(IHostedService), typeof(SagaWorker<,,,,,>).MakeGenericType(type, TSagaState, TSagaEvent, TCommand, TState, TEvent));
+                }
+            }
+
             // find all implementations of IReaction<,,,> and register a ReactionWorker for it
             foreach (var (type, reactionType, commandType, stateType, eventType) in
                      from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
@@ -150,21 +187,6 @@ public static class ExtensionsForAggregatesOptions {
 
                      select (type, reactionType: genericArgs[0], commandType: genericArgs[1], stateType: genericArgs[2], eventType: genericArgs[3])) {
                 services.AddSingleton(typeof(IHostedService), typeof(ReactionWorker<,,,,>).MakeGenericType(type, reactionType, commandType, stateType, eventType));
-            }
-
-            // find all implementations of IReaction<,,,,> and register a SagaWorker for it
-            foreach (var (reactionStateType, reactionEventType, commandType, commandStateType, commandEventType) in
-                     from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
-                     where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
-                     from type in assembly.GetTypes()
-                     where !type.IsAbstract
-
-                     from @interface in type.GetInterfaces()
-                     where @interface.IsGenericType && @interface.GetGenericTypeDefinition() == typeof(IReaction<,,,,>)
-                     let genericArgs = @interface.GetGenericArguments()
-
-                     select (reactionStateType: genericArgs[0], reactionEventType: genericArgs[1], commandType: genericArgs[2], commandStateType: genericArgs[3], commandEventType: genericArgs[4])) {
-                services.AddSingleton(typeof(IHostedService), typeof(SagaWorker<,,,,>).MakeGenericType(reactionStateType, reactionEventType, commandType, commandStateType, commandEventType));
             }
         });
 }

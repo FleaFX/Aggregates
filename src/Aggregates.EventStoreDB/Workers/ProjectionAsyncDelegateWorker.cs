@@ -59,8 +59,7 @@ class ProjectionAsyncDelegateWorker<TProjection, TEvent>(IServiceScopeFactory se
                             }
                                 break;
                             case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
-                                logger.LogInformation(
-                                    $"Subscription to {confirmation.SubscriptionId} has been confirmed. Projection started.");
+                                logger.LogInformation($"Subscription to {confirmation.SubscriptionId} has been confirmed. Projection started.");
                                 break;
                         }
                     }
@@ -76,7 +75,7 @@ class ProjectionAsyncDelegateWorker<TProjection, TEvent>(IServiceScopeFactory se
         await stoppingToken;
     }
 
-    static async Task<(string? subscriptionGroupName, ProjectionAsyncDelegate<TEvent>? @delegate)> BootstrapAsync(TProjection owner, ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, DeleteToAllAsyncDelegate deleteToAllAsync, AggregatesOptions options,CancellationToken cancellationToken) {
+    static async Task<(string? subscriptionGroupName, ProjectionAsyncDelegate<TEvent>? @delegate)> BootstrapAsync(TProjection owner, ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, DeleteToAllAsyncDelegate deleteToAllAsync, AggregatesOptions options, CancellationToken cancellationToken) {
         var ownerType = owner!.GetType();
         if (ownerType.GetCustomAttribute<ProjectionContractAttribute>() is not { } projectionContract)
             return (null, null);

@@ -25,12 +25,23 @@ static class ExtensionsForReflection {
     /// <param name="methodInfo"></param>
     /// <param name="target"></param>
     /// <returns></returns>
-    public static bool IsDelegate(this MethodInfo methodInfo, Type delegateType, object? target) {
+    public static bool IsDelegate(this MethodInfo methodInfo, Type delegateType, object target) {
         try {
             methodInfo.CreateDelegate(delegateType, target);
             return true;
         }  catch (Exception) {
             return false;
         }
+    }
+
+    public static object? BuildWithStubDependencies(this Type targetType) {
+        var constructor = targetType.GetConstructors().MinBy(ctor => ctor.GetParameters().Length);
+        var parameters = (
+                from parameter in constructor?.GetParameters() ?? []
+                select parameter.ParameterType.IsPrimitive
+                    ? parameter.DefaultValue
+                    : parameter.ParameterType.BuildWithStubDependencies()
+            ).ToArray();
+        return constructor?.Invoke(parameters);
     }
 }
