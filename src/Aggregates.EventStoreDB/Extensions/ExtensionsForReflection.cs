@@ -40,7 +40,7 @@ static class ExtensionsForReflection {
                 from parameter in constructor?.GetParameters() ?? []
                 select parameter.ParameterType.IsPrimitive
                     ? parameter.DefaultValue
-                    : parameter.ParameterType.BuildWithStubDependencies()
+                    : null
             ).ToArray();
         return constructor?.Invoke(parameters);
     }

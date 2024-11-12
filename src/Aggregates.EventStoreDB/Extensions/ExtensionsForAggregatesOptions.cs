@@ -76,7 +76,7 @@ public static class ExtensionsForAggregatesOptions {
                 // find suitable Projection(Async)Delegate methods and register workers for it
                 var target = type.BuildWithStubDependencies();
                 foreach (var eventType in
-                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
                          where method.GetParameters().Length == 2 && method.ReturnType == typeof(ICommit)
                          let delegateType = typeof(ProjectionDelegate<>).MakeGenericType(method.GetParameters()[0].ParameterType)
                          where method.IsDelegate(delegateType, target)
@@ -85,8 +85,8 @@ public static class ExtensionsForAggregatesOptions {
                     services.AddSingleton(typeof(IHostedService), typeof(ProjectionDelegateWorker<,>).MakeGenericType(type, eventType));
                 }
                 foreach (var eventType in
-                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                         where method.GetParameters().Length == 2 && method.ReturnType == typeof(ValueTask<ICommit>)
+                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
+                         where method.GetParameters().Length == 3 && method.ReturnType == typeof(ValueTask<ICommit>)
                          let delegateType = typeof(ProjectionAsyncDelegate<>).MakeGenericType(method.GetParameters()[0].ParameterType)
                          where method.IsDelegate(delegateType, target)
                          select method.GetParameters()[0].ParameterType
@@ -139,7 +139,7 @@ public static class ExtensionsForAggregatesOptions {
                 // find suitable SagaAsyncDelegate methods and register workers for it
                 var target = type.BuildWithStubDependencies();
                 foreach (var (TSagaState, TSagaEvent, TCommand, TState, TEvent) in
-                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
                          where method.GetParameters().Length >= 3 &&
                                method.ReturnType.IsGenericType &&
                                (method.ReturnType.GetGenericTypeDefinition() == typeof(IAsyncEnumerable<>) || method.ReturnType.GetGenericTypeDefinition() == typeof(IEnumerable<>)) &&
@@ -177,7 +177,7 @@ public static class ExtensionsForAggregatesOptions {
                 // find suitable PolicyAsyncDelegate methods and register workers for it
                 var target = type.BuildWithStubDependencies();
                 foreach (var (TPolicyEvent, TCommand, TState, TEvent) in
-                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         from method in type.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly)
                          where method.GetParameters().Length >= 2 &&
                                method.ReturnType.IsGenericType &&
                                (method.ReturnType.GetGenericTypeDefinition() == typeof(IAsyncEnumerable<>) || method.ReturnType.GetGenericTypeDefinition() == typeof(IEnumerable<>)) &&
