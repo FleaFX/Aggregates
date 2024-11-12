@@ -31,8 +31,4 @@
     <ProjectReference Include="..\Aggregates\Aggregates.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="EventStoreDB\" />
-  </ItemGroup>
-
 </Project>
