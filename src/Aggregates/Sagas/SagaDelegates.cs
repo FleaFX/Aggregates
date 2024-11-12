@@ -1,6 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-
-namespace Aggregates.Sagas;
+﻿namespace Aggregates.Sagas;
 
 /// <summary>
 /// Reacts to an event, supported by some state built from previous events, by producing a sequence of commands to handle.
