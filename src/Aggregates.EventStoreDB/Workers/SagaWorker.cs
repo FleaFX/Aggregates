@@ -7,50 +7,38 @@ using Aggregates.EventStoreDB.Extensions;
 using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using Aggregates.Configuration;
+using Aggregates.Sagas;
 
 namespace Aggregates.EventStoreDB.Workers;
 /// <summary>
-/// Initializes a new <see cref="SagaWorker{TReactionState,TReactionEvent,TCommand,TCommandState,TCommandEvent}"/>.
+/// Initializes a new <see cref="SagaWorker{TSaga,TSagaState,TSagaEvent,TCommand,TCommandState,TCommandEvent}"/>.
 /// </summary>
 /// <param name="serviceScopeFactory">A <see cref="IServiceScopeFactory"/> that creates a scope in order to resolve the dependencies.</param>
-class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>(IServiceScopeFactory serviceScopeFactory, ILogger<SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>> logger)
-    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, SubscribeToAll, ResolvedEventDeserializer, MetadataDeserializer, AggregatesOptions, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent>>(serviceScopeFactory)
-    where TReactionState : IState<TReactionState, TReactionEvent>
+class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>(IServiceScopeFactory serviceScopeFactory, ILogger<SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>> logger)
+    : ScopedBackgroundService<ListToAllAsyncDelegate, CreateToAllAsyncDelegate, DeleteToAllAsyncDelegate, SubscribeToAll, ResolvedEventDeserializer, MetadataDeserializer, AggregatesOptions, TSaga, ISagaHandler<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(serviceScopeFactory)
+    where TSagaState : IState<TSagaState, TSagaEvent>
     where TCommand : ICommand<TCommandState, TCommandEvent>
     where TCommandState : IState<TCommandState, TCommandEvent> {
-    protected override async Task ExecuteCoreAsync(ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, SubscribeToAll subscribeToAll, ResolvedEventDeserializer deserializer, MetadataDeserializer metadataDeserializer, AggregatesOptions options, IReaction<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> reaction, ISagaHandler<TReactionState, TReactionEvent, TCommand, TCommandState, TCommandEvent> sagaHandler, CancellationToken stoppingToken) {
-        // setup a new subscription group if it doesn't exist yet
-        var persistentSubscriptionGroupName = reaction.GetType().FullName!;
-        await Task.WhenAll(
-            from sub in (
-                from i in await listToAllAsync(cancellationToken: stoppingToken)
-                where i.GroupName == persistentSubscriptionGroupName
-                select i
-            ).DefaultIfEmpty()
-            where sub == null
+    protected override async Task ExecuteCoreAsync(
+        ListToAllAsyncDelegate listToAllAsync,
+        CreateToAllAsyncDelegate createToAllAsync,
+        DeleteToAllAsyncDelegate deleteToAllAsync,
+        SubscribeToAll subscribeToAll,
+        ResolvedEventDeserializer deserializer,
+        MetadataDeserializer metadataDeserializer,
+        AggregatesOptions options,
+        TSaga owner,
+        ISagaHandler<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent> sagaHandler,
+        CancellationToken stoppingToken) {
 
-            // find applicable event types by tentatively applying them to both the state
-            let eventTypes = (
-                from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
-                from type in assembly.GetTypes()
-                let attr = type.GetCustomAttribute<EventContractAttribute>()
-                where type.IsAssignableTo(typeof(TReactionEvent)) && attr != null
-                select (type, attr)
-            ).TrySelect(tuple => {
-                var (eventType, contract) = tuple;
-                var _ = TReactionState.Initial.Apply((TReactionEvent)Activator.CreateInstance(eventType)!);
-                return contract;
-            })
-
-            // finally create a persistent subscription with a filter on event type
-            let filter = string.Join('|', eventTypes.Select(eventType => eventType.ToString().Replace(".", @"\.")))
-            select createToAllAsync(persistentSubscriptionGroupName, EventTypeFilter.RegularExpression($"^(?:{filter})$"), new PersistentSubscriptionSettings(startFrom: Position.Start), cancellationToken: stoppingToken)
-        );
+        var (subscriptionGroupName, @delegate) = await BootstrapAsync(owner, listToAllAsync, createToAllAsync, deleteToAllAsync, options, stoppingToken);
+        if (subscriptionGroupName is null || @delegate is null)
+            return;
 
         // now connect the subscription and start the saga
         await Task.Run(async () => {
             do {
-                await using var subscription = subscribeToAll(persistentSubscriptionGroupName);
+                await using var subscription = subscribeToAll(subscriptionGroupName);
 
                 try {
                     await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
@@ -59,8 +47,11 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
                                 try {
                                     using var linkEvent = new LinkEventScope(@event.ResolvedEvent);
                                     await sagaHandler.HandleAsync(
-                                        (TReactionEvent)deserializer.Deserialize(@event.ResolvedEvent),
-                                        metadataDeserializer.Deserialize(@event.ResolvedEvent), stoppingToken);
+                                        @delegate,
+                                        (TSagaEvent)deserializer.Deserialize(@event.ResolvedEvent),
+                                        metadataDeserializer.Deserialize(@event.ResolvedEvent),
+                                        stoppingToken
+                                    );
 
                                     // notify EventStoreDB that we're done
                                     await subscription.Ack(@event.ResolvedEvent);
@@ -76,8 +67,7 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
                                 break;
 
                             case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
-                                logger.LogInformation(
-                                    $"Subscription to {confirmation.SubscriptionId} has been confirmed. Saga started.");
+                                logger.LogInformation($"Subscription to {confirmation.SubscriptionId} has been confirmed. Saga started.");
                                 break;
                         }
                     }
@@ -92,5 +82,60 @@ class SagaWorker<TReactionState, TReactionEvent, TCommand, TCommandState, TComma
         }, stoppingToken);
 
         await stoppingToken;
+    }
+
+    static async Task<(string? subscriptionGroupName, SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>? @delegate)> BootstrapAsync(TSaga owner, ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, DeleteToAllAsyncDelegate deleteToAllAsync, AggregatesOptions options, CancellationToken cancellationToken) {
+        var ownerType = owner!.GetType();
+        if (ownerType.GetCustomAttribute<SagaContractAttribute>() is not { } sagaContract)
+            return (null, null);
+
+        // find saga delegate
+        var @delegate = (
+                from method in ownerType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                where method.IsDelegate<SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(owner)
+                select method.CreateDelegate<SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(owner)
+            ).Concat(
+                from method in ownerType.GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                where method.IsDelegate<SagaDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(owner)
+                let dlgt = method.CreateDelegate<SagaDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>>(owner)
+                select new SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>((state, @event, metadata, _) => dlgt(state, @event, metadata).ToAsyncEnumerable())
+            ).SingleOrDefault();
+        if (@delegate is null)
+            return (null, null);
+
+        // find subscription and create it if it doesn't exist
+        var subscription = (await listToAllAsync(cancellationToken: cancellationToken)).FirstOrDefault(info => info.GroupName == sagaContract.ToString());
+        if (subscription != null) return (subscription.GroupName, @delegate);
+
+        // find applicable event types by tentatively applying them to the state
+        var eventTypes = (
+            from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
+            from type in assembly.GetTypes()
+            let attr = type.GetCustomAttribute<EventContractAttribute>()
+            where type.IsAssignableTo(typeof(TSagaEvent)) && attr != null
+            select (type, attr)
+        ).TrySelect(tuple => {
+            var (eventType, contract) = tuple;
+            var _ = TSagaState.Initial.Apply((TSagaEvent)Activator.CreateInstance(eventType)!);
+            return contract;
+        });
+
+        // create a persistent subscription with a filter on event type
+        var filter = string.Join('|', eventTypes.Select(eventType => eventType.ToString().Replace(".", @"\.")));
+
+        // find the preceding subscription, if any
+        IPosition? position = Position.Start;
+        if (sagaContract.ContinueFrom is { } continueFrom && (await listToAllAsync(cancellationToken: cancellationToken)).FirstOrDefault(info => info.GroupName == continueFrom) is { } preceding) {
+            // use its last known event position as the new starting point, otherwise just start from the beginning
+            position = preceding.Stats.LastKnownEventPosition;
+
+            // delete the preceding subscription
+            await deleteToAllAsync(preceding.GroupName, cancellationToken: cancellationToken);
+        }
+
+        // now create the new subscription
+        await createToAllAsync(sagaContract.ToString(), EventTypeFilter.RegularExpression($"^(?:{filter})$"), new PersistentSubscriptionSettings(startFrom: position), cancellationToken: cancellationToken);
+
+        return (sagaContract.ToString(), @delegate);
     }
 }

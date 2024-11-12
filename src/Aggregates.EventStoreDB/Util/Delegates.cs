@@ -21,3 +21,8 @@ delegate EventStorePersistentSubscriptionsClient.PersistentSubscriptionResult Su
     int bufferSize = 10,
     UserCredentials? userCredentials = null,
     CancellationToken cancellationToken = default (CancellationToken));
+
+/// <summary>
+/// Asynchronously deletes a persistent subscription to $all.
+/// </summary>
+delegate Task DeleteToAllAsyncDelegate(string groupName, TimeSpan? deadline = null, UserCredentials? userCredentials = null, CancellationToken cancellationToken = default);

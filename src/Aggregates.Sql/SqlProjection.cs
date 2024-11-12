@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using Aggregates.Projections;
 
 namespace Aggregates.Sql;
 

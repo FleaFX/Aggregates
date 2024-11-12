@@ -1,4 +1,4 @@
-﻿using Aggregates.Types;
+﻿using Aggregates.Projections;
 using System.Collections.Immutable;
 using System.Data;
 using System.Reflection;

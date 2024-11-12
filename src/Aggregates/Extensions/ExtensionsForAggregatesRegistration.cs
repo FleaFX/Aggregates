@@ -3,6 +3,7 @@
 using Aggregates.Configuration;
 using Aggregates.Entities.Handlers;
 using Aggregates.Projections;
+using Aggregates.Sagas;
 using Aggregates.Sagas.Handlers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -78,38 +79,6 @@ public static class ExtensionsForAggregatesRegistration {
     /// <returns>A <see cref="IServiceCollection"/>.</returns>
     static AggregatesOptions UseReactions(this AggregatesOptions options) =>
         options
-            .AddConfiguration(svc => {
-                // find all (simple) implementations of IReaction and register them
-                foreach (var (implType, reactionEventType, commandType, stateType, eventType) in
-                         from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
-                         where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
-                         from type in assembly.GetTypes()
-
-                         from @interface in type.GetInterfaces()
-                         where @interface.IsGenericType && @interface.GetGenericTypeDefinition() == typeof(IReaction<,,,>)
-
-                         let genericArgs = @interface.GetGenericArguments()
-
-                         select (type, genericArgs[0], genericArgs[1], genericArgs[2], genericArgs[3])) {
-                    svc.AddScoped(typeof(IReaction<,,,>).MakeGenericType(reactionEventType, commandType, stateType, eventType), implType);
-                }
-            })
-            .AddConfiguration(svc => {
-                // find all stateful implementations of IReaction and register them
-                foreach (var (implType, reactionStateType, reactionEventType, commandType, commandStateType, commandEventType) in
-                         from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
-                         where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
-                         from type in assembly.GetTypes()
-
-                         from @interface in type.GetInterfaces()
-                         where @interface.IsGenericType && @interface.GetGenericTypeDefinition() == typeof(IReaction<,,,,>)
-
-                         let genericArgs = @interface.GetGenericArguments()
-
-                         select (type, genericArgs[0], genericArgs[1], genericArgs[2], genericArgs[3], genericArgs[4])) {
-                    svc.AddScoped(typeof(IReaction<,,,,>).MakeGenericType(reactionStateType, reactionEventType, commandType, commandStateType, commandEventType), implType);
-                }
-            })
             .AddConfiguration(svc => {
                 svc.TryAddScoped(typeof(DefaultHandler<,,,,>));
                 svc.TryAddScoped(typeof(UnitOfWorkAwareHandler<,,,,>));

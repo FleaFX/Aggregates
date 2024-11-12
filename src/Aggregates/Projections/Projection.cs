@@ -7,6 +7,7 @@ namespace Aggregates.Projections;
 /// </summary>
 /// <typeparam name="TState">The type of the state that is maintained.</typeparam>
 /// <typeparam name="TEvent">The type of the event that is being projected.</typeparam>
+[Obsolete("Use the new ProjectionContract attribute instead.", false)]
 public abstract record Projection<TState, TEvent> : IProjection<TState, TEvent>
     where TState : Projection<TState, TEvent> {
 
@@ -16,6 +17,19 @@ public abstract record Projection<TState, TEvent> : IProjection<TState, TEvent>
     /// <param name="Origin">The state object to return after all the commits have been executed.</param>
     /// <param name="Commits">The sequence of commits to execute.</param>
     protected record Commit(TState Origin, ImmutableArray<ICommit<TState>> Commits) : ICommit<TState> {
+        /// <summary>
+        /// Not supported on a stateful <see cref="Commit"/>.
+        /// </summary>
+        public ICommit Use(Func<ICommit> applicator) =>
+            throw new NotSupportedException();
+
+        /// <summary>
+        /// Not supported on a stateful <see cref="Commit"/>.
+        /// </summary>
+        /// <exception cref="NotSupportedException"></exception>
+        public ICommit Use<TCommit1>(Func<CancellationToken, ValueTask<TCommit1>> factory) where TCommit1 : ICommit =>
+            throw new NotSupportedException();
+
         /// <summary>
         /// Produces a <see cref="Commit"/> that uses the given <paramref name="applicator"/> to produce the appropriate <see cref="ICommit{TState}"/>.
         /// </summary>
@@ -34,13 +48,13 @@ public abstract record Projection<TState, TEvent> : IProjection<TState, TEvent>
             Use(state => new DeferredCommit<TState, TCommit>(state, factory));
 
         async ValueTask<TState> ICommit<TState>.CommitAsync(CancellationToken cancellationToken) {
+            return await CommitAllAsync(Commits.ToArray(), Origin);
+
             async ValueTask<TState> CommitAllAsync(ICommit<TState>[] commits, TState state) =>
                 commits switch {
                     [var commit, ..] => await CommitAllAsync(commits[1..], await commit.CommitAsync(cancellationToken)),
                     [] => state
                 };
-
-            return await CommitAllAsync(Commits.ToArray(), Origin);
         }
     }
 

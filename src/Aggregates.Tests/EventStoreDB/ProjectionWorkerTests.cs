@@ -2,6 +2,7 @@
 using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
 using Aggregates.EventStoreDB.Workers;
+using Aggregates.Projections;
 using Aggregates.Sql;
 using EventStore.Client;
 using FakeItEasy;
