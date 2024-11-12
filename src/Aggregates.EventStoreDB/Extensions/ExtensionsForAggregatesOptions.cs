@@ -60,22 +60,7 @@ public static class ExtensionsForAggregatesOptions {
             services.TryAddScoped<SubscribeToAll>(sp => sp.GetRequiredService<EventStorePersistentSubscriptionsClient>().SubscribeToAll);
             services.TryAddScoped(typeof(ResolvedEventDeserializer));
             services.TryAddScoped(typeof(MetadataDeserializer));
-
-            // find all implementations of IProjection<,> and register a ProjectionWorker for it
-            foreach (var (stateType, eventType) in
-                     from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
-                     where !(assembly.GetName().Name?.Contains("Microsoft.Data.SqlClient") ?? false)
-                     from type in assembly.GetTypes()
-                     where !type.IsAbstract
-
-                     from iface in type.GetInterfaces()
-                     where iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IProjection<,>)
-                     let genericArgs = iface.GetGenericArguments()
-
-                     select (stateType: genericArgs[0], eventType: genericArgs[1])) {
-                services.AddSingleton(typeof(IHostedService), typeof(ProjectionWorker<,>).MakeGenericType(stateType, eventType));
-            }
-
+            
             // find all classes that are attributed with a ProjectionContract
             foreach (var type in
                      from assembly in options.Assemblies ?? AppDomain.CurrentDomain.GetAssemblies()
