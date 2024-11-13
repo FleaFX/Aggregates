@@ -31,7 +31,7 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
         ISagaHandler<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent> sagaHandler,
         CancellationToken stoppingToken) {
 
-        var (subscriptionGroupName, @delegate) = await BootstrapAsync(owner, listToAllAsync, createToAllAsync, deleteToAllAsync, options, stoppingToken);
+        var (subscriptionGroupName, @delegate, skipPosition) = await BootstrapAsync(owner, listToAllAsync, createToAllAsync, deleteToAllAsync, options, stoppingToken);
         if (subscriptionGroupName is null || @delegate is null)
             return;
 
@@ -43,7 +43,7 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
                 try {
                     await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
                         switch (message) {
-                            case PersistentSubscriptionMessage.Event @event: {
+                            case PersistentSubscriptionMessage.Event @event when !Equals(@event.ResolvedEvent.OriginalPosition, skipPosition): {
                                 try {
                                     using var linkEvent = new LinkEventScope(@event.ResolvedEvent);
                                     await sagaHandler.HandleAsync(
@@ -63,8 +63,13 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
                                             : PersistentSubscriptionNakEventAction.Park, ex.ToString(),
                                         @event.ResolvedEvent);
                                 }
-                            }
                                 break;
+                            }
+
+                            case PersistentSubscriptionMessage.Event @event: {
+                                await subscription.Ack(@event.ResolvedEvent);
+                                break;
+                            }
 
                             case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
                                 logger.LogInformation($"Subscription to {confirmation.SubscriptionId} has been confirmed. Saga started.");
@@ -84,10 +89,10 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
         await stoppingToken;
     }
 
-    static async Task<(string? subscriptionGroupName, SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>? @delegate)> BootstrapAsync(TSaga owner, ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, DeleteToAllAsyncDelegate deleteToAllAsync, AggregatesOptions options, CancellationToken cancellationToken) {
+    static async Task<(string? subscriptionGroupName, SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>? @delegate, IPosition? skipPosition)> BootstrapAsync(TSaga owner, ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, DeleteToAllAsyncDelegate deleteToAllAsync, AggregatesOptions options, CancellationToken cancellationToken) {
         var ownerType = owner!.GetType();
         if (ownerType.GetCustomAttribute<SagaContractAttribute>() is not { } sagaContract)
-            return (null, null);
+            return (null, null, null);
 
         // find saga delegate
         var @delegate = (
@@ -101,11 +106,11 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
                 select new SagaAsyncDelegate<TSagaState, TSagaEvent, TCommand, TCommandState, TCommandEvent>((state, @event, metadata, _) => dlgt(state, @event, metadata).ToAsyncEnumerable())
             ).SingleOrDefault();
         if (@delegate is null)
-            return (null, null);
+            return (null, null, null);
 
         // find subscription and create it if it doesn't exist
         var subscription = (await listToAllAsync(cancellationToken: cancellationToken)).FirstOrDefault(info => info.GroupName == sagaContract.ToString());
-        if (subscription != null) return (subscription.GroupName, @delegate);
+        if (subscription != null) return (subscription.GroupName, @delegate, null);
 
         // find applicable event types by tentatively applying them to the state
         var eventTypes = (
@@ -124,10 +129,13 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
         var filter = string.Join('|', eventTypes.Select(eventType => eventType.ToString().Replace(".", @"\.")));
 
         // find the preceding subscription, if any
-        IPosition? position = Position.Start;
+        IPosition position = Position.Start;
+        IPosition? skipPosition = null;
         if (sagaContract.ContinueFrom is { } continueFrom && (await listToAllAsync(cancellationToken: cancellationToken)).FirstOrDefault(info => info.GroupName == continueFrom) is { } preceding) {
+            skipPosition = preceding.Stats.LastKnownEventPosition;
+
             // use its last known event position as the new starting point, otherwise just start from the beginning
-            position = preceding.Stats.LastKnownEventPosition;
+            position = preceding.Stats.LastKnownEventPosition ?? Position.Start;
 
             // delete the preceding subscription
             await deleteToAllAsync(preceding.GroupName, cancellationToken: cancellationToken);
@@ -136,6 +144,6 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
         // now create the new subscription
         await createToAllAsync(sagaContract.ToString(), EventTypeFilter.RegularExpression($"^(?:{filter})$"), new PersistentSubscriptionSettings(startFrom: position), cancellationToken: cancellationToken);
 
-        return (sagaContract.ToString(), @delegate);
+        return (sagaContract.ToString(), @delegate, skipPosition);
     }
 }

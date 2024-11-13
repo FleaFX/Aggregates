@@ -42,7 +42,7 @@ class PolicyWorker<TPolicy, TPolicyEvent, TCommand, TState, TEvent>(IServiceScop
         TPolicy owner,
         CancellationToken stoppingToken) {
 
-        var (subscriptionGroupName, @delegate) = await BootstrapAsync(owner, listToAllAsync, createToAllAsync, deleteToAllAsync, options, stoppingToken);
+        var (subscriptionGroupName, @delegate, skipPosition) = await BootstrapAsync(owner, listToAllAsync, createToAllAsync, deleteToAllAsync, options, stoppingToken);
         if (owner is null || @delegate is null)
             return;
 
@@ -54,7 +54,7 @@ class PolicyWorker<TPolicy, TPolicyEvent, TCommand, TState, TEvent>(IServiceScop
                 try {
                     await foreach (var message in subscription.Messages.WithCancellation(stoppingToken)) {
                         switch (message) {
-                            case PersistentSubscriptionMessage.Event @event: {
+                            case PersistentSubscriptionMessage.Event @event when !Equals(@event.ResolvedEvent.OriginalPosition, skipPosition): {
                                 // react to the event and handle each command
                                 try {
                                     await using var metadataScope = new MetadataScope();
@@ -79,8 +79,13 @@ class PolicyWorker<TPolicy, TPolicyEvent, TCommand, TState, TEvent>(IServiceScop
                                             : PersistentSubscriptionNakEventAction.Park, ex.Message,
                                         @event.ResolvedEvent);
                                 }
-                            }
                                 break;
+                            }
+
+                            case PersistentSubscriptionMessage.Event @event: {
+                                await subscription.Ack(@event.ResolvedEvent);
+                                break;
+                            }
 
                             case PersistentSubscriptionMessage.SubscriptionConfirmation confirmation:
                                 logger.LogInformation($"Subscription to {confirmation.SubscriptionId} has been confirmed. Policy started.");
@@ -99,10 +104,10 @@ class PolicyWorker<TPolicy, TPolicyEvent, TCommand, TState, TEvent>(IServiceScop
         await stoppingToken;
     }
 
-    static async Task<(string? subscriptionGroupName, PolicyAsyncDelegate<TPolicyEvent, TCommand, TState, TEvent>? @delegate)> BootstrapAsync(TPolicy owner, ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, DeleteToAllAsyncDelegate deleteToAllAsync, AggregatesOptions options, CancellationToken cancellationToken) {
+    static async Task<(string? subscriptionGroupName, PolicyAsyncDelegate<TPolicyEvent, TCommand, TState, TEvent>? @delegate, IPosition? skipPosition)> BootstrapAsync(TPolicy owner, ListToAllAsyncDelegate listToAllAsync, CreateToAllAsyncDelegate createToAllAsync, DeleteToAllAsyncDelegate deleteToAllAsync, AggregatesOptions options, CancellationToken cancellationToken) {
         var ownerType = owner!.GetType();
         if (ownerType.GetCustomAttribute<PolicyContractAttribute>() is not { } policyContract)
-            return (null, null);
+            return (null, null, null);
 
         // find saga delegate
         var @delegate = (
@@ -116,11 +121,11 @@ class PolicyWorker<TPolicy, TPolicyEvent, TCommand, TState, TEvent>(IServiceScop
                 select new PolicyAsyncDelegate<TPolicyEvent, TCommand, TState, TEvent>((@event, metadata, _) => dlgt(@event, metadata).ToAsyncEnumerable())
             ).SingleOrDefault();
         if (@delegate is null)
-            return (null, null);
+            return (null, null, null);
 
         // find subscription and create it if it doesn't exist
         var subscription = (await listToAllAsync(cancellationToken: cancellationToken)).FirstOrDefault(info => info.GroupName == policyContract.ToString());
-        if (subscription != null) return (subscription.GroupName, @delegate);
+        if (subscription != null) return (subscription.GroupName, @delegate, null);
 
         // find applicable event types by tentatively applying them to the state
         var eventTypes = (
@@ -139,10 +144,13 @@ class PolicyWorker<TPolicy, TPolicyEvent, TCommand, TState, TEvent>(IServiceScop
         var filter = string.Join('|', eventTypes.Select(eventType => eventType.ToString().Replace(".", @"\.")));
 
         // find the preceding subscription, if any
-        IPosition? position = Position.Start;
+        IPosition position = Position.Start;
+        IPosition? skipPosition = null;
         if (policyContract.ContinueFrom is { } continueFrom && (await listToAllAsync(cancellationToken: cancellationToken)).FirstOrDefault(info => info.GroupName == continueFrom) is { } preceding) {
+            skipPosition = preceding.Stats.LastKnownEventPosition;
+
             // use its last known event position as the new starting point, otherwise just start from the beginning
-            position = preceding.Stats.LastKnownEventPosition;
+            position = preceding.Stats.LastKnownEventPosition ?? Position.Start;
 
             // delete the preceding subscription
             await deleteToAllAsync(preceding.GroupName, cancellationToken: cancellationToken);
@@ -151,6 +159,6 @@ class PolicyWorker<TPolicy, TPolicyEvent, TCommand, TState, TEvent>(IServiceScop
         // now create the new subscription
         await createToAllAsync(policyContract.ToString(), EventTypeFilter.RegularExpression($"^(?:{filter})$"), new PersistentSubscriptionSettings(startFrom: position), cancellationToken: cancellationToken);
 
-        return (policyContract.ToString(), @delegate);
+        return (policyContract.ToString(), @delegate, skipPosition);
     }
 }
