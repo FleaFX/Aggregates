@@ -13,6 +13,6 @@ public static class ExtensionsForAggregatesOptions {
     /// <param name="dbConnectionFactory">The <see cref="IDbConnectionFactory"/> to use when creating a connection to the database.</param>
     /// <param name="isolationLevel">The transaction locking behaviour to use.</param>
     /// <returns>A <see cref="ISqlCommit"/>.</returns>
-    public static ICommit UseSql(this ICommit commit, IDbConnectionFactory dbConnectionFactory, IsolationLevel isolationLevel = IsolationLevel.Unspecified) =>
+    public static ISqlCommit UseSql(this ICommit commit, IDbConnectionFactory dbConnectionFactory, IsolationLevel isolationLevel = IsolationLevel.Unspecified) =>
          new SqlCommit(commit, dbConnectionFactory, isolationLevel);
 }
