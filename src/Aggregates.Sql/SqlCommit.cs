@@ -10,11 +10,11 @@ namespace Aggregates.Sql;
 /// </summary>
 /// <param name="dbConnectionFactory">The <see cref="IDbConnectionFactory"/> to use when creating a connection to the database.</param>
 /// <param name="isolationLevel">The transaction locking behaviour.</param>
-readonly struct SqlCommit(IDbConnectionFactory dbConnectionFactory, IsolationLevel isolationLevel) : ISqlCommit {
+readonly struct SqlCommit(ICommit parentCommit, IDbConnectionFactory dbConnectionFactory, IsolationLevel isolationLevel) : ISqlCommit {
     ImmutableQueue<Query> UncommittedQueries { get; init; } = ImmutableQueue<Query>.Empty;
 
     /// <summary>
-    /// Prepares a <see cref="ICommit{TState}"/> that will execute the given query when committed, along with any queries that were previously prepared.
+    /// Prepares a <see cref="ICommit"/> that will execute the given query when committed, along with any queries that were previously prepared.
     /// </summary>
     /// <param name="sql">The command text to execute.</param>
     /// <param name="parameters">Optional object that captures the parameters of the query. Each property on this object should match the name of the parameter to set.</param>
@@ -29,6 +29,8 @@ readonly struct SqlCommit(IDbConnectionFactory dbConnectionFactory, IsolationLev
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> to cancel the asynchronous operation.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous operation, which resolves to the new state.</returns>
     async ValueTask ICommit.CommitAsync(CancellationToken cancellationToken) {
+        await parentCommit.CommitAsync(cancellationToken);
+
         await using var connection = dbConnectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(isolationLevel, cancellationToken);

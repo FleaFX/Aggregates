@@ -14,5 +14,5 @@ public static class ExtensionsForAggregatesOptions {
     /// <param name="isolationLevel">The transaction locking behaviour to use.</param>
     /// <returns>A <see cref="ISqlCommit"/>.</returns>
     public static ICommit UseSql(this ICommit commit, IDbConnectionFactory dbConnectionFactory, IsolationLevel isolationLevel = IsolationLevel.Unspecified) =>
-         commit.Use(() => new SqlCommit(dbConnectionFactory, isolationLevel));
+         new SqlCommit(commit, dbConnectionFactory, isolationLevel);
 }
