@@ -43,7 +43,7 @@ class EventStoreDbRepository<TState, TEvent>(UnitOfWork unitOfWork, EventStoreCl
 
         try {
             var events = await _eventStoreClient.ReadStreamAsync(Direction.Forwards, identifier.Value, StreamPosition.Start, resolveLinkTos: true).ToArrayAsync();
-            var state = events.Select(_deserializer.Deserialize).Cast<TEvent>().Aggregate(TState.Initial, (state, @event) => state.Apply(@event));
+            var state = events.Where(@event => @event.Event is { EventType: not null }).Select(_deserializer.Deserialize).Cast<TEvent>().Aggregate(TState.Initial, (state, @event) => state.Apply(@event));
 
             return new SagaRoot<TState, TEvent>(state, new AggregateVersion(events.Length - 1L));
         } catch (StreamNotFoundException) {
