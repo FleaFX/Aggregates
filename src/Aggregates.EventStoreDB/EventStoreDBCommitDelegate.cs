@@ -1,4 +1,5 @@
 ﻿using EventStore.Client;
+using Grpc.Core;
 
 namespace Aggregates.EventStoreDB;
 
@@ -13,11 +14,13 @@ static class EventStoreDbCommitDelegate {
         async unitOfWork => {
             var changed = unitOfWork.GetChanged();
             if (changed is { } aggregate) {
-                await client.AppendToStreamAsync(
-                    aggregate.Identifier.Value,
-                    AggregateVersion.None.Equals(aggregate.AggregateRoot.Version) ? StreamRevision.None : StreamRevision.FromInt64(aggregate.AggregateRoot.Version),
-                    aggregate.AggregateRoot.GetChanges().Select(@event => serializer(aggregate, @event))
-                );
+                await RetryAsync(TimeSpan.FromMilliseconds(250d), 5, async () => {
+                    await client.AppendToStreamAsync(
+                        aggregate.Identifier.Value,
+                        AggregateVersion.None.Equals(aggregate.AggregateRoot.Version) ? StreamRevision.None : StreamRevision.FromInt64(aggregate.AggregateRoot.Version),
+                        aggregate.AggregateRoot.GetChanges().Select(@event => serializer(aggregate, @event))
+                    );
+                });
             }
         };
 
@@ -31,11 +34,26 @@ static class EventStoreDbCommitDelegate {
         async unitOfWork => {
             var changed = unitOfWork.GetChanged();
             if (changed is { } aggregate) {
-                await client.AppendToStreamAsync(
-                    aggregate.Identifier.Value,
-                    AggregateVersion.None.Equals(aggregate.AggregateRoot.Version) ? StreamRevision.None : StreamRevision.FromInt64(aggregate.AggregateRoot.Version),
-                    aggregate.AggregateRoot.GetChanges().Select(@event => serializer(aggregate, @event))
-                );
+                await RetryAsync(TimeSpan.FromMilliseconds(250d), 5, async () => {
+                    await client.AppendToStreamAsync(
+                        aggregate.Identifier.Value,
+                        AggregateVersion.None.Equals(aggregate.AggregateRoot.Version) ? StreamRevision.None : StreamRevision.FromInt64(aggregate.AggregateRoot.Version),
+                        aggregate.AggregateRoot.GetChanges().Select(@event => serializer(aggregate, @event))
+                    );
+                });
             }
         };
+
+    static async Task RetryAsync(TimeSpan backoff, int attempts, Func<Task> func) {
+        var (delay, attempt) = (backoff, 1);
+        do {
+            try {
+                await func();
+                return;
+            } catch (RpcException ex) when (ex.StatusCode is StatusCode.DeadlineExceeded or StatusCode.Unknown) {
+                await Task.Delay(delay);
+                delay += backoff * ++attempt;
+            }
+        } while (attempt < attempts);
+    }
 }
