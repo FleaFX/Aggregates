@@ -1,4 +1,5 @@
-﻿using Aggregates.Metadata;
+﻿using System.IO.Hashing;
+using Aggregates.Metadata;
 using Aggregates.Types;
 using EventStore.Client;
 using System.Reflection;
@@ -23,15 +24,16 @@ static class EventStoreDbSerialization {
             if (!serializedEventsPerAggregate.TryGetValue(aggregate.Identifier, out var versionOffset))
                 serializedEventsPerAggregate[aggregate.Identifier] = versionOffset = 0;
 
+            var data = SerializePayload(serializer, @event);
             var eventData = new EventData(
                 eventId:
-                CreateEventId(aggregate, @event, versionOffset),
+                CreateEventId(aggregate, @event, versionOffset, data),
 
                 type:
                 GetEventType(@event),
 
                 data:
-                SerializePayload(serializer, @event),
+                data,
 
                 metadata:
                 SerializePayload(serializer, MetadataScope.Current.ToDictionary()));
@@ -55,16 +57,17 @@ static class EventStoreDbSerialization {
             // if we don't have one yet, initialize it to zero
             if (!serializedEventsPerAggregate.TryGetValue(aggregate.Identifier, out var versionOffset))
                 serializedEventsPerAggregate[aggregate.Identifier] = versionOffset = 0;
-            
+
+            var data = Encoding.UTF8.GetBytes($"{LinkEventScope.Current!.LinkEvent.OriginalEventNumber}@{LinkEventScope.Current!.LinkEvent.OriginalStreamId}");
             var eventData = new EventData(
                 eventId:
-                CreateEventId(aggregate, @event, versionOffset),
+                CreateEventId(aggregate, @event, versionOffset, data),
 
                 type:
                 "$>",
 
                 data:
-                Encoding.UTF8.GetBytes($"{LinkEventScope.Current!.LinkEvent.OriginalEventNumber}@{LinkEventScope.Current!.LinkEvent.OriginalStreamId}"),
+                data,
 
                 metadata:
                 SerializePayload(serializer, MetadataScope.Current.ToDictionary()));
@@ -82,8 +85,9 @@ static class EventStoreDbSerialization {
     /// <param name="aggregate">The aggregate for which the event will be serialized.</param>
     /// <param name="event">The event that will be serialized.</param>
     /// <param name="versionOffset">The offset within the aggregate's event stream from the last persisted version.</param>
+    /// <param name="payload">The serialized payload of the event.</param>
     /// <returns>A <see cref="Guid"/>.</returns>
-    static Uuid CreateEventId(Aggregate aggregate, object @event, int versionOffset) {
+    static Uuid CreateEventId(Aggregate aggregate, object @event, int versionOffset, byte[] payload) {
         // event id will be a hash of aggregate id, version, event type and event hashcode, in order to ensure idempotence
         // use MD5 to compute the hash since it provides us with a 16-byte hash, which is convenient since that's the 
         // exact length of a GUID ¯\_(ツ)_/¯
@@ -92,7 +96,9 @@ static class EventStoreDbSerialization {
         var bufferWriter = new BinaryWriter(stream);
         bufferWriter.Write(aggregate.Identifier.ToString());
         bufferWriter.Write(aggregate.AggregateRoot.Version + versionOffset);
+        bufferWriter.Write(XxHash64.Hash(payload));
         bufferWriter.Write(@event.GetType().Name);
+
         bufferWriter.Flush();
         stream.Seek(0, SeekOrigin.Begin);
 
