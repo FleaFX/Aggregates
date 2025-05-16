@@ -73,7 +73,8 @@ class PolicyWorker<TPolicy, TPolicyEvent, TCommand, TState, TEvent>(IServiceScop
                                     await subscription.Ack(@event.ResolvedEvent);
                                 }
                                 catch (Exception ex) {
-                                    await subscription.Nack(
+                                    logger.LogError(ex, "Exception occurred during handling of {eventType} @ {position} in subscription {subscriptionGroupName}.", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
+                                        await subscription.Nack(
                                         @event.RetryCount < 5
                                             ? PersistentSubscriptionNakEventAction.Retry
                                             : PersistentSubscriptionNakEventAction.Park, ex.Message,
