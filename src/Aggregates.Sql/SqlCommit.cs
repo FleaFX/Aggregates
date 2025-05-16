@@ -34,7 +34,7 @@ readonly struct SqlCommit(ICommit parentCommit, IDbConnectionFactory dbConnectio
         await using var connection = dbConnectionFactory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
         await using var tx = await connection.BeginTransactionAsync(isolationLevel, cancellationToken);
-
+        
         try {
             var uncommittedQueries = UncommittedQueries;
             while (!uncommittedQueries.IsEmpty) {
@@ -44,8 +44,7 @@ readonly struct SqlCommit(ICommit parentCommit, IDbConnectionFactory dbConnectio
                 command.Transaction = tx;
                 command.CommandType = query.CommandType;
                 command.CommandText = query.Sql;
-                foreach (var property in query.Parameters?.GetType().GetRuntimeProperties() ??
-                                         Array.Empty<PropertyInfo>()) {
+                foreach (var property in query.Parameters?.GetType().GetRuntimeProperties() ?? []) {
                     var parameter = command.CreateParameter();
                     parameter.ParameterName = property.Name;
                     parameter.Value = property.GetValue(query.Parameters);
