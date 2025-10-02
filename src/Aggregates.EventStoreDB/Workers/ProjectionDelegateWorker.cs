@@ -5,7 +5,6 @@ using Aggregates.EventStoreDB.Serialization;
 using Aggregates.EventStoreDB.Util;
 using Aggregates.Projections;
 using EventStore.Client;
-using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -38,16 +37,19 @@ class ProjectionDelegateWorker<TProjection, TEvent>(IServiceScopeFactory service
                         switch (message) {
                             case PersistentSubscriptionMessage.Event @event when !Equals(@event.ResolvedEvent.OriginalPosition, skipPosition): {
                                 try {
+                                    logger.LogTrace("Received event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
+
                                     // apply and commit the projection
                                     await @delegate(
-                                            @event: (TEvent)eventDeserializer.Deserialize(@event.ResolvedEvent),
-                                            metadata: metadataDeserializer.Deserialize(@event.ResolvedEvent)
-                                        ).CommitAsync(stoppingToken);
+                                        @event: (TEvent)eventDeserializer.Deserialize(@event.ResolvedEvent),
+                                        metadata: metadataDeserializer.Deserialize(@event.ResolvedEvent)
+                                    ).CommitAsync(stoppingToken);
 
                                     // notify EventStoreDB that we're done
                                     await subscription.Ack(@event.ResolvedEvent);
-                                }
-                                catch (Exception ex) {
+
+                                    logger.LogTrace("Ack'ed event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
+                                } catch (Exception ex) {
                                     logger.LogError(ex, "Exception occurred during handling of {eventType} @ {position} in subscription {subscriptionGroupName}.", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
                                         await subscription.Nack(
                                         @event.RetryCount < 5
@@ -69,7 +71,7 @@ class ProjectionDelegateWorker<TProjection, TEvent>(IServiceScopeFactory service
                         }
                     }
                 }
-                catch (RpcException e) {
+                catch (Exception e) {
                     logger.LogError(e, e?.Message);
                 }
 
