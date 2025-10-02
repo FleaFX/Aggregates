@@ -4,7 +4,6 @@ using EventStore.Client;
 using Microsoft.Extensions.DependencyInjection;
 using System.Reflection;
 using Aggregates.EventStoreDB.Extensions;
-using Grpc.Core;
 using Microsoft.Extensions.Logging;
 using Aggregates.Configuration;
 using Aggregates.Sagas;
@@ -45,6 +44,8 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
                         switch (message) {
                             case PersistentSubscriptionMessage.Event @event when !Equals(@event.ResolvedEvent.OriginalPosition, skipPosition): {
                                 try {
+                                    logger.LogTrace("Received event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
+
                                     using var linkEvent = new LinkEventScope(@event.ResolvedEvent);
                                     await sagaHandler.HandleAsync(
                                         @delegate,
@@ -55,6 +56,8 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
 
                                     // notify EventStoreDB that we're done
                                     await subscription.Ack(@event.ResolvedEvent);
+
+                                    logger.LogTrace("Ack'ed event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
                                 }
                                 catch (Exception ex) {
                                     logger.LogError(ex, "Exception occurred during handling of {eventType} @ {position} in subscription {subscriptionGroupName}.", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
@@ -79,7 +82,7 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
                         }
                     }
                 }
-                catch (RpcException e) {
+                catch (Exception e) {
                     logger.LogError(e, e?.Message);
                 }
 
