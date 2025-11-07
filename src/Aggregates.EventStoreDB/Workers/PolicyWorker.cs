@@ -258,7 +258,7 @@ class ContinueUntilMaxFailureRateHandler<TCommand, TState, TEvent>(IServiceScope
         try {
             await asyncHandleFunc(command);
         } catch (Exception ex) {
-            var rate = (double)_errors / batchSize;
+            var rate = (double)++_errors / batchSize;
 
             if (rate > maxFailureRate + double.Epsilon)
                 throw;
