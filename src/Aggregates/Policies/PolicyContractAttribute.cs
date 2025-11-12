@@ -7,6 +7,7 @@
 /// <param name="version">The version of the policy. You should only ever have one version for every <paramref name="name"/> in your codebase.</param>
 /// <param name="namespace">Optional. A namespace to prepend to the name of your policy.</param>
 /// <param name="continueFrom">Optional. Specifies the name of a previous version of the policy to continue projecting from.</param>
+/// <param name="startFromEnd">Optional. Indicates whether the policy should start from the end of the stream.</param>
 /// <param name="errorHandlingMode">Optional. Defines how the policy should behave when command handling errors occur. Defaults to <see cref="PolicyErrorHandlingMode.FailFast"/>.</param>
 /// <param name="maxErrors">Optional. Defines the maximum number of failures to tolerate before failing an event, in case the <paramref name="errorHandlingMode"/> is <see cref="PolicyErrorHandlingMode.ContinueUntilMaxErrors"/>. Defaults to 1.</param>
 /// <param name="maxErrorRate">Optional. Defines the maximum percentage of failures to tolerate before failing an event, in case the <paramref name="errorHandlingMode"/> is <see cref="PolicyErrorHandlingMode.ContinueUntilMaxFailureRate"/>. Defaults to 0.1 (10%).</param>
@@ -15,7 +16,8 @@ public class PolicyContractAttribute(
     string name, 
     int version = 1, 
     string? @namespace = null, 
-    string? continueFrom = null, 
+    string? continueFrom = null,
+    bool startFromEnd = false,
     PolicyErrorHandlingMode errorHandlingMode = PolicyErrorHandlingMode.FailFast,
     int? maxErrors = 1,
     double? maxErrorRate = .1
@@ -41,6 +43,11 @@ public class PolicyContractAttribute(
     /// Defines the maximum percentage of failures to tolerate before failing an event, in case the <see cref="ErrorHandlingMode"/> is <see cref="PolicyErrorHandlingMode.ContinueUntilMaxFailureRate"/>.
     /// </summary>
     public double MaxErrorRate => maxErrorRate ?? .1;
+
+    /// <summary>
+    /// Indicates whether the projection should start from the end of the stream.
+    /// </summary>
+    public bool StartFromEnd => startFromEnd;
 
     /// <summary>
     /// Returns the policy contract name.
