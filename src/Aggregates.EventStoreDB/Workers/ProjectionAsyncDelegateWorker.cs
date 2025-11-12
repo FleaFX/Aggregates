@@ -119,13 +119,13 @@ class ProjectionAsyncDelegateWorker<TProjection, TEvent>(IServiceScopeFactory se
         var filter = string.Join('|', eventTypes.Select(eventType => eventType.ToString().Replace(".", @"\.")));
 
         // find the preceding subscription, if any
-        IPosition position = Position.Start;
+        IPosition position = projectionContract.StartFromEnd ? Position.End : Position.Start;
         IPosition? skipPosition = null;
         if (projectionContract.ContinueFrom is { } continueFrom && (await listToAllAsync(cancellationToken: cancellationToken)).FirstOrDefault(info => info.GroupName == continueFrom) is {} preceding) {
             skipPosition = preceding.Stats.LastKnownEventPosition;
 
             // use its last known event position as the new starting point, otherwise just start from the beginning
-            position = preceding.Stats.LastKnownEventPosition ?? Position.Start;
+            position = preceding.Stats.LastKnownEventPosition ?? position;
 
             // delete the preceding subscription
             await deleteToAllAsync(preceding.GroupName, cancellationToken: cancellationToken);
