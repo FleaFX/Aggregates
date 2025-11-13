@@ -19,8 +19,8 @@ public class PolicyContractAttribute(
     string? continueFrom = null,
     bool startFromEnd = false,
     PolicyErrorHandlingMode errorHandlingMode = PolicyErrorHandlingMode.FailFast,
-    int? maxErrors = 1,
-    double? maxErrorRate = .1
+    int maxErrors = 1,
+    double maxErrorRate = .1
 ) : Attribute {
     /// <summary>
     /// Returns the fully qualified name of the preceding policy contract, if any.
@@ -37,12 +37,12 @@ public class PolicyContractAttribute(
     /// <summary>
     /// Defines the maximum number of failures to tolerate before failing an event, in case the <see cref="ErrorHandlingMode"/> is <see cref="PolicyErrorHandlingMode.ContinueUntilMaxErrors"/>.
     /// </summary>
-    public int MaxErrors => maxErrors ?? 1;
+    public int MaxErrors => maxErrors;
 
     /// <summary>
     /// Defines the maximum percentage of failures to tolerate before failing an event, in case the <see cref="ErrorHandlingMode"/> is <see cref="PolicyErrorHandlingMode.ContinueUntilMaxFailureRate"/>.
     /// </summary>
-    public double MaxErrorRate => maxErrorRate ?? .1;
+    public double MaxErrorRate => maxErrorRate;
 
     /// <summary>
     /// Indicates whether the projection should start from the end of the stream.
