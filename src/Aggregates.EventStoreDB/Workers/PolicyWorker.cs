@@ -58,6 +58,8 @@ class PolicyWorker<TPolicy, TPolicyEvent, TCommand, TState, TEvent>(IServiceScop
                             case PersistentSubscriptionMessage.Event @event when !Equals(@event.ResolvedEvent.OriginalPosition, skipPosition): {
                                 // react to the event and handle each command
                                 try {
+                                    logger.LogInformation("Received event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
+
                                     await using var metadataScope = new MetadataScope();
                                     var metadata = metadataDeserializer.Deserialize(@event.ResolvedEvent);
                                     foreach (var pair in metadata ?? new Dictionary<string, object?>()) {
@@ -73,6 +75,8 @@ class PolicyWorker<TPolicy, TPolicyEvent, TCommand, TState, TEvent>(IServiceScop
 
                                     // notify EventStoreDB that we're done
                                     await subscription.Ack(@event.ResolvedEvent);
+
+                                    logger.LogInformation("Ack'ed event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
                                 }
                                 catch (Exception ex) {
                                     logger.LogError(ex, "Exception occurred during handling of {eventType} @ {position} in subscription {subscriptionGroupName}.", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
