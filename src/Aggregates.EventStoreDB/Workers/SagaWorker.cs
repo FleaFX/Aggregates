@@ -44,7 +44,7 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
                         switch (message) {
                             case PersistentSubscriptionMessage.Event @event when !Equals(@event.ResolvedEvent.OriginalPosition, skipPosition): {
                                 try {
-                                    logger.LogTrace("Received event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
+                                    logger.LogInformation("Received event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
 
                                     using var linkEvent = new LinkEventScope(@event.ResolvedEvent);
                                     await sagaHandler.HandleAsync(
@@ -57,7 +57,7 @@ class SagaWorker<TSaga, TSagaState, TSagaEvent, TCommand, TCommandState, TComman
                                     // notify EventStoreDB that we're done
                                     await subscription.Ack(@event.ResolvedEvent);
 
-                                    logger.LogTrace("Ack'ed event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
+                                    logger.LogInformation("Ack'ed event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
                                 }
                                 catch (Exception ex) {
                                     logger.LogError(ex, "Exception occurred during handling of {eventType} @ {position} in subscription {subscriptionGroupName}.", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);

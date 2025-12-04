@@ -37,7 +37,7 @@ class ProjectionDelegateWorker<TProjection, TEvent>(IServiceScopeFactory service
                         switch (message) {
                             case PersistentSubscriptionMessage.Event @event when !Equals(@event.ResolvedEvent.OriginalPosition, skipPosition): {
                                 try {
-                                    logger.LogTrace("Received event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
+                                    logger.LogInformation("Received event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
 
                                     // apply and commit the projection
                                     await @delegate(
@@ -48,7 +48,7 @@ class ProjectionDelegateWorker<TProjection, TEvent>(IServiceScopeFactory service
                                     // notify EventStoreDB that we're done
                                     await subscription.Ack(@event.ResolvedEvent);
 
-                                    logger.LogTrace("Ack'ed event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
+                                    logger.LogInformation("Ack'ed event {eventType} @ {position} in {subscriptionGroupName}", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
                                 } catch (Exception ex) {
                                     logger.LogError(ex, "Exception occurred during handling of {eventType} @ {position} in subscription {subscriptionGroupName}.", @event.ResolvedEvent.Event.EventType, @event.ResolvedEvent.Event.Position, subscriptionGroupName);
                                         await subscription.Nack(
