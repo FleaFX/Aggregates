@@ -19,6 +19,7 @@ public class MetadataScopeTests {
         scope.Add("Test", 68463, MetadataMultiplicity.Multiple);
         scope.Add("Test", true, MetadataMultiplicity.Multiple);
         scope.Add("Test", "Some text", MetadataMultiplicity.Multiple);
+        scope.Add("Test", "Some text", MetadataMultiplicity.Multiple);
 
         var dict = scope.ToDictionary();
         dict.TryGetValue("Test", out var read).Should().BeTrue();
