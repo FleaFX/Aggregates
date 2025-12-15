@@ -42,9 +42,11 @@ public sealed class MetadataScope : IAsyncDisposable, IDisposable {
             _metadata.TryGetValue(metadata.Key, out var existingValue) && existingValue is not null
                 ? multiplicity switch {
                     MetadataMultiplicity.Single => metadata.Value,
-                    MetadataMultiplicity.Multiple => !existingValue.GetType().IsArray
-                        ? [existingValue, metadata.Value]
-                        : (object?[]) [..(Array)existingValue, metadata.Value],
+                    MetadataMultiplicity.Multiple => (
+                        !existingValue.GetType().IsArray
+                            ? [existingValue, metadata.Value]
+                            : (object?[]) [..(Array)existingValue, metadata.Value]
+                        ).Distinct().ToArray(),
                     _ => throw new ArgumentOutOfRangeException(nameof(multiplicity), multiplicity, null)
                 }
                 : metadata.Value;
