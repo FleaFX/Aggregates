@@ -29,7 +29,7 @@ public class MetadataAttribute<TContext>(string key, MetadataMultiplicity multip
     /// <returns></returns>
     public override KeyValuePair<string, object?> Create(object context) {
         var self = (TContext)context;
-        return new KeyValuePair<string, object?>(key, self.GetValue(self));
+        return new KeyValuePair<string, object?>(key, self.GetValue(key, self));
     }
 }
 
@@ -38,7 +38,7 @@ public class MetadataAttribute<TContext>(string key, MetadataMultiplicity multip
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true)]
 public class MetadataAttribute<TContext, TValueProvider>(string key, MetadataMultiplicity multiplicity = MetadataMultiplicity.Single) : MetadataAttribute(multiplicity) where TValueProvider : IMetadataProvider<TContext> {
-    readonly Func<TContext, object?> _valueProvider = Activator.CreateInstance<TValueProvider>().GetValue;
+    readonly Func<string, TContext, object?> _valueProvider = Activator.CreateInstance<TValueProvider>().GetValue;
 
     /// <summary>
     /// Creates a <see cref="KeyValuePair"/> to be used in a metadata dictionary using the given <paramref name="context"/>.
@@ -46,5 +46,5 @@ public class MetadataAttribute<TContext, TValueProvider>(string key, MetadataMul
     /// <param name="context">A context object that may provide more information to create the metadata.</param>
     /// <returns></returns>
     public override KeyValuePair<string, object?> Create(object context) =>
-        new(key, _valueProvider((TContext)context));
+        new(key, _valueProvider(key, (TContext)context));
 }
