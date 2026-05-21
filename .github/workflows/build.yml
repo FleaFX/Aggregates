@@ -1,31 +1,29 @@
-# Build workflow for GitHub actions
-
 name: Build & test
 
 on:
     push:
-        branches: [ "main" ]
+        branches: [ "main", "feature/v1" ]
     pull_request:
-        branches: [ "main" ]
+        branches: [ "main", "feature/v1" ]
 
 jobs:
     build:
-    
+
         runs-on: ubuntu-latest
 
         steps:
-        - uses: actions/checkout@v3
-  
+        - uses: actions/checkout@v4
+
         - name: Setup .NET
-          uses: actions/setup-dotnet@v3
+          uses: actions/setup-dotnet@v4
           with:
-            dotnet-version: '8.0.x'
+            dotnet-version: '10.0.x'
 
         - name: Restore packages
-          run: dotnet restore src/Aggregates.sln
+          run: dotnet restore src/Aggregates.slnx
 
         - name: Build
-          run: dotnet build --no-restore src/Aggregates.sln
-          
+          run: dotnet build --no-restore src/Aggregates.slnx
+
         - name: Test
-          run: dotnet test --no-build --verbosity normal src/Aggregates.sln
+          run: dotnet test --no-build --verbosity normal src/Aggregates.slnx

@@ -1,5 +1,3 @@
-# Publish workflow for GitHub actions
-
 name: Publish package
 
 on:
@@ -11,46 +9,37 @@ on:
 
 jobs:
     publish:
-    
+
         runs-on: ubuntu-latest
+        if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
         steps:
-        - uses: actions/checkout@v3
-  
+        - uses: actions/checkout@v4
+
         - name: Setup .NET
-          uses: actions/setup-dotnet@v3
+          uses: actions/setup-dotnet@v4
           with:
-            dotnet-version: '8.0.x'
+            dotnet-version: '10.0.x'
 
-        - name: Restore dependencies
-          run: dotnet restore src
+        - name: Restore packages
+          run: dotnet restore src/Aggregates.slnx
 
-        - name: Pack Aggregates
-          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATES }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATES }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release src/Aggregates/
+        - name: Pack
+          run: >
+            dotnet pack
+            -p:PackageId="${{ vars.NUGET_PACKAGE_ID }}"
+            -p:Description="${{ vars.NUGET_DESCRIPTION }}"
+            -p:Authors="${{ vars.NUGET_AUTHORS }}"
+            -p:Copyright="${{ vars.NUGET_COPYRIGHT }}"
+            -p:PackageProjectUrl="${{ vars.NUGET_PROJECT_URL }}"
+            -c Release
+            --no-restore
+            src/Aggregates/
 
-        - name: Push Aggregates
-          run: dotnet nuget push src/Aggregates/bin/Release/Aggregates.*.nupkg -k ${{ secrets.NUGETAPIKEY }} -s ${{ vars.NUGETPUSHSOURCE }} --skip-duplicate
-
-        - name: Pack Aggregates.EventStoreDB
-          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESEVENTSTOREDB }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESEVENTSTOREDB }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release --no-restore src/Aggregates.EventStoreDB/
-
-        - name: Push Aggregates.EventStoreDB
-          run: dotnet nuget push src/Aggregates.EventStoreDB/bin/Release/Aggregates.EventStoreDB.*.nupkg -k ${{ secrets.NUGETAPIKEY }} -s ${{ vars.NUGETPUSHSOURCE }} --skip-duplicate
-
-        - name: Pack Aggregates.Sql
-          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESSQL }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESSQL }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release --no-restore src/Aggregates.Sql/
-
-        - name: Push Aggregates.Sql
-          run: dotnet nuget push src/Aggregates.Sql/bin/Release/Aggregates.Sql.*.nupkg -k ${{ secrets.NUGETAPIKEY }} -s ${{ vars.NUGETPUSHSOURCE }} --skip-duplicate
-
-        - name: Pack Aggregates.Json
-          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESJSON }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESJSON }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release --no-restore src/Aggregates.Json/
-
-        - name: Push Aggregates.Json
-          run: dotnet nuget push src/Aggregates.Json/bin/Release/Aggregates.Json.*.nupkg -k ${{ secrets.NUGETAPIKEY }} -s ${{ vars.NUGETPUSHSOURCE }} --skip-duplicate
-
-        - name: Pack Aggregates.Protobuf
-          run: dotnet pack -p:PackageId="${{ vars.NUGETPACKIDAGGREGATESPROTOBUF }}" -p:Description="${{ vars.NUGETPACKDESCRIPTIONAGGREGATESPROTOBUF }}" -p:Authors="${{ vars.NUGETPACKAUTHORS }}" -p:Copyright="${{ vars.NUGETPACKCOPYRIGHT }}" -p:PackageProjectUrl="${{ vars.NUGETPACKPROJECTURL }}" -c Release --no-restore src/Aggregates.Protobuf/
-
-        - name: Push Aggregates.Protobuf
-          run: dotnet nuget push src/Aggregates.Protobuf/bin/Release/Aggregates.Protobuf.*.nupkg -k ${{ secrets.NUGETAPIKEY }} -s ${{ vars.NUGETPUSHSOURCE }} --skip-duplicate
+        - name: Push
+          run: >
+            dotnet nuget push
+            src/Aggregates/bin/Release/Aggregates.*.nupkg
+            -k ${{ secrets.NUGET_API_KEY }}
+            -s ${{ vars.NUGET_PUSH_SOURCE }}
+            --skip-duplicate

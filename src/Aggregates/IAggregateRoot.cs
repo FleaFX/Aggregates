@@ -1,14 +1,16 @@
-﻿namespace Aggregates;
+namespace Aggregates;
 
+/// <summary>
+/// Represents the root of an aggregate, tracking its version and pending changes.
+/// </summary>
 public interface IAggregateRoot {
     /// <summary>
-    /// Gets the version that the aggregate instance is at.
+    /// Gets the version of the aggregate at the time it was loaded.
     /// </summary>
     AggregateVersion Version { get; }
 
     /// <summary>
-    /// Gets the sequence of changes that were applied, if any.
+    /// Gets the events that were applied since the aggregate was loaded.
     /// </summary>
-    /// <returns>A <see cref="IEnumerable{T}"/>.</returns>
     IEnumerable<object> GetChanges();
 }
