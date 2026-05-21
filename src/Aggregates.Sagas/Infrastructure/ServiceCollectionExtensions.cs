@@ -22,8 +22,10 @@ public static class ServiceCollectionExtensions {
         var options = new SagasOptions();
         configure?.Invoke(options);
 
-        // Decorator chain (open-generic): ISagaHandler<,> → UnitOfWorkAwareSagaHandler<,>
-        builder.Services.TryAddScoped(typeof(ISagaHandler<,>), typeof(UnitOfWorkAwareSagaHandler<,>));
+        // Decorator chain (open-generic): ISagaHandler<,> → LoggingSagaHandler<,> → RetrySagaHandler<,> → UnitOfWorkAwareSagaHandler<,>
+        builder.Services.TryAddScoped(typeof(UnitOfWorkAwareSagaHandler<,>));
+        builder.Services.TryAddScoped(typeof(RetrySagaHandler<,>));
+        builder.Services.TryAddScoped(typeof(ISagaHandler<,>), typeof(LoggingSagaHandler<,>));
 
         // ICommandDispatcher implementation
         builder.Services.TryAddScoped<ICommandDispatcher, CommandDispatcher>();
