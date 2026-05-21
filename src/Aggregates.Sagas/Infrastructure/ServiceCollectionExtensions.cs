@@ -48,6 +48,10 @@ public static class ServiceCollectionExtensions {
                 typeof(SagaHandler<,,>).MakeGenericType(sagaType, stateType, eventType));
         }
 
+        // ISagaIdResolver<TEvent> registrations
+        foreach (var (eventType, resolver) in options.Resolvers)
+            builder.Services.TryAdd(ServiceDescriptor.Singleton(typeof(ISagaIdResolver<>).MakeGenericType(eventType), resolver));
+
         return new SagasBuilder(builder.Services);
     }
 }
