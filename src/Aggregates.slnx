@@ -3,6 +3,7 @@
     <File Path="Directory.Build.props" />
   </Folder>
   <Project Path="Aggregates/Aggregates.csproj" />
+  <Project Path="Aggregates.Sagas/Aggregates.Sagas.csproj" />
   <Folder Name="/Tests/">
     <Project Path="Aggregates.Tests/Aggregates.Tests.csproj" />
   </Folder>
