@@ -1,4 +1,3 @@
-using Aggregates.MSSP.Infrastructure;
 using MSSP;
 
 namespace Aggregates.MSSP;
@@ -8,6 +7,7 @@ namespace Aggregates.MSSP;
 /// <see cref="UnitOfWork"/> to the aggregate's stream, using optimistic concurrency control.
 /// </summary>
 public sealed class MsspCommitHandler(IMsspClient client, MsspOptions options) {
+
     /// <summary>
     /// Appends the single changed aggregate's events to its MSSP stream.
     /// </summary>

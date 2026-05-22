@@ -1,14 +1,20 @@
-using Aggregates.MSSP.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
-namespace Aggregates.MSSP.Infrastructure;
+namespace Aggregates.MSSP;
 
 /// <summary>
 /// Extension methods for registering <c>Aggregates.MSSP</c> with an
 /// <see cref="Microsoft.Extensions.DependencyInjection.IServiceCollection"/>.
 /// </summary>
 public static class ServiceCollectionExtensions {
+    /// <summary>
+    /// Registers MSSP as the event store for Aggregates, using the specified options.
+    /// </summary>
+    /// <param name="builder">The <see cref="IAggregatesBuilder"/> to configure.</param>
+    /// <param name="configure">Configuration action for <see cref="MsspOptions"/>.</param>
+    /// <returns>An <see cref="IMsspBuilder"/> for further configuration.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when <see cref="MsspOptions.Serialize"/> is not configured.</exception>
     public static IMsspBuilder AddMssp(this IAggregatesBuilder builder, Action<MsspOptions> configure) {
         var options = new MsspOptions();
         configure(options);
@@ -25,6 +31,9 @@ public static class ServiceCollectionExtensions {
     }
 }
 
+/// <summary>
+/// Builder for configuring MSSP-specific services.
+/// </summary>
 sealed class MsspBuilder(IServiceCollection services) : IMsspBuilder {
     /// <inheritdoc />
     public IServiceCollection Services => services;

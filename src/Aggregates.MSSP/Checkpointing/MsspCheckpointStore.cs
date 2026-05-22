@@ -2,8 +2,12 @@ using System.Buffers.Binary;
 using Aggregates.Subscriptions;
 using MSSP;
 
-namespace Aggregates.MSSP.Checkpointing;
+namespace Aggregates.MSSP;
 
+/// <summary>
+/// An <see cref="ICheckpointStore"/> implementation that stores checkpoint positions in MSSP.
+/// Each subscription gets its own stream in the format <c>checkpoint-{subscriptionId}</c>.
+/// </summary>
 public sealed class MsspCheckpointStore(IMsspClient client) : ICheckpointStore {
     const string CheckpointEventType = "CheckpointStored";
 

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Aggregates.MSSP.Infrastructure;
+namespace Aggregates.MSSP;
 
 /// <summary>
 /// A builder for configuring the <c>Aggregates.MSSP</c> package and its extensions.

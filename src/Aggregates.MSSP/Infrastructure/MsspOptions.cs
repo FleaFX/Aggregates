@@ -1,7 +1,10 @@
 using MSSP;
 
-namespace Aggregates.MSSP.Infrastructure;
+namespace Aggregates.MSSP;
 
+/// <summary>
+/// Options for configuring the MSSP integration in Aggregates.
+/// </summary>
 public sealed class MsspOptions {
     /// <summary>
     /// Serializes a domain event to a <see cref="EventData"/> for storage in MSSP.
