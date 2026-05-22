@@ -1,5 +1,7 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace Aggregates.Policies;
 
@@ -48,8 +50,26 @@ public static class ServiceCollectionExtensions {
             registeredPolicies.Add((eventType, policyType));
         }
 
+        // Subscription hosted service — one per registered policy
+        foreach (var (eventType, policyType) in registeredPolicies) {
+            var subscriptionId = GetSubscriptionId(policyType);
+            var startFromEnd = GetStartFromEnd(policyType);
+            var serviceType = typeof(PolicySubscriptionService<>).MakeGenericType(eventType);
+
+            builder.Services.AddSingleton(typeof(IHostedService), sp =>
+                ActivatorUtilities.CreateInstance(sp, serviceType, subscriptionId, startFromEnd));
+        }
+
         return new PoliciesBuilder(builder.Services, registeredPolicies);
     }
+
+    static string GetSubscriptionId(Type policyType) {
+        var attr = policyType.GetCustomAttribute<PolicyContractAttribute>();
+        return attr?.ToString() ?? policyType.FullName ?? policyType.Name;
+    }
+
+    static bool GetStartFromEnd(Type policyType) =>
+        policyType.GetCustomAttribute<PolicyContractAttribute>()?.StartFromEnd ?? false;
 }
 
 internal sealed class PoliciesBuilder(
