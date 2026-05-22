@@ -7,6 +7,7 @@
   <Project Path="Aggregates.Sagas/Aggregates.Sagas.csproj" />
   <Folder Name="/Integrations/">
     <Project Path="Aggregates.KurrentDB/Aggregates.KurrentDB.csproj" />
+    <Project Path="Aggregates.Sagas.KurrentDB/Aggregates.Sagas.KurrentDB.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Aggregates.Tests/Aggregates.Tests.csproj" />

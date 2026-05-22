@@ -16,7 +16,7 @@ namespace Aggregates.KurrentDB;
 /// This ensures idempotent writes: retrying a failed commit produces identical event IDs,
 /// which KurrentDB uses to deduplicate the events silently.
 /// </remarks>
-sealed class KurrentDbCommitHandler(KurrentDBClient client, KurrentDbOptions options) {
+public sealed class KurrentDbCommitHandler(KurrentDBClient client, KurrentDbOptions options) {
     /// <summary>
     /// Appends the single changed aggregate's events to its KurrentDB stream.
     /// </summary>

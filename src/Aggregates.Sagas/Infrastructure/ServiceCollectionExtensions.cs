@@ -31,6 +31,8 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddScoped<ICommandDispatcher, CommandDispatcher>();
 
         // Per ISaga<,> implementation: register the saga class and its concrete handler
+        var registeredSagas = new List<(Type StateType, Type EventType, Type SagaType)>();
+
         foreach (var (sagaType, stateType, eventType) in
             from assembly in options.Assemblies
             from type in assembly.GetTypes()
@@ -48,16 +50,31 @@ public static class ServiceCollectionExtensions {
             builder.Services.TryAddScoped(
                 typeof(SagaHandler<,>).MakeGenericType(stateType, eventType),
                 typeof(SagaHandler<,,>).MakeGenericType(sagaType, stateType, eventType));
+
+            registeredSagas.Add((stateType, eventType, sagaType));
         }
 
         // ISagaIdResolver<TEvent> registrations
         foreach (var (eventType, resolver) in options.Resolvers)
             builder.Services.TryAdd(ServiceDescriptor.Singleton(typeof(ISagaIdResolver<>).MakeGenericType(eventType), resolver));
 
-        return new SagasBuilder(builder.Services);
+        return new SagasBuilder(builder.Services, registeredSagas);
+    }
+
+    /// <summary>
+    /// Registers <paramref name="openGenericRepositoryType"/> as the
+    /// <see cref="ISagaRepository{TSagaState,TEvent}"/> implementation.
+    /// Called by storage integration packages (e.g. <c>Aggregates.Sagas.KurrentDB</c>).
+    /// </summary>
+    public static ISagasBuilder UseSagaRepository(this ISagasBuilder builder, Type openGenericRepositoryType) {
+        builder.Services.TryAddScoped(typeof(ISagaRepository<,>), openGenericRepositoryType);
+        return builder;
     }
 }
 
-internal sealed class SagasBuilder(IServiceCollection services) : ISagasBuilder {
+internal sealed class SagasBuilder(
+    IServiceCollection services,
+    IReadOnlyList<(Type StateType, Type EventType, Type SagaType)> registeredSagas) : ISagasBuilder {
     public IServiceCollection Services => services;
+    public IReadOnlyList<(Type StateType, Type EventType, Type SagaType)> RegisteredSagas => registeredSagas;
 }
