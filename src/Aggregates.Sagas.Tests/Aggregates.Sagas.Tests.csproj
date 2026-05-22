@@ -7,13 +7,11 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
-    <RootNamespace>$(MSBuildProjectName.Replace(".Tests", "").Replace(" ", "_"))</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="FakeItEasy" Version="9.0.1" />
     <PackageReference Include="FluentAssertions" Version="8.2.0" />
-    <PackageReference Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit.v3" Version="2.0.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2">
@@ -29,9 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Aggregates.KurrentDB\Aggregates.KurrentDB.csproj" />
     <ProjectReference Include="..\Aggregates.Sagas\Aggregates.Sagas.csproj" />
-    <ProjectReference Include="..\Aggregates\Aggregates.csproj" />
   </ItemGroup>
 
 </Project>

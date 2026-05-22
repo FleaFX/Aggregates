@@ -54,7 +54,7 @@ public sealed class UnitOfWork {
 /// Scopes a <see cref="UnitOfWork"/> to the current async context. Call <see cref="Complete"/> before
 /// disposing to trigger the commit; otherwise changes are discarded.
 /// </summary>
-sealed class UnitOfWorkScope : IAsyncDisposable {
+public sealed class UnitOfWorkScope : IAsyncDisposable {
     static readonly AsyncLocal<ImmutableStack<UnitOfWorkScope>> _scopes = new();
 
     static ImmutableStack<UnitOfWorkScope> Scopes {
@@ -71,7 +71,7 @@ sealed class UnitOfWorkScope : IAsyncDisposable {
     /// </summary>
     /// <param name="unitOfWork">The unit of work to scope.</param>
     /// <param name="onCommit">The delegate to call when committing.</param>
-    internal UnitOfWorkScope(UnitOfWork unitOfWork, CommitDelegate onCommit) {
+    public UnitOfWorkScope(UnitOfWork unitOfWork, CommitDelegate onCommit) {
         _unitOfWork = unitOfWork;
         _onCommit = onCommit;
         Scopes = Scopes.Push(this);
@@ -85,12 +85,12 @@ sealed class UnitOfWorkScope : IAsyncDisposable {
     /// <summary>
     /// The <see cref="UnitOfWork"/> tracked by this scope.
     /// </summary>
-    internal UnitOfWork UnitOfWork => _unitOfWork;
+    public UnitOfWork UnitOfWork => _unitOfWork;
 
     /// <summary>
     /// Returns the current ambient <see cref="UnitOfWorkScope"/>, or <see langword="null"/> if none is active.
     /// </summary>
-    internal static UnitOfWorkScope? Current => Scopes.IsEmpty ? null : Scopes.Peek();
+    public static UnitOfWorkScope? Current => Scopes.IsEmpty ? null : Scopes.Peek();
 
     /// <inheritdoc/>
     public ValueTask DisposeAsync() {
