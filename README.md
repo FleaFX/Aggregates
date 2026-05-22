@@ -14,6 +14,7 @@ This library provides all the boilerplate code needed to do event sourcing, leav
 | `Aggregates.Subscriptions` | Shared abstractions: `ICheckpointStore`, `ISubscription`, `ISubscriptionFactory` |
 | `Aggregates.Sagas` | Saga pattern: stateful event-driven process managers |
 | `Aggregates.Policies` | Policy pattern: stateless event-driven command dispatchers |
+| `Aggregates.Projections` | Projection pattern: event-driven read-model builders |
 
 Storage integration packages are provided separately and are required to wire everything up:
 
@@ -22,6 +23,8 @@ Storage integration packages are provided separately and are required to wire ev
 | `Aggregates.KurrentDB` | KurrentDB aggregate persistence |
 | `Aggregates.Sagas.KurrentDB` | KurrentDB saga storage + subscriptions |
 | `Aggregates.Policies.KurrentDB` | KurrentDB policy subscriptions |
+| `Aggregates.Projections.KurrentDB` | KurrentDB projection subscriptions |
+| `Aggregates.Projections.Sql` | SQL projection commits via ADO.NET |
 
 ## Getting started
 
@@ -213,3 +216,43 @@ services
 ```
 
 The subscription hosted service is registered automatically for every scanned policy.
+
+---
+
+## Projections
+
+A projection listens to a stream of domain events and builds a read model by writing to an external store (e.g. a SQL database). Unlike sagas and policies, projections do not dispatch commands — they produce writes.
+
+### IProjection
+
+Implement `IProjection<TEvent>` to define the projection logic. The method returns an `ICommit` that describes the pending writes; the infrastructure executes it after the method returns:
+
+```csharp
+[ProjectionContract("Orders")]
+class OrdersProjection(IDbConnectionFactory db) : IProjection<IOrdersProjectionEvent> {
+
+    public ValueTask<ICommit> ProjectAsync(
+        IOrdersProjectionEvent @event,
+        CancellationToken cancellationToken = default) =>
+
+        ValueTask.FromResult<ICommit>(@event switch {
+            OrderPlaced e  => Commit.Create().UseSql(db)
+                                .Query("INSERT INTO orders (id, date) VALUES (@Id, @Date)",
+                                       new { e.Id, e.Date }),
+            OrderShipped e => Commit.Create().UseSql(db)
+                                .Query("UPDATE orders SET shipped = 1 WHERE id = @Id",
+                                       new { e.Id }),
+            _              => Commit.Create()
+        });
+}
+```
+
+### Wiring up projections
+
+```csharp
+services
+    .AddProjections(o => o.ScanAssemblies(typeof(OrdersProjection).Assembly))
+    .AddKurrentDb();
+```
+
+`ScanAssemblies` discovers all `IProjection<TEvent>` implementations and registers a subscription hosted service for each. `AddKurrentDb` supplies the `ISubscriptionFactory` and `ICheckpointStore`.
