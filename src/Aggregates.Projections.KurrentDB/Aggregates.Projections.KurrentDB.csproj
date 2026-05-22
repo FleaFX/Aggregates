@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Aggregates.KurrentDB\Aggregates.KurrentDB.csproj" />
+    <ProjectReference Include="..\Aggregates.Projections\Aggregates.Projections.csproj" />
+    <ProjectReference Include="..\Aggregates.Subscriptions\Aggregates.Subscriptions.csproj" />
+  </ItemGroup>
+
+</Project>

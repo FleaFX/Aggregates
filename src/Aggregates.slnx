@@ -6,10 +6,13 @@
   <Project Path="Aggregates.Subscriptions/Aggregates.Subscriptions.csproj" />
   <Project Path="Aggregates.Sagas/Aggregates.Sagas.csproj" />
   <Project Path="Aggregates.Policies/Aggregates.Policies.csproj" />
+  <Project Path="Aggregates.Projections/Aggregates.Projections.csproj" />
   <Folder Name="/Integrations/">
     <Project Path="Aggregates.KurrentDB/Aggregates.KurrentDB.csproj" />
     <Project Path="Aggregates.Sagas.KurrentDB/Aggregates.Sagas.KurrentDB.csproj" />
     <Project Path="Aggregates.Policies.KurrentDB/Aggregates.Policies.KurrentDB.csproj" />
+    <Project Path="Aggregates.Projections.KurrentDB/Aggregates.Projections.KurrentDB.csproj" />
+    <Project Path="Aggregates.Projections.Sql/Aggregates.Projections.Sql.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Aggregates.Tests/Aggregates.Tests.csproj" />
