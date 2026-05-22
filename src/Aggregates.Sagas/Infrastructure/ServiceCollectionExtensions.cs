@@ -27,9 +27,6 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddScoped(typeof(RetrySagaHandler<,>));
         builder.Services.TryAddScoped(typeof(ISagaHandler<,>), typeof(LoggingSagaHandler<,>));
 
-        // ICommandDispatcher implementation
-        builder.Services.TryAddScoped<ICommandDispatcher, CommandDispatcher>();
-
         // Per ISaga<,> implementation: register the saga class and its concrete handler
         var registeredSagas = new List<(Type StateType, Type EventType, Type SagaType)>();
 
