@@ -55,7 +55,7 @@ public class SagaHandlerTests {
 
         await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
 
-        A.CallTo(() => dispatcher.DispatchAsync<ICommand>(command, A<CancellationToken>._))
+        A.CallTo(() => dispatcher.DispatchAsync(command, A<CancellationToken>._))
             .MustHaveHappenedOnceExactly();
     }
 
@@ -71,7 +71,7 @@ public class SagaHandlerTests {
 
         await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
 
-        A.CallTo(() => dispatcher.DispatchAsync<ICommand>(A<ICommand>._, A<CancellationToken>._))
+        A.CallTo(() => dispatcher.DispatchAsync(A<ICommand>._, A<CancellationToken>._))
             .MustNotHaveHappened();
     }
 }

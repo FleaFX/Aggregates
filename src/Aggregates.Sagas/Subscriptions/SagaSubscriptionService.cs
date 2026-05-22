@@ -1,0 +1,49 @@
+using Aggregates.Subscriptions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+namespace Aggregates.Sagas;
+
+/// <summary>
+/// A hosted service that subscribes to an event stream and routes incoming events to the
+/// appropriate saga instances.
+/// </summary>
+/// <remarks>
+/// For each received event the service:
+/// <list type="number">
+///   <item>Calls <see cref="ISagaIdResolver{TEvent}.Resolve"/> to determine which saga instances are interested.</item>
+///   <item>Creates a fresh DI scope per saga instance and resolves <see cref="ISagaHandler{TSagaState,TEvent}"/> from it.</item>
+///   <item>Calls <see cref="ISagaHandler{TSagaState,TEvent}.HandleAsync"/> for every resolved saga identifier.</item>
+///   <item>Stores the stream position as the new checkpoint.</item>
+/// </list>
+/// A fresh DI scope is created per saga invocation so that scoped services are never captured
+/// as singletons by this long-lived hosted service.
+/// </remarks>
+sealed class SagaSubscriptionService<TSagaState, TEvent>(
+    ISubscriptionFactory subscriptionFactory,
+    ISagaIdResolver<TEvent> resolver,
+    IServiceScopeFactory scopeFactory,
+    ICheckpointStore checkpointStore,
+    string subscriptionId,
+    bool startFromEnd) : BackgroundService
+    where TSagaState : IState<TSagaState, TEvent> {
+
+    /// <inheritdoc/>
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+        var checkpoint = await checkpointStore.GetAsync(subscriptionId, stoppingToken);
+
+        await using var subscription = subscriptionFactory.Subscribe(checkpoint, startFromEnd, stoppingToken);
+
+        await foreach (var message in subscription.WithCancellation(stoppingToken)) {
+            if (message.Event is TEvent typedEvent) {
+                foreach (var sagaId in resolver.Resolve(typedEvent)) {
+                    await using var scope = scopeFactory.CreateAsyncScope();
+                    var handler = scope.ServiceProvider.GetRequiredService<ISagaHandler<TSagaState, TEvent>>();
+                    await handler.HandleAsync(sagaId, typedEvent, stoppingToken);
+                }
+            }
+
+            await checkpointStore.StoreAsync(subscriptionId, message.CommitPosition, stoppingToken);
+        }
+    }
+}

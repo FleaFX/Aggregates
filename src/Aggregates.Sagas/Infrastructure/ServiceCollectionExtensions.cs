@@ -1,5 +1,7 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace Aggregates.Sagas;
 
@@ -26,9 +28,6 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddScoped(typeof(UnitOfWorkAwareSagaHandler<,>));
         builder.Services.TryAddScoped(typeof(RetrySagaHandler<,>));
         builder.Services.TryAddScoped(typeof(ISagaHandler<,>), typeof(LoggingSagaHandler<,>));
-
-        // ICommandDispatcher implementation
-        builder.Services.TryAddScoped<ICommandDispatcher, CommandDispatcher>();
 
         // Per ISaga<,> implementation: register the saga class and its concrete handler
         var registeredSagas = new List<(Type StateType, Type EventType, Type SagaType)>();
@@ -58,6 +57,20 @@ public static class ServiceCollectionExtensions {
         foreach (var (eventType, resolver) in options.Resolvers)
             builder.Services.TryAdd(ServiceDescriptor.Singleton(typeof(ISagaIdResolver<>).MakeGenericType(eventType), resolver));
 
+        // Subscription hosted service — one per saga type that has a registered resolver
+        foreach (var (stateType, eventType, sagaType) in registeredSagas) {
+            var resolverType = typeof(ISagaIdResolver<>).MakeGenericType(eventType);
+            if (!builder.Services.Any(sd => sd.ServiceType == resolverType))
+                continue;
+
+            var subscriptionId = GetSubscriptionId(sagaType);
+            var startFromEnd = GetStartFromEnd(sagaType);
+            var serviceType = typeof(SagaSubscriptionService<,>).MakeGenericType(stateType, eventType);
+
+            builder.Services.AddSingleton(typeof(IHostedService), sp =>
+                ActivatorUtilities.CreateInstance(sp, serviceType, subscriptionId, startFromEnd));
+        }
+
         return new SagasBuilder(builder.Services, registeredSagas);
     }
 
@@ -70,6 +83,14 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddScoped(typeof(ISagaRepository<,>), openGenericRepositoryType);
         return builder;
     }
+
+    static string GetSubscriptionId(Type sagaType) {
+        var attr = sagaType.GetCustomAttribute<SagaContractAttribute>();
+        return attr?.ToString() ?? sagaType.FullName ?? sagaType.Name;
+    }
+
+    static bool GetStartFromEnd(Type sagaType) =>
+        sagaType.GetCustomAttribute<SagaContractAttribute>()?.StartFromEnd ?? false;
 }
 
 internal sealed class SagasBuilder(

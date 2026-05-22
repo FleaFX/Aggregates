@@ -22,6 +22,7 @@ public static class ServiceCollectionExtensions {
         configure?.Invoke(options);
 
         var builder = new AggregatesBuilder(services);
+        builder.Services.TryAddScoped<ICommandDispatcher, CommandDispatcher>();
         builder.Services.TryAddScoped(typeof(UnitOfWorkAwareCommandHandler<>));
         builder.Services.TryAddScoped(typeof(RetryCommandHandler<>));
         builder.Services.TryAddScoped(typeof(ICommandHandler<>), typeof(LoggingCommandHandler<>));

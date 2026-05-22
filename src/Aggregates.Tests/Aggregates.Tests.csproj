@@ -30,6 +30,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aggregates.KurrentDB\Aggregates.KurrentDB.csproj" />
+    <ProjectReference Include="..\Aggregates.Policies\Aggregates.Policies.csproj" />
     <ProjectReference Include="..\Aggregates.Sagas\Aggregates.Sagas.csproj" />
     <ProjectReference Include="..\Aggregates\Aggregates.csproj" />
   </ItemGroup>

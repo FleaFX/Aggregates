@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using Aggregates.Subscriptions;
 using KurrentDB.Client;
 
-namespace Aggregates.Sagas.KurrentDB;
+namespace Aggregates.KurrentDB;
 
 /// <summary>
 /// Persists subscription checkpoints in KurrentDB. Each subscription gets a dedicated stream
