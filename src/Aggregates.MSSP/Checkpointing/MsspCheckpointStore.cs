@@ -9,9 +9,17 @@ public sealed class MsspCheckpointStore(IMsspClient client) : ICheckpointStore {
 
     /// <inheritdoc />
     public async ValueTask<ulong?> GetAsync(string subscriptionId, CancellationToken cancellationToken = default) {
-        var @event = await client.ReadAsync(StreamName(subscriptionId), cancellationToken: cancellationToken).LastOrDefaultAsync(cancellationToken: cancellationToken);
+        var result = client.ReadAsync(
+            StreamName(subscriptionId),
+            direction: ReadDirection.Backwards,
+            maxCount: 1,
+            cancellationToken: cancellationToken
+        );
 
-        return BinaryPrimitives.ReadUInt64LittleEndian(@event.Data.Span);
+        await foreach (var resolvedEvent in result.WithCancellation(cancellationToken))
+            return BinaryPrimitives.ReadUInt64LittleEndian(resolvedEvent.Data.Span);
+
+        return null;
     }
 
     /// <inheritdoc />
