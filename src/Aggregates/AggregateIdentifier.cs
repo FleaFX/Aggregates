@@ -9,4 +9,7 @@ public record struct AggregateIdentifier(string Value) {
     /// Implicitly converts a <see cref="string"/> to an <see cref="AggregateIdentifier"/>.
     /// </summary>
     public static implicit operator AggregateIdentifier(string value) => new(value);
+
+    /// <inheritdoc/>
+    public override string ToString() => Value;
 }
