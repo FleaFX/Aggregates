@@ -15,13 +15,6 @@ public static class ServiceCollectionExtensions {
     /// Call after <c>AddPolicies</c> on the aggregates builder and <c>AddKurrentDb</c> on the
     /// aggregates builder.
     /// </summary>
-    /// <remarks>
-    /// Registers:
-    /// <list type="bullet">
-    ///   <item><see cref="KurrentDbCheckpointStore"/> as <see cref="ICheckpointStore"/> (if not already registered).</item>
-    ///   <item><see cref="KurrentDbSubscriptionFactory"/> as <see cref="ISubscriptionFactory"/> (if not already registered).</item>
-    /// </list>
-    /// </remarks>
     public static IPoliciesKurrentDbBuilder AddKurrentDb(this IPoliciesBuilder builder) {
         // Checkpoint store — shared with sagas if both are used
         builder.Services.TryAddSingleton<ICheckpointStore, KurrentDbCheckpointStore>();

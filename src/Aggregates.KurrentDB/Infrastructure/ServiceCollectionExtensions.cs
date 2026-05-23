@@ -39,6 +39,6 @@ public static class ServiceCollectionExtensions {
     }
 }
 
-internal sealed class KurrentDbBuilder(IServiceCollection services) : IKurrentDbBuilder {
+sealed class KurrentDbBuilder(IServiceCollection services) : IKurrentDbBuilder {
     public IServiceCollection Services => services;
 }

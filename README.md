@@ -24,6 +24,10 @@ Storage integration packages are provided separately and are required to wire ev
 | `Aggregates.Sagas.KurrentDB` | KurrentDB saga storage + subscriptions |
 | `Aggregates.Policies.KurrentDB` | KurrentDB policy subscriptions |
 | `Aggregates.Projections.KurrentDB` | KurrentDB projection subscriptions |
+| `Aggregates.MSSP` | MSSP aggregate persistence |
+| `Aggregates.Sagas.MSSP` | MSSP saga storage + subscriptions |
+| `Aggregates.Policies.MSSP` | MSSP policy subscriptions |
+| `Aggregates.Projections.MSSP` | MSSP projection subscriptions |
 | `Aggregates.Projections.Sql` | SQL projection commits via ADO.NET |
 
 ## Getting started
@@ -100,11 +104,22 @@ class ShoppingCartController(ICommandHandler<AddItem> handler) : ControllerBase 
 
 ### Wiring up
 
+**KurrentDB:**
 ```csharp
 services
     .AddAggregates(o => o.ScanAssemblies(typeof(AddItem).Assembly))
     .AddKurrentDb(o => {
         o.Serialize   = e => new SerializedEvent(e.GetType().Name, JsonSerializer.SerializeToUtf8Bytes(e));
+        o.Deserialize = (type, data) => /* your deserializer */;
+    });
+```
+
+**MSSP:**
+```csharp
+services
+    .AddAggregates(o => o.ScanAssemblies(typeof(AddItem).Assembly))
+    .AddMssp(o => {
+        o.Serialize   = e => new EventData(e.GetType().Name, JsonSerializer.SerializeToUtf8Bytes(e));
         o.Deserialize = (type, data) => /* your deserializer */;
     });
 ```
@@ -162,6 +177,7 @@ class OrderFulfillmentSaga : ISaga<OrderFulfillmentState, IOrderEvent> { ... }
 
 ### Wiring up sagas
 
+**KurrentDB:**
 ```csharp
 services
     .AddAggregates(o => o.ScanAssemblies(typeof(ShipOrder).Assembly))
@@ -175,6 +191,22 @@ services
             ? [new AggregateIdentifier(p.OrderId)]
             : []))
     .AddKurrentDb();
+```
+
+**MSSP:**
+```csharp
+services
+    .AddAggregates(o => o.ScanAssemblies(typeof(ShipOrder).Assembly))
+    .AddMssp(o => { /* serialization */ });
+
+services
+    .AddAggregates()
+    .AddSagas(o => o
+        .ScanAssemblies(typeof(OrderFulfillmentSaga).Assembly)
+        .WithResolver<IOrderEvent>(e => e is OrderPlaced p
+            ? [new AggregateIdentifier(p.OrderId)]
+            : []))
+    .AddMssp();
 ```
 
 `WithResolver` determines which saga instance(s) should handle a given event. The subscription hosted service is registered automatically for every saga that has a resolver.
@@ -204,6 +236,7 @@ class SendWelcomeEmailPolicy : IPolicy<UserRegistered> {
 
 ### Wiring up policies
 
+**KurrentDB:**
 ```csharp
 services
     .AddAggregates(o => o.ScanAssemblies(typeof(SendEmail).Assembly))
@@ -213,6 +246,18 @@ services
     .AddAggregates()
     .AddPolicies(o => o.ScanAssemblies(typeof(SendWelcomeEmailPolicy).Assembly))
     .AddKurrentDb();
+```
+
+**MSSP:**
+```csharp
+services
+    .AddAggregates(o => o.ScanAssemblies(typeof(SendEmail).Assembly))
+    .AddMssp(o => { /* serialization */ });
+
+services
+    .AddAggregates()
+    .AddPolicies(o => o.ScanAssemblies(typeof(SendWelcomeEmailPolicy).Assembly))
+    .AddMssp();
 ```
 
 The subscription hosted service is registered automatically for every scanned policy.
@@ -249,10 +294,18 @@ class OrdersProjection(IDbConnectionFactory db) : IProjection<IOrdersProjectionE
 
 ### Wiring up projections
 
+**KurrentDB:**
 ```csharp
 services
     .AddProjections(o => o.ScanAssemblies(typeof(OrdersProjection).Assembly))
     .AddKurrentDb();
 ```
 
-`ScanAssemblies` discovers all `IProjection<TEvent>` implementations and registers a subscription hosted service for each. `AddKurrentDb` supplies the `ISubscriptionFactory` and `ICheckpointStore`.
+**MSSP:**
+```csharp
+services
+    .AddProjections(o => o.ScanAssemblies(typeof(OrdersProjection).Assembly))
+    .AddMssp();
+```
+
+`ScanAssemblies` discovers all `IProjection<TEvent>` implementations and registers a subscription hosted service for each. `AddKurrentDb`/`AddMssp` supplies the `ISubscriptionFactory` and `ICheckpointStore`.

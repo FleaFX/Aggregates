@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -7,10 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Aggregates\Aggregates.csproj" />
     <ProjectReference Include="..\Aggregates.Subscriptions\Aggregates.Subscriptions.csproj" />
-    <PackageReference Include="KurrentDB.Client" Version="1.4.0" />
-    <PackageReference Include="System.IO.Hashing" Version="10.0.8" />
+    <ProjectReference Include="..\Aggregates\Aggregates.csproj" />
+    <PackageReference Include="MSSP" Version="0.3.1" />
   </ItemGroup>
 
   <ItemGroup>
