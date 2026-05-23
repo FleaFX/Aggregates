@@ -17,6 +17,7 @@
     <Project Path="Aggregates.Policies.KurrentDB/Aggregates.Policies.KurrentDB.csproj" />
     <Project Path="Aggregates.Policies.MSSP/Aggregates.Policies.MSSP.csproj" Id="16cb86f3-794c-40ba-9cf4-7193d49a7604" />
     <Project Path="Aggregates.Projections.KurrentDB/Aggregates.Projections.KurrentDB.csproj" />
+    <Project Path="Aggregates.Projections.MSSP/Aggregates.Projections.MSSP.csproj" Id="1ebca04b-c571-4d67-b40e-f6152ac83929" />
     <Project Path="Aggregates.Projections.Sql/Aggregates.Projections.Sql.csproj" />
     <Project Path="Aggregates.Sagas.MSSP/Aggregates.Sagas.MSSP.csproj" Id="d16e6c9c-ad60-4e45-9a15-9003dcd1e900" />
   </Folder>
