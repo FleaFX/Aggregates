@@ -28,8 +28,10 @@ jobs:
           run: dotnet pack src/Aggregates.slnx -c Release --no-restore --output packages/
 
         - name: Push
+          env:
+            NUGET_API_KEY: ${{ secrets.NUGETAPIKEY }}
           run: >
             dotnet nuget push "packages/*.nupkg"
-            -k ${{ secrets.NUGET_API_KEY }}
-            -s https://api.nuget.org/v3/index.json
+            --api-key "$NUGET_API_KEY"
+            --source https://api.nuget.org/v3/index.json
             --skip-duplicate
