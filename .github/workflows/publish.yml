@@ -25,21 +25,11 @@ jobs:
           run: dotnet restore src/Aggregates.slnx
 
         - name: Pack
-          run: >
-            dotnet pack
-            -p:PackageId="${{ vars.NUGET_PACKAGE_ID }}"
-            -p:Description="${{ vars.NUGET_DESCRIPTION }}"
-            -p:Authors="${{ vars.NUGET_AUTHORS }}"
-            -p:Copyright="${{ vars.NUGET_COPYRIGHT }}"
-            -p:PackageProjectUrl="${{ vars.NUGET_PROJECT_URL }}"
-            -c Release
-            --no-restore
-            src/Aggregates/
+          run: dotnet pack src/Aggregates.slnx -c Release --no-restore --output packages/
 
         - name: Push
           run: >
-            dotnet nuget push
-            src/Aggregates/bin/Release/Aggregates.*.nupkg
+            dotnet nuget push "packages/*.nupkg"
             -k ${{ secrets.NUGET_API_KEY }}
             -s ${{ vars.NUGET_PUSH_SOURCE }}
             --skip-duplicate
