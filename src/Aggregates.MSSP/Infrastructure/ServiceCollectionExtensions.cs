@@ -20,7 +20,9 @@ public static class ServiceCollectionExtensions {
         configure(options);
 
         if (options.Serialize is null)
-            throw new InvalidOperationException($"{nameof(MsspOptions)}.{nameof(MsspOptions.Serialize)} must be configured");
+            throw new InvalidOperationException($"{nameof(MsspOptions)}.{nameof(MsspOptions.Serialize)} must be configured.");
+        if (options.Deserialize is null)
+            throw new InvalidOperationException($"{nameof(MsspOptions)}.{nameof(MsspOptions.Deserialize)} must be configured.");
 
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton<MsspCommitHandler>();

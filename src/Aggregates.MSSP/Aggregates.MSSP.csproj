@@ -10,7 +10,6 @@
     <ProjectReference Include="..\Aggregates.Subscriptions\Aggregates.Subscriptions.csproj" />
     <ProjectReference Include="..\Aggregates\Aggregates.csproj" />
     <PackageReference Include="MSSP" Version="0.3.1" />
-    <PackageReference Include="System.IO.Hashing" Version="10.0.8" />
   </ItemGroup>
 
   <ItemGroup>

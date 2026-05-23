@@ -10,7 +10,7 @@ public static class ServiceCollectionExtensions {
     /// Adds the MSSP subscription infrastructure for projections.
     /// Call after <c>AddProjections</c> and <c>AddMssp</c> on the aggregates builder.
     /// </summary>
-    public static IProjectionsMsspBuilder AddKurrentDb(this IProjectionsBuilder builder) {
+    public static IProjectionsMsspBuilder AddMssp(this IProjectionsBuilder builder) {
         // Checkpoint store — shared with sagas/policies if both are used
         builder.Services.TryAddSingleton<ICheckpointStore, MsspCheckpointStore>();
 
