@@ -12,5 +12,9 @@ public interface ISagaIdResolver<in TEvent> {
     /// any saga instance.
     /// </summary>
     /// <param name="event">The incoming event.</param>
-    IEnumerable<AggregateIdentifier> Resolve(TEvent @event);
+    /// <param name="metadata">
+    /// The metadata stored alongside <paramref name="event"/>. Useful when saga identifiers
+    /// are carried in metadata rather than in the event body itself.
+    /// </param>
+    IEnumerable<AggregateIdentifier> Resolve(TEvent @event, EventMetadata metadata);
 }

@@ -29,7 +29,17 @@ public sealed class SagasOptions {
 
     /// <summary>
     /// Registers a <see cref="FuncSagaIdResolver{TEvent}"/> using the supplied function.
+    /// The function receives the event only; use this overload when the saga identifier is
+    /// derivable from the event body alone.
     /// </summary>
     public SagasOptions WithResolver<TEvent>(Func<TEvent, IEnumerable<AggregateIdentifier>> resolve) =>
+        WithResolver(new FuncSagaIdResolver<TEvent>(resolve));
+
+    /// <summary>
+    /// Registers a <see cref="FuncSagaIdResolver{TEvent}"/> using the supplied function.
+    /// The function receives both the event and its stored metadata; use this overload when
+    /// saga identifiers are carried in metadata rather than the event body.
+    /// </summary>
+    public SagasOptions WithResolver<TEvent>(Func<TEvent, EventMetadata, IEnumerable<AggregateIdentifier>> resolve) =>
         WithResolver(new FuncSagaIdResolver<TEvent>(resolve));
 }
