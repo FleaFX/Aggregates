@@ -8,7 +8,7 @@ public class UnitOfWorkTests {
         public TestState Apply(string @event) => new(Value: @event);
     }
 
-    static EntityRoot<TestState, string> NewRoot() => new(AggregateVersion.None);
+    static EntityRoot<TestState, string> NewRoot() => new(TestState.Initial, AggregateVersion.None);
 
     public class Get : UnitOfWorkTests {
         [Fact]

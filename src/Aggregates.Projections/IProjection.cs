@@ -14,10 +14,11 @@ public interface IProjection<in TEvent> {
     /// persists the projection state.
     /// </summary>
     /// <param name="event">The event to project.</param>
+    /// <param name="metadata">The metadata stored alongside <paramref name="event"/>.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>
     /// An <see cref="ICommit"/> representing the pending write(s). Call
     /// <see cref="ICommit.CommitAsync"/> to execute them.
     /// </returns>
-    ValueTask<ICommit> ProjectAsync(TEvent @event, CancellationToken cancellationToken = default);
+    ValueTask<ICommit> ProjectAsync(TEvent @event, EventMetadata metadata, CancellationToken cancellationToken = default);
 }

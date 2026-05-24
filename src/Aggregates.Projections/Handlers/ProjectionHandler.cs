@@ -5,7 +5,7 @@ namespace Aggregates.Projections;
 /// </summary>
 abstract class ProjectionHandler<TEvent> : IProjectionHandler<TEvent> {
     /// <inheritdoc/>
-    public abstract ValueTask HandleAsync(TEvent @event, CancellationToken cancellationToken = default);
+    public abstract ValueTask HandleAsync(TEvent @event, EventMetadata metadata, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -17,8 +17,8 @@ sealed class ProjectionHandler<TProjection, TEvent>(IProjection<TEvent> projecti
     where TProjection : IProjection<TEvent> {
 
     /// <inheritdoc/>
-    public override async ValueTask HandleAsync(TEvent @event, CancellationToken cancellationToken = default) {
-        var commit = await projection.ProjectAsync(@event, cancellationToken);
+    public override async ValueTask HandleAsync(TEvent @event, EventMetadata metadata, CancellationToken cancellationToken = default) {
+        var commit = await projection.ProjectAsync(@event, metadata, cancellationToken);
         await commit.CommitAsync(cancellationToken);
     }
 }

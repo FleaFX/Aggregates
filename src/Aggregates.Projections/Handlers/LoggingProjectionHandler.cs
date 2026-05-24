@@ -12,11 +12,11 @@ sealed partial class LoggingProjectionHandler<TEvent>(ProjectionHandler<TEvent> 
     : IProjectionHandler<TEvent> {
 
     /// <inheritdoc/>
-    public async ValueTask HandleAsync(TEvent @event, CancellationToken cancellationToken = default) {
+    public async ValueTask HandleAsync(TEvent @event, EventMetadata metadata, CancellationToken cancellationToken = default) {
         var eventType = typeof(TEvent).Name;
         LogHandling(logger, eventType);
         try {
-            await inner.HandleAsync(@event, cancellationToken);
+            await inner.HandleAsync(@event, metadata, cancellationToken);
             LogHandled(logger, eventType);
         } catch (Exception ex) {
             LogFailed(logger, ex, eventType);

@@ -34,7 +34,7 @@ sealed class ProjectionSubscriptionService<TEvent>(
             if (message.Event is TEvent typedEvent) {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var handler = scope.ServiceProvider.GetRequiredService<IProjectionHandler<TEvent>>();
-                await handler.HandleAsync(typedEvent, stoppingToken);
+                await handler.HandleAsync(typedEvent, message.Metadata, stoppingToken);
             }
 
             await checkpointStore.StoreAsync(subscriptionId, message.CommitPosition, stoppingToken);

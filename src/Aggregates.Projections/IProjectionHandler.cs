@@ -9,5 +9,8 @@ public interface IProjectionHandler<in TEvent> {
     /// <summary>
     /// Handles <paramref name="event"/> by projecting it and committing the result.
     /// </summary>
-    ValueTask HandleAsync(TEvent @event, CancellationToken cancellationToken = default);
+    /// <param name="event">The event to handle.</param>
+    /// <param name="metadata">The metadata stored alongside <paramref name="event"/>.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    ValueTask HandleAsync(TEvent @event, EventMetadata metadata, CancellationToken cancellationToken = default);
 }
