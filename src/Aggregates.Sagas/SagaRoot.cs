@@ -6,7 +6,7 @@ namespace Aggregates.Sagas;
 /// </summary>
 /// <typeparam name="TSagaState">The type of the state object.</typeparam>
 /// <typeparam name="TEvent">The type of the events applicable to this saga.</typeparam>
-public sealed class SagaRoot<TSagaState, TEvent>(AggregateVersion version, TSagaState? state = default) : IAggregateRoot
+public sealed class SagaRoot<TSagaState, TEvent>(TSagaState? state, AggregateVersion version) : IAggregateRoot
     where TSagaState : IState<TSagaState, TEvent> {
 
     readonly List<TEvent> _changes = [];

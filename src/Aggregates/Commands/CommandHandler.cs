@@ -31,7 +31,7 @@ class CommandHandler<TCommand, TState, TEvent>(IRepository<TState, TEvent> repos
     public override async ValueTask HandleAsync(TCommand command, CancellationToken cancellationToken = default) {
         var aggregateRoot = await repository.TryGetEntityRootAsync(command.Id, cancellationToken);
         if (aggregateRoot is null) {
-            aggregateRoot = new EntityRoot<TState, TEvent>(AggregateVersion.None, TState.Initial);
+            aggregateRoot = new EntityRoot<TState, TEvent>(TState.Initial, AggregateVersion.None);
             repository.Add(command.Id, aggregateRoot);
         }
         await aggregateRoot.AcceptAsync(command, cancellationToken);

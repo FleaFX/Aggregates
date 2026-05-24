@@ -21,8 +21,8 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
         try {
             var events = await ReadEventsAsync(sagaId, cancellationToken).ToArrayAsync(cancellationToken);
             var root = new SagaRoot<TSagaState, TEvent>(
-                new AggregateVersion(events.Length - 1L),
-                events.Aggregate(TSagaState.Initial, (state, @event) => state.Apply(@event)));
+                events.Aggregate(TSagaState.Initial, (state, @event) => state.Apply(@event)),
+                new AggregateVersion(events.Length - 1L));
             unitOfWork.Attach(new Aggregate(sagaId, root));
             return root;
         } catch (AggregateRootNotFoundException) {

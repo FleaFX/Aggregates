@@ -27,7 +27,7 @@ public class SagaHandlerTests {
 
     [Fact]
     public async Task HandleAsync_WhenSagaExists_UsesExistingRoot() {
-        var existingRoot = new SagaRoot<TestSagaState, TestEvent>(new AggregateVersion(0));
+        var existingRoot = new SagaRoot<TestSagaState, TestEvent>(default, new AggregateVersion(0));
         var repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
         var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
         var dispatcher = A.Fake<ICommandDispatcher>();

@@ -8,7 +8,7 @@ namespace Aggregates;
 /// </summary>
 /// <typeparam name="TState">The type of the state object.</typeparam>
 /// <typeparam name="TEvent">The type of the events applicable to this aggregate.</typeparam>
-public sealed class EntityRoot<TState, TEvent>(AggregateVersion version, TState? state = default) : IAggregateRoot
+public sealed class EntityRoot<TState, TEvent>(TState? state, AggregateVersion version) : IAggregateRoot
     where TState : IState<TState, TEvent> {
 
     // Cache MetadataAttribute lookups per type to avoid repeated reflection on the hot path.

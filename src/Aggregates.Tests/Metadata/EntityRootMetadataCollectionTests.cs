@@ -44,7 +44,7 @@ public class EntityRootMetadataCollectionTests {
     [Fact]
     public async Task GivenAttributeOnCommand_CollectsCommandMetadata() {
         await using var scope = new MetadataScope();
-        var root = new EntityRoot<TestState, TestEvent>(AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
 
         await root.AcceptAsync(new TestCommand("agg/1", "new-value"), TestContext.Current.CancellationToken);
 
@@ -54,7 +54,7 @@ public class EntityRootMetadataCollectionTests {
     [Fact]
     public async Task GivenAttributeOnState_CollectsStateMetadataAfterApply() {
         await using var scope = new MetadataScope();
-        var root = new EntityRoot<TestState, TestEvent>(AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
 
         await root.AcceptAsync(new TestCommand("agg/1", "new-value"), TestContext.Current.CancellationToken);
 
@@ -66,7 +66,7 @@ public class EntityRootMetadataCollectionTests {
     [Fact]
     public async Task GivenMultipleEvents_StateMetadataReflectsLastAppliedState() {
         await using var scope = new MetadataScope();
-        var root = new EntityRoot<TestState, TestEvent>(AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
 
         await root.AcceptAsync(new TwoEventsCommand("agg/1"), TestContext.Current.CancellationToken);
 
@@ -77,7 +77,7 @@ public class EntityRootMetadataCollectionTests {
 
     [Fact]
     public async Task GivenNoActiveScope_AcceptAsyncDoesNotThrow() {
-        var root = new EntityRoot<TestState, TestEvent>(AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
 
         var act = () => root.AcceptAsync(new TestCommand("agg/1", "value"), TestContext.Current.CancellationToken).AsTask();
 
@@ -86,7 +86,7 @@ public class EntityRootMetadataCollectionTests {
 
     [Fact]
     public async Task GivenNoActiveScope_ChangesAreStillApplied() {
-        var root = new EntityRoot<TestState, TestEvent>(AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
 
         await root.AcceptAsync(new TestCommand("agg/1", "new-value"), TestContext.Current.CancellationToken);
 

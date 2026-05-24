@@ -20,7 +20,7 @@ public abstract class BaseRepository<TState, TEvent> : IRepository<TState, TEven
         
         try {
             var events = await ReadEventsAsync(identifier, cancellationToken).ToArrayAsync(cancellationToken: cancellationToken);
-            var root = new EntityRoot<TState, TEvent>(new AggregateVersion(events.Length - 1L), events.Aggregate(TState.Initial, (current, @event) => current.Apply(@event)));
+            var root = new EntityRoot<TState, TEvent>(events.Aggregate(TState.Initial, (current, @event) => current.Apply(@event)), new AggregateVersion(events.Length - 1L));
             unitOfWork.Attach(new Aggregate(identifier, root));
             return root;
         } catch (AggregateRootNotFoundException) {

@@ -24,7 +24,7 @@ class SagaHandler<TSaga, TSagaState, TEvent>(ISagaRepository<TSagaState, TEvent>
     public override async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, CancellationToken cancellationToken = default) {
         var sagaRoot = await repository.TryGetAsync(sagaId, cancellationToken);
         if (sagaRoot is null) {
-            sagaRoot = new SagaRoot<TSagaState, TEvent>(AggregateVersion.None);
+            sagaRoot = new SagaRoot<TSagaState, TEvent>(default, AggregateVersion.None);
             repository.Add(sagaId, sagaRoot);
         }
         var commands = await sagaRoot.AcceptAsync(@event, saga, cancellationToken);
