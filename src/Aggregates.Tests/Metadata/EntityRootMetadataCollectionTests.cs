@@ -12,7 +12,6 @@ public class EntityRootMetadataCollectionTests {
         public TestState Apply(TestEvent @event) => new(@event.Value);
     }
 
-    [FixedMetadata("eventKey", "event-processed")]
     record TestEvent(string Value);
 
     [FixedMetadata("commandKey", "command-processed")]
@@ -41,16 +40,6 @@ public class EntityRootMetadataCollectionTests {
     }
 
     // --- Tests ---
-
-    [Fact]
-    public async Task GivenAttributeOnEvent_CollectsEventMetadata() {
-        await using var scope = new MetadataScope();
-        var root = new EntityRoot<TestState, TestEvent>(AggregateVersion.None);
-
-        await root.AcceptAsync(new TestCommand("agg/1", "new-value"), TestContext.Current.CancellationToken);
-
-        scope.Snapshot()["eventKey"].Should().Be("event-processed");
-    }
 
     [Fact]
     public async Task GivenAttributeOnCommand_CollectsCommandMetadata() {

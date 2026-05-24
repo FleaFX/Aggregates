@@ -1,9 +1,9 @@
 namespace Aggregates;
 
 /// <summary>
-/// Enriches written events with metadata derived from the decorated type. Apply to a state,
-/// command or event class to automatically populate the ambient <see cref="MetadataScope"/>
-/// whenever an instance of that type is processed by <see cref="EntityRoot{TState,TEvent}"/>.
+/// Enriches written events with metadata derived from the decorated type. Apply to a state or
+/// command class to automatically populate the ambient <see cref="MetadataScope"/> whenever an
+/// instance of that type is processed by <see cref="EntityRoot{TState,TEvent}"/>.
 /// </summary>
 /// <remarks>
 /// Subclass this attribute and override <see cref="GetValueAsync"/> to supply the metadata value.
@@ -27,7 +27,7 @@ public abstract class MetadataAttribute(string key, MetadataMultiplicity multipl
     /// Asynchronously produces the metadata value for the given <paramref name="context"/> object.
     /// </summary>
     /// <param name="context">
-    /// The object the attribute is decorating (a state, command or event instance).
+    /// The object the attribute is decorating (a state or command instance).
     /// Cast to the expected type in the implementation.
     /// </param>
     /// <param name="cancellationToken">A cancellation token.</param>
