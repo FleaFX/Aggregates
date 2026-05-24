@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <VersionPrefix>1.0.0</VersionPrefix>
-    <VersionSuffix>preview.2</VersionSuffix>
+    <VersionSuffix>preview.3</VersionSuffix>
     <GenerateDocumentationFile Condition="'$(IsPackable)' != 'false'">true</GenerateDocumentationFile>
     <Authors>Wouter Naessens</Authors>
     <Copyright>Copyright © 2025 Wouter Naessens</Copyright>
