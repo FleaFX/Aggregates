@@ -37,7 +37,8 @@ public class LoggingCommandHandlerTests {
         CommandHandler<NoopCommand> inner,
         FakeLogger<LoggingCommandHandler<NoopCommand>> logger) {
         var uow = new UnitOfWorkAwareCommandHandler<NoopCommand>(inner, _ => ValueTask.CompletedTask);
-        var retry = new RetryCommandHandler<NoopCommand>(uow);
+        var metadata = new MetadataAwareCommandHandler<NoopCommand>(uow);
+        var retry = new RetryCommandHandler<NoopCommand>(metadata);
         return new LoggingCommandHandler<NoopCommand>(retry, logger);
     }
 }

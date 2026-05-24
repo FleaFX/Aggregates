@@ -56,5 +56,5 @@ public class RetryCommandHandlerTests {
     }
 
     static RetryCommandHandler<NoopCommand> BuildHandler(CommandHandler<NoopCommand> inner, int maxAttempts = 3) =>
-        new(new UnitOfWorkAwareCommandHandler<NoopCommand>(inner, _ => ValueTask.CompletedTask), maxAttempts);
+        new(new MetadataAwareCommandHandler<NoopCommand>(new UnitOfWorkAwareCommandHandler<NoopCommand>(inner, _ => ValueTask.CompletedTask)), maxAttempts);
 }

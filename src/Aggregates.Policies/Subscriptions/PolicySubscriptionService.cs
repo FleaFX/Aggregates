@@ -34,6 +34,9 @@ sealed class PolicySubscriptionService<TEvent>(
             if (message.Event is TEvent typedEvent) {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var handler = scope.ServiceProvider.GetRequiredService<IPolicyHandler<TEvent>>();
+                // Seed the metadata scope with the incoming event's metadata so that commands
+                // dispatched by the policy inherit correlation/causation identifiers.
+                await using var metadataScope = new MetadataScope(message.Metadata);
                 await handler.HandleAsync(typedEvent, stoppingToken);
             }
 

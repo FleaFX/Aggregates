@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Reflection;
+
 namespace Aggregates;
 
 /// <summary>
@@ -7,6 +10,9 @@ namespace Aggregates;
 /// <typeparam name="TEvent">The type of the events applicable to this aggregate.</typeparam>
 public sealed class EntityRoot<TState, TEvent>(AggregateVersion version, TState? state = default) : IAggregateRoot
     where TState : IState<TState, TEvent> {
+
+    // Cache MetadataAttribute lookups per type to avoid repeated reflection on the hot path.
+    static readonly ConcurrentDictionary<Type, MetadataAttribute[]> _attributeCache = new();
 
     readonly List<TEvent> _changes = [];
 
@@ -23,6 +29,8 @@ public sealed class EntityRoot<TState, TEvent>(AggregateVersion version, TState?
 
     /// <summary>
     /// Applies <paramref name="command"/> to the current state, collecting the resulting events.
+    /// For each event produced, metadata is collected from the updated state, the command, and
+    /// the event itself (in that order) into the ambient <see cref="MetadataScope"/>, if active.
     /// </summary>
     /// <param name="command">The command to apply.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -31,6 +39,23 @@ public sealed class EntityRoot<TState, TEvent>(AggregateVersion version, TState?
         await foreach (var @event in command.ProgressAsync(State, cancellationToken)) {
             _changes.Add(@event);
             State = State.Apply(@event);
+            await CollectMetadataAsync(State, cancellationToken);
+            await CollectMetadataAsync(command, cancellationToken);
+            await CollectMetadataAsync(@event, cancellationToken);
+        }
+    }
+
+    static async ValueTask CollectMetadataAsync(object context, CancellationToken cancellationToken) {
+        var scope = MetadataScope.Current;
+        if (scope is null) return;
+
+        var attributes = _attributeCache.GetOrAdd(
+            context.GetType(),
+            static t => t.GetCustomAttributes<MetadataAttribute>(inherit: true).ToArray());
+
+        foreach (var attr in attributes) {
+            var value = await attr.GetValueAsync(context, cancellationToken);
+            scope.Add(attr.Key, value, attr.Multiplicity);
         }
     }
 }

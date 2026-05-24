@@ -27,7 +27,12 @@ sealed class KurrentDbSubscription(Func<ValueTask> dispose, IAsyncEnumerable<Str
                 resolvedEvent.OriginalEvent.EventType,
                 resolvedEvent.OriginalEvent.Data);
 
-            yield return new SubscriptionMessage(domainEvent, commitPosition);
+            var rawMetadata = resolvedEvent.OriginalEvent.Metadata;
+            var metadata = options.DeserializeMetadata is not null && !rawMetadata.IsEmpty
+                ? options.DeserializeMetadata(rawMetadata)
+                : EventMetadata.Empty;
+
+            yield return new SubscriptionMessage(domainEvent, commitPosition, metadata);
         }
     }
 

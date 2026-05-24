@@ -16,4 +16,17 @@ public sealed class MsspOptions {
     /// Returns <see langword="null"/> when the event type is unknown; the event is then skipped.
     /// </summary>
     public Func<string, ReadOnlyMemory<byte>, object?>? Deserialize { get; set; }
+
+    /// <summary>
+    /// Serializes an <see cref="EventMetadata"/> snapshot to bytes for storage alongside the
+    /// event in MSSP. Optional: when <see langword="null"/>, no metadata is written.
+    /// </summary>
+    public Func<EventMetadata, ReadOnlyMemory<byte>>? SerializeMetadata { get; set; }
+
+    /// <summary>
+    /// Deserializes the raw metadata bytes stored in MSSP back to an <see cref="EventMetadata"/>.
+    /// Optional: when <see langword="null"/>, <see cref="EventMetadata.Empty"/> is used for all
+    /// events delivered through subscriptions.
+    /// </summary>
+    public Func<ReadOnlyMemory<byte>, EventMetadata>? DeserializeMetadata { get; set; }
 }

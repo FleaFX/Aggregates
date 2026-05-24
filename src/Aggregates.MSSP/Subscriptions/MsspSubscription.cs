@@ -20,7 +20,10 @@ sealed class MsspSubscription(Func<ValueTask> dispose, IAsyncEnumerable<Subscrip
     async IAsyncEnumerable<SubscriptionMessage> EnumerateAsync([EnumeratorCancellation] CancellationToken cancellationToken = default) {
         await foreach (var message in messages.WithCancellation(cancellationToken)) {
             var domainEvent = options.Deserialize!(message.EventType, message.Data);
-            yield return new SubscriptionMessage(domainEvent, message.Position.Value);
+            var metadata = options.DeserializeMetadata is not null && !message.Metadata.IsEmpty
+                ? options.DeserializeMetadata(message.Metadata)
+                : EventMetadata.Empty;
+            yield return new SubscriptionMessage(domainEvent, message.Position.Value, metadata);
         }
     }
 

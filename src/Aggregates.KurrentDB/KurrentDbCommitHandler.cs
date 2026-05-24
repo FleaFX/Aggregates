@@ -31,13 +31,16 @@ public sealed class KurrentDbCommitHandler(KurrentDBClient client, KurrentDbOpti
         var identifier = aggregate.Identifier;
         var version = (long)aggregate.AggregateRoot.Version;
 
+        var metadata = MetadataScope.Current?.Snapshot() ?? EventMetadata.Empty;
+        var serializedMetadata = options.SerializeMetadata?.Invoke(metadata);
+
         var eventData = changes.Select((e, i) => {
             var serialized = options.Serialize!(e);
             // version is the last persisted revision; the first new event lands at version + 1,
             // the second at version + 2, etc. For a brand-new stream (version < 0) the first
             // event lands at position 0.
             var expectedPosition = version < 0 ? i : version + 1 + i;
-            return new EventData(CreateEventId(identifier, expectedPosition, serialized), serialized.EventType, serialized.Data);
+            return new EventData(CreateEventId(identifier, expectedPosition, serialized), serialized.EventType, serialized.Data, serializedMetadata);
         });
 
         try {

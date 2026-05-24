@@ -9,7 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Aggregates.Subscriptions\Aggregates.Subscriptions.csproj" />
     <ProjectReference Include="..\Aggregates\Aggregates.csproj" />
-    <PackageReference Include="MSSP" Version="0.3.1" />
+    <PackageReference Include="MSSP" Version="0.3.2" />
   </ItemGroup>
 
   <ItemGroup>

@@ -22,12 +22,16 @@ public sealed class MsspCommitHandler(IMsspClient client, MsspOptions options) {
         var identifier = aggregate.Identifier;
         var version = (long)aggregate.AggregateRoot.Version;
 
+        var metadata = MetadataScope.Current?.Snapshot() ?? EventMetadata.Empty;
+        var serializedMetadata = options.SerializeMetadata?.Invoke(metadata) ?? default;
+
         try {
             await client.AppendAsync(
                 identifier.ToString(),
                 version < 0 ? StreamRevision.NoStream : (ulong)version,
                 from change in changes
-                select options.Serialize!(change)
+                let serialized = options.Serialize!(change)
+                select new EventData(serialized.EventType, serialized.Data, serializedMetadata)
             );
         } catch (OptimisticConcurrencyException ex) {
             throw new ConcurrencyException(

@@ -39,6 +39,9 @@ sealed class SagaSubscriptionService<TSagaState, TEvent>(
                 foreach (var sagaId in resolver.Resolve(typedEvent)) {
                     await using var scope = scopeFactory.CreateAsyncScope();
                     var handler = scope.ServiceProvider.GetRequiredService<ISagaHandler<TSagaState, TEvent>>();
+                    // Seed the metadata scope with the incoming event's metadata so that commands
+                    // dispatched by the saga inherit correlation/causation identifiers.
+                    await using var metadataScope = new MetadataScope(message.Metadata);
                     await handler.HandleAsync(sagaId, typedEvent, stoppingToken);
                 }
             }

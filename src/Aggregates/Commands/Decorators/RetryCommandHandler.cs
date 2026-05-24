@@ -7,7 +7,7 @@ namespace Aggregates;
 /// <see cref="UnitOfWork"/> — on every call.
 /// </summary>
 /// <typeparam name="TCommand">The type of command being handled.</typeparam>
-sealed class RetryCommandHandler<TCommand>(UnitOfWorkAwareCommandHandler<TCommand> inner, int maxAttempts = 3) : ICommandHandler<TCommand>
+sealed class RetryCommandHandler<TCommand>(MetadataAwareCommandHandler<TCommand> inner, int maxAttempts = 3) : ICommandHandler<TCommand>
     where TCommand : ICommand {
 
     /// <inheritdoc/>
