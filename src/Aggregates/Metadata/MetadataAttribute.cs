@@ -7,8 +7,8 @@ namespace Aggregates;
 /// </summary>
 /// <remarks>
 /// Subclass this attribute and override <see cref="GetValueAsync"/> to supply the metadata value.
-/// The <paramref name="context"/> passed to <see cref="GetValueAsync"/> is the decorated object
-/// itself; cast it to the expected type in the implementation.
+/// The context object passed to <see cref="GetValueAsync"/> is the decorated object itself;
+/// cast it to the expected type in the implementation.
 /// </remarks>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = true, Inherited = true)]
 public abstract class MetadataAttribute(string key, MetadataMultiplicity multiplicity = MetadataMultiplicity.Single) : Attribute {

@@ -45,7 +45,8 @@ public sealed class EntityRoot<TState, TEvent>(AggregateVersion version, TState?
         }
     }
 
-    static async ValueTask CollectMetadataAsync(object context, CancellationToken cancellationToken) {
+    static async ValueTask CollectMetadataAsync(object? context, CancellationToken cancellationToken) {
+        if (context is null) return;
         var scope = MetadataScope.Current;
         if (scope is null) return;
 
