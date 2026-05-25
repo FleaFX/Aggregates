@@ -38,6 +38,10 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton<SagaCommitDelegate>(
             sp => sp.GetRequiredService<KurrentDbCommitHandler>().CommitAsync);
 
+        // Parked-message sink — Replace overrides the LoggingParkedMessageSink fallback registered
+        // by AddSagas, regardless of the order in which AddKurrentDb was called.
+        builder.Services.Replace(ServiceDescriptor.Singleton<IParkedMessageSink, KurrentDbParkedMessageSink>());
+
         return new SagasKurrentDbBuilder(builder.Services);
     }
 }

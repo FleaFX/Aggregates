@@ -11,7 +11,7 @@ namespace Aggregates.Policies;
 /// <remarks>
 /// For each received event the service:
 /// <list type="number">
-///   <item>Calls <see cref="IPolicyHandler{TEvent}.HandleAsync"/> when the event matches <typeparamref name="TEvent"/>.</item>
+///   <item>Calls <see cref="IPolicyHandler{TEvent}.HandleAsync"/> when the event matches <typeparamref name="TEvent"/>, with automatic retry and parked-message fallback via <see cref="SubscriptionRetryPolicy"/>.</item>
 ///   <item>Stores the stream position as the new checkpoint.</item>
 /// </list>
 /// A fresh DI scope is created per event so that scoped services are never captured as
@@ -21,6 +21,7 @@ sealed class PolicySubscriptionService<TEvent>(
     ISubscriptionFactory subscriptionFactory,
     IServiceScopeFactory scopeFactory,
     ICheckpointStore checkpointStore,
+    SubscriptionRetryPolicy retryPolicy,
     string subscriptionId,
     bool startFromEnd) : BackgroundService {
 
@@ -32,12 +33,14 @@ sealed class PolicySubscriptionService<TEvent>(
 
         await foreach (var message in subscription.WithCancellation(stoppingToken)) {
             if (message.Event is TEvent typedEvent) {
-                await using var scope = scopeFactory.CreateAsyncScope();
-                var handler = scope.ServiceProvider.GetRequiredService<IPolicyHandler<TEvent>>();
-                // Seed the metadata scope with the incoming event's metadata so that commands
-                // dispatched by the policy inherit correlation/causation identifiers.
-                await using var metadataScope = new MetadataScope(message.Metadata);
-                await handler.HandleAsync(typedEvent, stoppingToken);
+                await retryPolicy.ExecuteAsync(async ct => {
+                    await using var scope = scopeFactory.CreateAsyncScope();
+                    var handler = scope.ServiceProvider.GetRequiredService<IPolicyHandler<TEvent>>();
+                    // Seed the metadata scope with the incoming event's metadata so that commands
+                    // dispatched by the policy inherit correlation/causation identifiers.
+                    await using var metadataScope = new MetadataScope(message.Metadata);
+                    await handler.HandleAsync(typedEvent, ct);
+                }, subscriptionId, message, stoppingToken);
             }
 
             await checkpointStore.StoreAsync(subscriptionId, message.CommitPosition, stoppingToken);

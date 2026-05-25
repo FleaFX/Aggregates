@@ -27,6 +27,12 @@ public static class ServiceCollectionExtensions {
         // Decorator chain: IProjectionHandler<TEvent> → LoggingProjectionHandler<TEvent>
         services.TryAddScoped(typeof(IProjectionHandler<>), typeof(LoggingProjectionHandler<>));
 
+        // Subscription error handling — transport packages register their own IParkedMessageSink;
+        // LoggingParkedMessageSink is the fallback for dev/test scenarios without a transport.
+        services.TryAddSingleton<IParkedMessageSink, LoggingParkedMessageSink>();
+        services.TryAddSingleton(new SubscriptionErrorHandlingOptions());
+        services.TryAddSingleton<SubscriptionRetryPolicy>();
+
         var registeredProjections = new List<(Type EventType, Type ProjectionType)>();
 
         foreach (var (projectionType, eventType) in

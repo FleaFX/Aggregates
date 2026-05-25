@@ -29,6 +29,10 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton<SagaCommitDelegate>(
             sp => sp.GetRequiredService<MsspCommitHandler>().CommitAsync);
 
+        // Parked-message sink — Replace overrides the LoggingParkedMessageSink fallback registered
+        // by AddSagas, regardless of the order in which AddMssp was called.
+        builder.Services.Replace(ServiceDescriptor.Singleton<IParkedMessageSink, MsspParkedMessageSink>());
+
         return new SagasMsspBuilder(builder.Services);
     }
 }

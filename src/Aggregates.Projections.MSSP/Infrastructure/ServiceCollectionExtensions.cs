@@ -17,6 +17,10 @@ public static class ServiceCollectionExtensions {
         // Subscription factory — shared with sagas/policies if both are used
         builder.Services.TryAddSingleton<ISubscriptionFactory, MsspSubscriptionFactory>();
 
+        // Parked-message sink — Replace overrides the LoggingParkedMessageSink fallback registered
+        // by AddProjections, regardless of the order in which AddMssp was called.
+        builder.Services.Replace(ServiceDescriptor.Singleton<IParkedMessageSink, MsspParkedMessageSink>());
+
         return new ProjectionsMsspBuilder(builder.Services);
     }
 }

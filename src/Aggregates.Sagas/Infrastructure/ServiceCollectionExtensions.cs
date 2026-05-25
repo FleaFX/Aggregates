@@ -1,4 +1,5 @@
 using System.Reflection;
+using Aggregates.Subscriptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -28,6 +29,12 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddScoped(typeof(UnitOfWorkAwareSagaHandler<,>));
         builder.Services.TryAddScoped(typeof(RetrySagaHandler<,>));
         builder.Services.TryAddScoped(typeof(ISagaHandler<,>), typeof(LoggingSagaHandler<,>));
+
+        // Subscription error handling — transport packages register their own IParkedMessageSink;
+        // LoggingParkedMessageSink is the fallback for dev/test scenarios without a transport.
+        builder.Services.TryAddSingleton<IParkedMessageSink, LoggingParkedMessageSink>();
+        builder.Services.TryAddSingleton(new SubscriptionErrorHandlingOptions());
+        builder.Services.TryAddSingleton<SubscriptionRetryPolicy>();
 
         // Per ISaga<,> implementation: register the saga class and its concrete handler
         var registeredSagas = new List<(Type StateType, Type EventType, Type SagaType)>();

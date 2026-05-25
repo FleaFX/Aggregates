@@ -22,6 +22,10 @@ public static class ServiceCollectionExtensions {
         // Subscription factory — shared with sagas if both are used
         builder.Services.TryAddSingleton<ISubscriptionFactory, KurrentDbSubscriptionFactory>();
 
+        // Parked-message sink — Replace overrides the LoggingParkedMessageSink fallback registered
+        // by AddPolicies, regardless of the order in which AddKurrentDb was called.
+        builder.Services.Replace(ServiceDescriptor.Singleton<IParkedMessageSink, KurrentDbParkedMessageSink>());
+
         return new PoliciesKurrentDbBuilder(builder.Services);
     }
 }
