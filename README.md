@@ -2,7 +2,7 @@
 
 [![Build & test](https://github.com/FleaFX/aggregates/actions/workflows/build.yml/badge.svg)](https://github.com/FleaFX/aggregates/actions/workflows/build.yml)
 
-> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.4`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
+> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.5`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
 
 This library provides all the boilerplate code needed to do event sourcing, leaving you with just the core functionality of your domain to write.
 
@@ -13,7 +13,7 @@ This library provides all the boilerplate code needed to do event sourcing, leav
 | Package | Description |
 |---------|-------------|
 | `Aggregates` | Core package: commands, aggregates, unit of work |
-| `Aggregates.Subscriptions` | Shared abstractions: `ICheckpointStore`, `ISubscription`, `ISubscriptionFactory` |
+| `Aggregates.Subscriptions` | Shared abstractions: `ICheckpointStore`, `ISubscription`, `ISubscriptionFactory`, `IParkedMessageSink` |
 | `Aggregates.Sagas` | Saga pattern: stateful event-driven process managers |
 | `Aggregates.Policies` | Policy pattern: stateless event-driven command dispatchers |
 | `Aggregates.Projections` | Projection pattern: event-driven read-model builders |
