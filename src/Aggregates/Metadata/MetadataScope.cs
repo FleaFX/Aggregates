@@ -1,6 +1,7 @@
 ﻿using Aggregates.Extensions;
 using Aggregates.Util;
 using System.Collections.Immutable;
+using System.Text.Json;
 
 namespace Aggregates.Metadata;
 
@@ -42,8 +43,9 @@ public sealed class MetadataScope : IAsyncDisposable, IDisposable {
             _metadata.TryGetValue(metadata.Key, out var existingValue) && existingValue is not null
                 ? multiplicity switch {
                     MetadataMultiplicity.Single => metadata.Value,
-                    MetadataMultiplicity.Multiple => (
-                        !existingValue.GetType().IsArray
+                    MetadataMultiplicity.Multiple => (existingValue is JsonElement { ValueKind: JsonValueKind.Array } jsonArray
+                        ? (object?[]) [..jsonArray.EnumerateArray().Select(e => (object?)e), metadata.Value]
+                        : !existingValue.GetType().IsArray
                             ? [existingValue, metadata.Value]
                             : (object?[]) [..(Array)existingValue, metadata.Value]
                         ).Distinct().ToArray(),
