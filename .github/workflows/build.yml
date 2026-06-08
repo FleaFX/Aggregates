@@ -4,9 +4,9 @@ name: Build & test
 
 on:
     push:
-        branches: [ "main" ]
+        branches: [ "legacy" ]
     pull_request:
-        branches: [ "main" ]
+        branches: [ "legacy" ]
 
 jobs:
     build:
