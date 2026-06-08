@@ -3,7 +3,6 @@
 name: Publish package
 
 on:
-    workflow_dispatch:
     workflow_run:
         workflows: ["Build & test"]
         branches: [ "legacy" ]
