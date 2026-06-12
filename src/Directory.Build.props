@@ -4,7 +4,7 @@
     <VersionSuffix>preview.6</VersionSuffix>
     <GenerateDocumentationFile Condition="'$(IsPackable)' != 'false'">true</GenerateDocumentationFile>
     <Authors>Wouter Naessens</Authors>
-    <Copyright>Copyright © 2025 Wouter Naessens</Copyright>
+    <Copyright>Copyright © 2026 Wouter Naessens</Copyright>
     <PackageProjectUrl>https://github.com/FleaFX/Aggregates</PackageProjectUrl>
     <RepositoryUrl>https://github.com/FleaFX/Aggregates</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
