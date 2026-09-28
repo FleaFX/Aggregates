@@ -15,3 +15,15 @@ class TestSaga : ISaga<TestSagaState, TestEvent> {
     public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
         AsyncEnumerable.Empty<ICommand>();
 }
+
+record struct OtherTestEvent(int Value);
+
+record OtherTestSagaState(int Total) : IState<OtherTestSagaState, OtherTestEvent> {
+    public static OtherTestSagaState Initial => new(0);
+    public OtherTestSagaState Apply(OtherTestEvent @event) => new(Total + @event.Value);
+}
+
+class OtherTestSaga : ISaga<OtherTestSagaState, OtherTestEvent> {
+    public IAsyncEnumerable<ICommand> ReactAsync(OtherTestSagaState state, OtherTestEvent @event, CancellationToken cancellationToken = default) =>
+        AsyncEnumerable.Empty<ICommand>();
+}

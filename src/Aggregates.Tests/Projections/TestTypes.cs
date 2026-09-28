@@ -11,3 +11,13 @@ class TestProjection : IProjection<ProjectionTestEvent> {
         CancellationToken cancellationToken = default) =>
         ValueTask.FromResult(Commit.Create());
 }
+
+record struct OtherProjectionTestEvent(int Value);
+
+class OtherTestProjection : IProjection<OtherProjectionTestEvent> {
+    public ValueTask<ICommit> ProjectAsync(
+        OtherProjectionTestEvent @event,
+        EventMetadata metadata,
+        CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(Commit.Create());
+}

@@ -16,6 +16,7 @@ public static class ServiceCollectionExtensions {
     /// Optional configuration callback. Use <see cref="AggregatesOptions.ScanAssemblies"/> to
     /// automatically register a <see cref="CommandHandler{TCommand,TState,TEvent}"/> for every
     /// <see cref="ICommand{TState,TEvent}"/> implementation found in those assemblies.
+    /// Use <see cref="AggregatesOptions.ScanTypes"/> instead to register an explicit set of types.
     /// </param>
     public static IAggregatesBuilder AddAggregates(this IServiceCollection services, Action<AggregatesOptions>? configure = null) {
         var options = new AggregatesOptions();
@@ -29,8 +30,7 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddScoped(typeof(ICommandHandler<>), typeof(LoggingCommandHandler<>));
 
         foreach (var (baseType, implType) in
-                 from assembly in options.Assemblies
-                 from type in assembly.GetTypes()
+                 from type in options.Types.Distinct()
                  from @interface in type.GetInterfaces()
                  where @interface.IsGenericType
                  where @interface.GetGenericTypeDefinition() == typeof(ICommand<,>)

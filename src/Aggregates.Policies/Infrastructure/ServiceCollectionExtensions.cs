@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions {
     /// Optional configuration callback. Use <see cref="PoliciesOptions.ScanAssemblies"/> to
     /// automatically register a handler for every <see cref="IPolicy{TEvent}"/> implementation
     /// found in those assemblies.
+    /// Use <see cref="PoliciesOptions.ScanTypes"/> instead to register an explicit set of types.
     /// </param>
     public static IPoliciesBuilder AddPolicies(this IAggregatesBuilder builder, Action<PoliciesOptions>? configure = null) {
         var options = new PoliciesOptions();
@@ -37,8 +38,7 @@ public static class ServiceCollectionExtensions {
         var registeredPolicies = new List<(Type EventType, Type PolicyType)>();
 
         foreach (var (policyType, eventType) in
-            from assembly in options.Assemblies
-            from type in assembly.GetTypes()
+            from type in options.Types.Distinct()
             where !type.IsAbstract
             from @interface in type.GetInterfaces()
             where @interface.IsGenericType
