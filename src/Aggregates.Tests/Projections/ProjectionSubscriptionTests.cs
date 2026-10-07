@@ -23,7 +23,7 @@ public class ProjectionSubscriptionTests(ITestOutputHelper output) {
             .Which.Stream.Should().Be("order-1");
     }
 
-    [Fact(Skip = KnownIssues.HostStopsOnSubscriptionError)]
+    [Fact]
     public async Task SurvivesStoreInterruption() {
         await using var store = await Stores.StartAsync(Transport.KurrentDB);
         await using var host = await TestHost.StartAsync(store, output, o => o
