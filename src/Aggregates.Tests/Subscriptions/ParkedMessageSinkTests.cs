@@ -20,7 +20,7 @@ public class ParkedMessageSinkTests(ITestOutputHelper output) {
             TestContext.Current.CancellationToken);
 
         var parked = (await store.ReadAllAsync()).Should().ContainSingle(e => e.Stream == "parked-subscription-1").Which;
-        parked.EventType.Should().Be("ParkedMessage");
+        parked.EventType.Should().Be("$aggregates-parked");
         using var payload = JsonDocument.Parse(parked.Data);
         payload.RootElement.GetProperty("CommitPosition").GetUInt64().Should().Be(42);
         payload.RootElement.GetProperty("ExceptionType").GetString().Should().Be(typeof(InvalidOperationException).FullName);

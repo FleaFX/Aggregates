@@ -10,8 +10,13 @@ namespace Aggregates.KurrentDB;
 /// a new event containing the position as a little-endian <see cref="ulong"/>.
 /// <see cref="GetAsync"/> reads the last event in that stream.
 /// </summary>
+/// <remarks>
+/// Checkpoint events use the <c>$aggregates-checkpoint</c> event type. Events whose type starts
+/// with <c>$</c> are never delivered to subscriptions, so storing a checkpoint does not feed
+/// back into the subscriptions that produce them.
+/// </remarks>
 public sealed class KurrentDbCheckpointStore(KurrentDBClient client) : ICheckpointStore {
-    const string CheckpointEventType = "CheckpointStored";
+    const string CheckpointEventType = "$aggregates-checkpoint";
 
     /// <inheritdoc/>
     public async ValueTask<ulong?> GetAsync(string subscriptionId, CancellationToken cancellationToken = default) {
