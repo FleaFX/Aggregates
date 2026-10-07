@@ -8,6 +8,10 @@ namespace Aggregates.KurrentDB;
 /// <see cref="KurrentDbOptions.Deserialize"/>. System events are excluded via
 /// <see cref="EventTypeFilter.ExcludeSystemEvents"/>.
 /// </summary>
+/// <remarks>
+/// Events whose type starts with <c>$</c> are never delivered; the library's own bookkeeping
+/// (checkpoints, parked messages) uses that prefix.
+/// </remarks>
 public sealed class KurrentDbSubscriptionFactory(KurrentDBClient client, KurrentDbOptions options) : ISubscriptionFactory {
     /// <inheritdoc/>
     public ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default) {
