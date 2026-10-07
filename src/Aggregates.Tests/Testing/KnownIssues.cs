@@ -6,11 +6,6 @@ namespace Aggregates.Testing;
 /// </summary>
 static class KnownIssues {
     /// <summary>
-    /// Checkpoints are stored as events in the subscribed store, so they feed back into every subscription.
-    /// </summary>
-    public const string CheckpointFeedback = "Checkpoint events are delivered to every subscription again, so checkpoints keep growing on an idle store";
-
-    /// <summary>
     /// Saga streams contain copies of the trigger events.
     /// </summary>
     public const string SagaEventCopies = "Sagas store a copy of their trigger event, which is delivered to every subscription again";
