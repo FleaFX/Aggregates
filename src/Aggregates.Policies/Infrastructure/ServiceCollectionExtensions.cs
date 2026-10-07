@@ -39,6 +39,10 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton(new SubscriptionCheckpointOptions());
         builder.Services.TryAddSingleton(TimeProvider.System);
 
+        // Subscription loop — subscribes again after a transient failure
+        builder.Services.TryAddSingleton(new SubscriptionResubscribeOptions());
+        builder.Services.TryAddSingleton<SubscriptionLoop>();
+
         var registeredPolicies = new List<(Type EventType, Type PolicyType)>();
 
         foreach (var (policyType, eventType) in

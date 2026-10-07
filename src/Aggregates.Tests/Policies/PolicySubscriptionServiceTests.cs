@@ -3,6 +3,7 @@ using Aggregates.Testing;
 using FakeItEasy;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Aggregates.Policies;
 
@@ -14,15 +15,16 @@ public class PolicySubscriptionServiceTests {
 
     static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    PolicySubscriptionService<PolicyTestEvent> BuildService(FakeSubscriptionFactory factory) =>
-        new(factory,
+    PolicySubscriptionService<PolicyTestEvent> BuildService(FakeSubscriptionFactory factory) {
+        var parkedMessageSink = A.Fake<IParkedMessageSink>();
+        return new(
+            new SubscriptionLoop(factory, _store, parkedMessageSink, new SubscriptionCheckpointOptions(),
+                new SubscriptionResubscribeOptions(), TimeProvider.System, NullLogger<SubscriptionLoop>.Instance),
             new ServiceCollection().AddSingleton(_handler).BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            _store,
-            new SubscriptionRetryPolicy(A.Fake<IParkedMessageSink>(), new SubscriptionErrorHandlingOptions()),
-            new SubscriptionCheckpointOptions(),
-            TimeProvider.System,
+            new SubscriptionRetryPolicy(parkedMessageSink, new SubscriptionErrorHandlingOptions()),
             SubscriptionId,
             startFromEnd: false);
+    }
 
     IEnumerable<ulong> StoredPositions() =>
         Fake.GetCalls(_store)
@@ -36,7 +38,8 @@ public class PolicySubscriptionServiceTests {
         using var service = BuildService(factory);
 
         await service.StartAsync(Token);
-        await service.ExecuteTask!.WaitAsync(Token);
+        await factory.Drained.WaitAsync(Token);
+        await service.StopAsync(Token);
 
         A.CallTo(() => _handler.HandleAsync(A<PolicyTestEvent>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
         A.CallTo(() => _handler.HandleAsync(new PolicyTestEvent(1), A<CancellationToken>._)).MustHaveHappenedOnceExactly();
@@ -46,7 +49,7 @@ public class PolicySubscriptionServiceTests {
     [Fact]
     public async Task GivenStopped_StoresLastProcessedPosition() {
         var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(3,
-            position => new OtherPolicyTestEvent((int)position)), waitAtEnd: true);
+            position => new OtherPolicyTestEvent((int)position)));
         using var service = BuildService(factory);
         await service.StartAsync(Token);
         await factory.Drained.WaitAsync(Token);
