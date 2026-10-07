@@ -1,4 +1,5 @@
 using Aggregates.Subscriptions;
+using Grpc.Core;
 using KurrentDB.Client;
 
 namespace Aggregates.KurrentDB;
@@ -25,4 +26,17 @@ public sealed class KurrentDbSubscriptionFactory(KurrentDBClient client, Kurrent
         var subscription = client.SubscribeToAll(from, filterOptions: filterOptions, cancellationToken: cancellationToken);
         return new KurrentDbSubscription(() => subscription.DisposeAsync(), subscription.Messages, options);
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Not transient: missing permissions, invalid credentials, and requests the server rejects
+    /// as invalid or unsupported. Everything else (connection loss, keepalive timeouts, leader
+    /// changes, server restarts) is transient.
+    /// </remarks>
+    public bool IsTransient(Exception exception) => exception switch {
+        AccessDeniedException or NotAuthenticatedException => false,
+        RpcException { StatusCode: StatusCode.PermissionDenied or StatusCode.Unauthenticated
+            or StatusCode.InvalidArgument or StatusCode.Unimplemented or StatusCode.FailedPrecondition } => false,
+        _ => true,
+    };
 }

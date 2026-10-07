@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Aggregates.Subscriptions;
+using Grpc.Core;
 using MSSP;
 
 namespace Aggregates.MSSP;
@@ -33,4 +34,16 @@ public sealed class MsspSubscriptionFactory(IMsspClient client, MsspOptions opti
             options
         );
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Not transient: a remote server that rejects the request for missing permissions, invalid
+    /// credentials, or as invalid or unsupported. Everything else (connection loss, leader
+    /// changes, a stopped embedded store) is transient.
+    /// </remarks>
+    public bool IsTransient(Exception exception) => exception switch {
+        RpcException { StatusCode: StatusCode.PermissionDenied or StatusCode.Unauthenticated
+            or StatusCode.InvalidArgument or StatusCode.Unimplemented or StatusCode.FailedPrecondition } => false,
+        _ => true,
+    };
 }
