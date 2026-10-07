@@ -4,7 +4,7 @@ namespace Aggregates.Policies;
 
 public class PolicyContractAttributeTests {
 
-    public class ToString {
+    public new class ToString {
         [Fact]
         public void WithNameOnly_ReturnsNameAtVersion1() {
             var attr = new PolicyContractAttribute("SendWelcomeEmail");
