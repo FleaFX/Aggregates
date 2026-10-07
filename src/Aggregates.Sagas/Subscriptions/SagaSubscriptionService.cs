@@ -15,7 +15,7 @@ namespace Aggregates.Sagas;
 ///   <item>Creates a fresh DI scope per saga instance and resolves <see cref="ISagaHandler{TSagaState,TEvent}"/> from it.</item>
 ///   <item>Opens a <see cref="MetadataScope"/> seeded from the event's stored metadata so that commands dispatched by the saga inherit correlation/causation identifiers.</item>
 ///   <item>Calls <see cref="ISagaHandler{TSagaState,TEvent}.HandleAsync"/> for every resolved saga identifier, with automatic retry and parked-message fallback via <see cref="SubscriptionRetryPolicy"/>.</item>
-///   <item>Stores the stream position as the new checkpoint.</item>
+///   <item>Records the stream position with a <see cref="CheckpointTracker"/>; checkpoints are written in batches, as configured by <see cref="SubscriptionCheckpointOptions"/>, and once more when the subscription stops.</item>
 /// </list>
 /// A fresh DI scope is created per saga invocation so that scoped services are never captured
 /// as singletons by this long-lived hosted service.
@@ -26,9 +26,13 @@ sealed class SagaSubscriptionService<TSagaState, TEvent>(
     IServiceScopeFactory scopeFactory,
     ICheckpointStore checkpointStore,
     SubscriptionRetryPolicy retryPolicy,
+    SubscriptionCheckpointOptions checkpointOptions,
+    TimeProvider timeProvider,
     string subscriptionId,
     bool startFromEnd) : BackgroundService
     where TSagaState : IState<TSagaState, TEvent> {
+
+    static readonly TimeSpan FinalFlushTimeout = TimeSpan.FromSeconds(5);
 
     /// <inheritdoc/>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
@@ -36,21 +40,28 @@ sealed class SagaSubscriptionService<TSagaState, TEvent>(
 
         await using var subscription = subscriptionFactory.Subscribe(checkpoint, startFromEnd, stoppingToken);
 
-        await foreach (var message in subscription.WithCancellation(stoppingToken)) {
-            if (message.Event is TEvent typedEvent) {
-                foreach (var sagaId in resolver.Resolve(typedEvent, message.Metadata)) {
-                    await retryPolicy.ExecuteAsync(async ct => {
-                        await using var scope = scopeFactory.CreateAsyncScope();
-                        var handler = scope.ServiceProvider.GetRequiredService<ISagaHandler<TSagaState, TEvent>>();
-                        // Seed the metadata scope with the incoming event's metadata so that commands
-                        // dispatched by the saga inherit correlation/causation identifiers.
-                        await using var metadataScope = new MetadataScope(message.Metadata);
-                        await handler.HandleAsync(sagaId, typedEvent, ct);
-                    }, subscriptionId, message, stoppingToken);
+        var tracker = new CheckpointTracker(checkpointStore, subscriptionId, checkpointOptions, timeProvider);
+        try {
+            await foreach (var message in subscription.WithCancellation(stoppingToken)) {
+                if (message.Event is TEvent typedEvent) {
+                    foreach (var sagaId in resolver.Resolve(typedEvent, message.Metadata)) {
+                        await retryPolicy.ExecuteAsync(async ct => {
+                            await using var scope = scopeFactory.CreateAsyncScope();
+                            var handler = scope.ServiceProvider.GetRequiredService<ISagaHandler<TSagaState, TEvent>>();
+                            // Seed the metadata scope with the incoming event's metadata so that commands
+                            // dispatched by the saga inherit correlation/causation identifiers.
+                            await using var metadataScope = new MetadataScope(message.Metadata);
+                            await handler.HandleAsync(sagaId, typedEvent, ct);
+                        }, subscriptionId, message, stoppingToken);
+                    }
                 }
-            }
 
-            await checkpointStore.StoreAsync(subscriptionId, message.CommitPosition, stoppingToken);
+                await tracker.AdvanceAsync(message.CommitPosition, stoppingToken);
+            }
+        } finally {
+            // stoppingToken is already cancelled on a graceful shutdown.
+            using var flushTimeout = new CancellationTokenSource(FinalFlushTimeout);
+            await tracker.FlushAsync(flushTimeout.Token);
         }
     }
 }
