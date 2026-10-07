@@ -10,7 +10,7 @@ static class TestImages {
     public const string KurrentDb = "docker.kurrent.io/kurrent-lts/kurrentdb:26.0.3";
 
     /// <summary>
-    /// SQL Server, for <c>Aggregates.Projections.Sql</c>.
+    /// SQL Server 2022, for <c>Aggregates.Projections.Sql</c>.
     /// </summary>
-    public const string SqlServer = "mcr.microsoft.com/mssql/server:2022-latest";
+    public const string SqlServer = "mcr.microsoft.com/mssql/server:2022-CU27-ubuntu-22.04";
 }
