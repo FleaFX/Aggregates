@@ -74,5 +74,17 @@ public class ServiceCollectionExtensionsTests {
             services.Should().ContainSingle(d => d.ServiceType == typeof(SubscriptionCheckpointOptions))
                 .Which.ImplementationInstance.Should().BeSameAs(options);
         }
+
+        [Fact]
+        public void RegistersSubscriptionLoopWithDefaultResubscribeOptions() {
+            var services = new ServiceCollection();
+
+            services.AddProjections();
+
+            services.Should().ContainSingle(d => d.ServiceType == typeof(SubscriptionLoop))
+                .Which.Lifetime.Should().Be(ServiceLifetime.Singleton);
+            using var provider = services.BuildServiceProvider();
+            provider.GetRequiredService<SubscriptionResubscribeOptions>().MaxDelay.Should().Be(TimeSpan.FromSeconds(30));
+        }
     }
 }

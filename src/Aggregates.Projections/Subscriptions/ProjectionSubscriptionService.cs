@@ -9,49 +9,33 @@ namespace Aggregates.Projections;
 /// registered projection handler.
 /// </summary>
 /// <remarks>
-/// For each received event the service:
-/// <list type="number">
-///   <item>Calls <see cref="IProjectionHandler{TEvent}.HandleAsync"/> when the event matches <typeparamref name="TEvent"/>, with automatic retry and parked-message fallback via <see cref="SubscriptionRetryPolicy"/>.</item>
-///   <item>Records the stream position with a <see cref="CheckpointTracker"/>; checkpoints are written in batches, as configured by <see cref="SubscriptionCheckpointOptions"/>, and once more when the subscription stops.</item>
-/// </list>
+/// The subscription runs in a <see cref="SubscriptionLoop"/>, which subscribes again after a
+/// transient failure, parks messages that could not be deserialized, and records checkpoints.
+/// For each event that matches <typeparamref name="TEvent"/>, the service calls
+/// <see cref="IProjectionHandler{TEvent}.HandleAsync"/>, with automatic retry and parked-message
+/// fallback via <see cref="SubscriptionRetryPolicy"/>.
 /// A fresh DI scope is created per event so that scoped services are never captured as
 /// singletons by this long-lived hosted service.
 /// </remarks>
 sealed class ProjectionSubscriptionService<TEvent>(
-    ISubscriptionFactory subscriptionFactory,
+    SubscriptionLoop loop,
     IServiceScopeFactory scopeFactory,
-    ICheckpointStore checkpointStore,
     SubscriptionRetryPolicy retryPolicy,
-    SubscriptionCheckpointOptions checkpointOptions,
-    TimeProvider timeProvider,
     string subscriptionId,
     bool startFromEnd) : BackgroundService {
 
-    static readonly TimeSpan FinalFlushTimeout = TimeSpan.FromSeconds(5);
-
     /// <inheritdoc/>
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
-        var checkpoint = await checkpointStore.GetAsync(subscriptionId, stoppingToken);
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
+        loop.RunAsync(subscriptionId, startFromEnd, ProcessAsync, stoppingToken);
 
-        await using var subscription = subscriptionFactory.Subscribe(checkpoint, startFromEnd, stoppingToken);
+    async ValueTask ProcessAsync(SubscriptionMessage message, CancellationToken cancellationToken) {
+        if (message.Event is not TEvent typedEvent)
+            return;
 
-        var tracker = new CheckpointTracker(checkpointStore, subscriptionId, checkpointOptions, timeProvider);
-        try {
-            await foreach (var message in subscription.WithCancellation(stoppingToken)) {
-                if (message.Event is TEvent typedEvent) {
-                    await retryPolicy.ExecuteAsync(async ct => {
-                        await using var scope = scopeFactory.CreateAsyncScope();
-                        var handler = scope.ServiceProvider.GetRequiredService<IProjectionHandler<TEvent>>();
-                        await handler.HandleAsync(typedEvent, message.Metadata, ct);
-                    }, subscriptionId, message, stoppingToken);
-                }
-
-                await tracker.AdvanceAsync(message.CommitPosition, stoppingToken);
-            }
-        } finally {
-            // stoppingToken is already cancelled on a graceful shutdown.
-            using var flushTimeout = new CancellationTokenSource(FinalFlushTimeout);
-            await tracker.FlushAsync(flushTimeout.Token);
-        }
+        await retryPolicy.ExecuteAsync(async ct => {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var handler = scope.ServiceProvider.GetRequiredService<IProjectionHandler<TEvent>>();
+            await handler.HandleAsync(typedEvent, message.Metadata, ct);
+        }, subscriptionId, message, cancellationToken);
     }
 }

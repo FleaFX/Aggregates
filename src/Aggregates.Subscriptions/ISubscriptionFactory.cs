@@ -20,4 +20,19 @@ public interface ISubscriptionFactory {
     /// A cancellation token passed to the underlying transport to cancel the subscription.
     /// </param>
     ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether opening the subscription again can be expected to succeed after
+    /// <paramref name="exception"/>. A subscription service subscribes again after a transient
+    /// failure, and stops after any other failure.
+    /// </summary>
+    /// <remarks>
+    /// Also used for failures of the checkpoint store and the parked-message sink, which use the
+    /// same transport. Implementations should return <see langword="false"/> only for failures
+    /// that need a configuration change, such as missing permissions or invalid credentials:
+    /// stopping on a failure that would have passed is worse than retrying one that won't.
+    /// The default treats every failure as transient.
+    /// </remarks>
+    /// <param name="exception">The exception that ended the subscription.</param>
+    bool IsTransient(Exception exception) => true;
 }

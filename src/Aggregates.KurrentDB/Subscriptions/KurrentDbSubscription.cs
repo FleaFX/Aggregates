@@ -8,7 +8,8 @@ namespace Aggregates.KurrentDB;
 /// Adapts a KurrentDB <c>$all</c> subscription to the transport-agnostic
 /// <see cref="ISubscription"/> contract. Each incoming <see cref="StreamMessage.Event"/>
 /// is deserialized via <see cref="KurrentDbOptions.Deserialize"/> and wrapped in a
-/// <see cref="SubscriptionMessage"/>. Non-event stream messages are skipped.
+/// <see cref="SubscriptionMessage"/>. Non-event stream messages are skipped. A deserialization
+/// failure is reported in <see cref="SubscriptionMessage.DeserializationError"/> instead of thrown.
 /// </summary>
 sealed class KurrentDbSubscription(Func<ValueTask> dispose, IAsyncEnumerable<StreamMessage> messages, KurrentDbOptions options) : ISubscription {
 
@@ -21,18 +22,23 @@ sealed class KurrentDbSubscription(Func<ValueTask> dispose, IAsyncEnumerable<Str
             if (message is not StreamMessage.Event eventMessage)
                 continue;
 
-            var resolvedEvent = eventMessage.ResolvedEvent;
-            var commitPosition = resolvedEvent.OriginalEvent.Position.CommitPosition;
-            var domainEvent = options.Deserialize!(
-                resolvedEvent.OriginalEvent.EventType,
-                resolvedEvent.OriginalEvent.Data);
+            yield return ToMessage(eventMessage.ResolvedEvent.OriginalEvent);
+        }
+    }
 
-            var rawMetadata = resolvedEvent.OriginalEvent.Metadata;
-            var metadata = options.DeserializeMetadata is not null && !rawMetadata.IsEmpty
-                ? options.DeserializeMetadata(rawMetadata)
+    // A failing deserializer must not end the enumeration: the error travels with the message, so
+    // the subscription can park it and continue with the next one.
+    SubscriptionMessage ToMessage(EventRecord record) {
+        var commitPosition = record.Position.CommitPosition;
+        try {
+            var domainEvent = options.Deserialize!(record.EventType, record.Data);
+            var metadata = options.DeserializeMetadata is not null && !record.Metadata.IsEmpty
+                ? options.DeserializeMetadata(record.Metadata)
                 : EventMetadata.Empty;
 
-            yield return new SubscriptionMessage(domainEvent, commitPosition, metadata);
+            return new SubscriptionMessage(domainEvent, commitPosition, metadata);
+        } catch (Exception exception) when (exception is not OperationCanceledException) {
+            return new SubscriptionMessage(null, commitPosition, EventMetadata.Empty) { DeserializationError = exception };
         }
     }
 

@@ -14,9 +14,16 @@ public sealed class CheckpointTracker {
     readonly TimeSpan _maxInterval;
     readonly TimeProvider _timeProvider;
 
+    ulong? _lastPosition;
     ulong? _pendingPosition;
     int _pendingCount;
     long _pendingSince;
+
+    /// <summary>
+    /// The position of the last processed message, whether or not it has been written yet.
+    /// <see langword="null"/> until the first call to <see cref="AdvanceAsync"/>.
+    /// </summary>
+    public ulong? LastPosition => _lastPosition;
 
     /// <summary>
     /// Initializes a new <see cref="CheckpointTracker"/>.
@@ -47,6 +54,7 @@ public sealed class CheckpointTracker {
         if (_pendingPosition is null)
             _pendingSince = _timeProvider.GetTimestamp();
 
+        _lastPosition = position;
         _pendingPosition = position;
         _pendingCount++;
 

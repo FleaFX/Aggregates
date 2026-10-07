@@ -12,7 +12,6 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
     [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task Restart_ContinuesAfterCheckpoint(HandlerKind kind, Transport transport) {
         Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
-        Assert.SkipWhen(transport == Transport.MSSP, KnownIssues.MsspStartPositionInclusive);
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.Probe(kind);
 
@@ -97,7 +96,7 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
         await AssertHandledOnceAndSettledAsync(store, host, handlers);
     }
 
-    [Theory(Skip = KnownIssues.HostStopsOnSubscriptionError), MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
+    [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task FailingDeserialization_ParksEventAndContinues(HandlerKind kind, Transport transport) {
         Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(transport);
@@ -115,6 +114,45 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
         await Eventually.QuietAsync();
         host.Probe.Events(handler).Should().Equal(new OrderPlaced("order-2", "bob"));
         (await store.ReadAllAsync()).Should().ContainSingle(e => e.Stream.StartsWith("parked-"));
+    }
+
+    [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
+    public async Task UnknownEventType_IsSkipped_NotParked(HandlerKind kind, Transport transport) {
+        Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
+        await using var store = await Stores.StartAsync(transport);
+        var handler = ScenarioHandlers.Probe(kind);
+        await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, handler));
+
+        // The serializer doesn't know this type, so Deserialize returns null.
+        await store.AppendRawAsync("other-1", "IntegrationTests.Unknown@v1", "{}"u8.ToArray());
+        await store.AppendAsync(host.Serialization, "order-2", new OrderPlaced("order-2", "bob"));
+
+        await Eventually.UntilAsync(() => host.Probe.Count(handler) >= 1 || host.Stopping.IsCompleted, "order-2 is handled after the unknown event");
+        await Eventually.QuietAsync();
+        host.Stopping.IsCompleted.Should().BeFalse("the host keeps running");
+        host.Probe.Events(handler).Should().Equal(new OrderPlaced("order-2", "bob"));
+        (await store.ReadAllAsync()).Should().NotContain(e => e.Stream.StartsWith("parked-"));
+    }
+
+    // E9 covers projections; the store can only be interrupted on KurrentDB.
+    [Theory, InlineData(HandlerKind.Policy), InlineData(HandlerKind.Saga)]
+    public async Task StoreInterruption_SubscribesAgain(HandlerKind kind) {
+        Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
+        await using var store = await Stores.StartAsync(Transport.KurrentDB);
+        var handler = ScenarioHandlers.Probe(kind);
+        await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, handler));
+        await store.AppendAsync(host.Serialization, "order-1", new OrderPlaced("order-1", "alice"));
+        await Eventually.UntilAsync(() => host.Probe.Count(handler) >= 1, "order-1 is handled");
+
+        await store.InterruptAsync();
+        await Task.Delay(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        await store.ResumeAsync();
+        await store.AppendAsync(host.Serialization, "order-2", new OrderPlaced("order-2", "bob"));
+
+        await Eventually.UntilAsync(() => host.Probe.Count(handler) >= 2 || host.Stopping.IsCompleted,
+            "order-2 is handled after the interruption", TimeSpan.FromSeconds(60));
+        host.Stopping.IsCompleted.Should().BeFalse("the host keeps running");
+        host.Probe.Events(handler).Should().Equal(new OrderPlaced("order-1", "alice"), new OrderPlaced("order-2", "bob"));
     }
 
     [Theory(Skip = KnownIssues.OneHandlerPerEventType), MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]

@@ -4,14 +4,11 @@ namespace Aggregates.Testing;
 
 /// <summary>
 /// An <see cref="ISubscriptionFactory"/> whose subscriptions yield a fixed list of messages, for
-/// unit testing subscription services without a store.
+/// unit testing subscription services without a store. Like a live subscription, a subscription
+/// starts after <c>fromPosition</c> and waits for cancellation after the last message.
 /// </summary>
-/// <param name="messages">The messages every subscription yields, in order.</param>
-/// <param name="waitAtEnd">
-/// When <see langword="true"/>, a subscription waits for cancellation after the last message,
-/// like a live subscription; otherwise it ends.
-/// </param>
-sealed class FakeSubscriptionFactory(IReadOnlyList<SubscriptionMessage> messages, bool waitAtEnd = false) : ISubscriptionFactory {
+/// <param name="messages">The messages every subscription yields, in order of commit position.</param>
+sealed class FakeSubscriptionFactory(IReadOnlyList<SubscriptionMessage> messages) : ISubscriptionFactory {
     readonly TaskCompletionSource _drained = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     /// <summary>
@@ -29,16 +26,15 @@ sealed class FakeSubscriptionFactory(IReadOnlyList<SubscriptionMessage> messages
 
     /// <inheritdoc/>
     public ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default) =>
-        new Subscription(messages, waitAtEnd, _drained);
+        new Subscription([.. messages.Where(message => fromPosition is null || message.CommitPosition > fromPosition)], _drained);
 
-    sealed class Subscription(IReadOnlyList<SubscriptionMessage> messages, bool waitAtEnd, TaskCompletionSource drained) : ISubscription {
+    sealed class Subscription(IReadOnlyList<SubscriptionMessage> messages, TaskCompletionSource drained) : ISubscription {
         public async IAsyncEnumerator<SubscriptionMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default) {
             foreach (var message in messages)
                 yield return message;
 
             drained.TrySetResult();
-            if (waitAtEnd)
-                await Task.Delay(Timeout.Infinite, cancellationToken);
+            await Task.Delay(Timeout.Infinite, cancellationToken);
         }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

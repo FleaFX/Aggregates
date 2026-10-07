@@ -38,6 +38,10 @@ public static class ServiceCollectionExtensions {
         services.TryAddSingleton(new SubscriptionCheckpointOptions());
         services.TryAddSingleton(TimeProvider.System);
 
+        // Subscription loop — subscribes again after a transient failure
+        services.TryAddSingleton(new SubscriptionResubscribeOptions());
+        services.TryAddSingleton<SubscriptionLoop>();
+
         var registeredProjections = new List<(Type EventType, Type ProjectionType)>();
 
         foreach (var (projectionType, eventType) in

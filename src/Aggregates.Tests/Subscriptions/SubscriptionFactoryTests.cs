@@ -23,7 +23,6 @@ public class SubscriptionFactoryTests(ITestOutputHelper output) {
 
     [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
     public async Task Subscribe_FromPosition_DeliversOnlyLaterEvents(Transport transport) {
-        Assert.SkipWhen(transport == Transport.MSSP, KnownIssues.MsspStartPositionInclusive);
         await using var store = await Stores.StartAsync(transport);
         await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Projections());
         await store.AppendAsync(host.Serialization, "order-1", new OrderPlaced("order-1", "alice"));
@@ -34,6 +33,42 @@ public class SubscriptionFactoryTests(ITestOutputHelper output) {
         var messages = await factory.TakeAsync(first.CommitPosition, false, 1);
 
         messages.Single().Event.Should().Be(new OrderShipped("order-1"));
+    }
+
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task Subscribe_ReportsFailingDeserialize_AndContinues(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        await using var host = await TestHost.StartAsync(store, output, o => o
+            .Events(Orders.EventTypes)
+            .FailDeserializing(typeof(OrderShipped))
+            .Projections());
+        await store.AppendAsync(host.Serialization, "order-1", new OrderShipped("order-1"));
+        await store.AppendAsync(host.Serialization, "order-2", new OrderPlaced("order-2", "bob"));
+
+        var messages = await host.Services.GetRequiredService<ISubscriptionFactory>().TakeAsync(null, false, 2);
+
+        messages[0].Event.Should().BeNull();
+        messages[0].DeserializationError.Should().BeOfType<InvalidOperationException>();
+        messages[1].Event.Should().Be(new OrderPlaced("order-2", "bob"));
+        messages[1].DeserializationError.Should().BeNull();
+        messages[1].CommitPosition.Should().BeGreaterThan(messages[0].CommitPosition);
+    }
+
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task Subscribe_ReportsFailingDeserializeMetadata_AndContinues(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Projections());
+        await store.AppendRawAsync("order-1", host.Serialization.TypeName(typeof(OrderPlaced)),
+            host.Serialization.SerializeData(new OrderPlaced("order-1", "alice")), "not json"u8.ToArray());
+        await store.AppendAsync(host.Serialization, "order-2", new OrderPlaced("order-2", "bob"));
+
+        var messages = await host.Services.GetRequiredService<ISubscriptionFactory>().TakeAsync(null, false, 2);
+
+        messages[0].Event.Should().BeNull();
+        messages[0].Metadata.Should().BeSameAs(EventMetadata.Empty);
+        messages[0].DeserializationError.Should().NotBeNull();
+        messages[1].Event.Should().Be(new OrderPlaced("order-2", "bob"));
+        messages[1].DeserializationError.Should().BeNull();
     }
 
     [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]

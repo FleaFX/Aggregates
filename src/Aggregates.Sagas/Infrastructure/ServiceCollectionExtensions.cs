@@ -41,6 +41,10 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton(new SubscriptionCheckpointOptions());
         builder.Services.TryAddSingleton(TimeProvider.System);
 
+        // Subscription loop — subscribes again after a transient failure
+        builder.Services.TryAddSingleton(new SubscriptionResubscribeOptions());
+        builder.Services.TryAddSingleton<SubscriptionLoop>();
+
         // Per ISaga<,> implementation: register the saga class and its concrete handler
         var registeredSagas = new List<(Type StateType, Type EventType, Type SagaType)>();
 

@@ -34,20 +34,13 @@ public sealed class SubscriptionRetryPolicy(
             } catch (OperationCanceledException) {
                 throw;
             } catch (Exception) when (attempt < options.MaxRetries) {
-                await Task.Delay(Backoff(attempt), cancellationToken);
+                await Task.Delay(
+                    Backoff.Delay(attempt, options.InitialDelay, options.MaxDelay, options.BackoffMultiplier),
+                    cancellationToken);
             } catch (Exception ex) {
                 await parkedMessageSink.ParkAsync(subscriptionId, message, ex, cancellationToken);
                 return;
             }
         }
-    }
-
-    TimeSpan Backoff(int attempt) {
-        var ms = Math.Min(
-            options.InitialDelay.TotalMilliseconds * Math.Pow(options.BackoffMultiplier, attempt - 1),
-            options.MaxDelay.TotalMilliseconds);
-        // ±10% jitter to avoid thundering herd on burst failures.
-        var jitter = ms * 0.1 * (Random.Shared.NextDouble() * 2.0 - 1.0);
-        return TimeSpan.FromMilliseconds(ms + jitter);
     }
 }
