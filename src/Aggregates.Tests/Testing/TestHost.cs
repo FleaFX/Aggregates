@@ -17,6 +17,7 @@ sealed class TestHostOptions {
     internal List<Type> CommandTypes { get; } = [];
     internal List<Type> ProjectionTypes { get; } = [];
     internal List<Type> PolicyTypes { get; } = [];
+    internal List<Type> FailingEventTypes { get; } = [];
     internal bool UseProjections { get; private set; }
     internal bool UsePolicies { get; private set; }
     internal Action<SagasOptions>? ConfigureSagas { get; private set; }
@@ -27,6 +28,14 @@ sealed class TestHostOptions {
     /// </summary>
     public TestHostOptions Events(params Type[] types) {
         EventTypes.AddRange(types);
+        return this;
+    }
+
+    /// <summary>
+    /// Event types whose <c>Deserialize</c> call throws, to simulate a poison event.
+    /// </summary>
+    public TestHostOptions FailDeserializing(params Type[] types) {
+        FailingEventTypes.AddRange(types);
         return this;
     }
 
@@ -124,7 +133,7 @@ sealed class TestHost : IAsyncDisposable {
         configure(options);
 
         var probe = new HandlerProbe();
-        var serialization = new SerializationSetup(probe, options.EventTypes);
+        var serialization = new SerializationSetup(probe, options.EventTypes, options.FailingEventTypes);
 
         var builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();

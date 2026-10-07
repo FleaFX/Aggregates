@@ -22,6 +22,17 @@ sealed class HandlerProbe {
     public int Count<THandler>() => _calls.Count(call => call.Handler == typeof(THandler));
 
     /// <summary>
+    /// The number of calls recorded for handlers of type <paramref name="handlerType"/>.
+    /// </summary>
+    public int Count(Type handlerType) => _calls.Count(call => call.Handler == handlerType);
+
+    /// <summary>
+    /// The events recorded for handlers of type <paramref name="handlerType"/>, in order.
+    /// </summary>
+    public IReadOnlyList<object> Events(Type handlerType) =>
+        [.. from call in _calls where call.Handler == handlerType select call.Event];
+
+    /// <summary>
     /// The events recorded for handlers of type <typeparamref name="THandler"/>, in order.
     /// </summary>
     public IReadOnlyList<object> Events<THandler>() =>

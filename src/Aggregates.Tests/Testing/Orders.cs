@@ -16,9 +16,14 @@ static class Orders {
 }
 
 /// <summary>
-/// Marker for the events of an order.
+/// The events of an order.
 /// </summary>
-interface IOrderEvent;
+interface IOrderEvent {
+    /// <summary>
+    /// The order the event belongs to.
+    /// </summary>
+    string OrderId { get; }
+}
 
 /// <summary>
 /// An order was placed.

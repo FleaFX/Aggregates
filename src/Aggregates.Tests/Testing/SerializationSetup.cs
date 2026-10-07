@@ -16,17 +16,20 @@ sealed class SerializationSetup {
     readonly HandlerProbe _probe;
     readonly Dictionary<string, Type> _byName = [];
     readonly Dictionary<Type, string> _byType = [];
+    readonly HashSet<string> _failing = [];
 
     /// <summary>
     /// Creates a setup that knows <paramref name="eventTypes"/>.
     /// </summary>
-    public SerializationSetup(HandlerProbe probe, IEnumerable<Type> eventTypes) {
+    public SerializationSetup(HandlerProbe probe, IEnumerable<Type> eventTypes, IEnumerable<Type>? failingTypes = null) {
         _probe = probe;
         foreach (var type in eventTypes) {
             var name = type.GetCustomAttribute<EventContractAttribute>()?.ToString() ?? type.Name;
             _byName.Add(name, type);
             _byType.Add(type, name);
         }
+        foreach (var type in failingTypes ?? [])
+            _failing.Add(TypeName(type));
     }
 
     /// <summary>
@@ -43,9 +46,12 @@ sealed class SerializationSetup {
 
     /// <summary>
     /// Deserializes a stored event, or returns <see langword="null"/> for an unknown event type.
+    /// Throws for the event types the setup was told to fail on.
     /// </summary>
     public object? Deserialize(string eventType, ReadOnlyMemory<byte> data) {
         _probe.RecordDeserialize(eventType);
+        if (_failing.Contains(eventType))
+            throw new InvalidOperationException($"Deserializing {eventType} fails on purpose.");
         return _byName.TryGetValue(eventType, out var type) ? JsonSerializer.Deserialize(data.Span, type) : null;
     }
 
