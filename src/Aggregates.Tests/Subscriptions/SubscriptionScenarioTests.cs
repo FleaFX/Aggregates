@@ -12,7 +12,6 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
     [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task Restart_ContinuesAfterCheckpoint(HandlerKind kind, Transport transport) {
         Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
-        Assert.SkipWhen(transport == Transport.MSSP, KnownIssues.MsspStartPositionInclusive);
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.Probe(kind);
 

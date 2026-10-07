@@ -23,7 +23,6 @@ public class SubscriptionFactoryTests(ITestOutputHelper output) {
 
     [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
     public async Task Subscribe_FromPosition_DeliversOnlyLaterEvents(Transport transport) {
-        Assert.SkipWhen(transport == Transport.MSSP, KnownIssues.MsspStartPositionInclusive);
         await using var store = await Stores.StartAsync(transport);
         await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Projections());
         await store.AppendAsync(host.Serialization, "order-1", new OrderPlaced("order-1", "alice"));

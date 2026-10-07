@@ -19,9 +19,4 @@ static class KnownIssues {
     /// Registration is keyed by the event type.
     /// </summary>
     public const string OneHandlerPerEventType = "Only the first handler of a kind is resolved for an event type; the second never runs";
-
-    /// <summary>
-    /// MSSP's subscription start position is inclusive.
-    /// </summary>
-    public const string MsspStartPositionInclusive = "MSSP treats the subscription start position as inclusive, so the event at the checkpoint is delivered again";
 }

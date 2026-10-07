@@ -20,7 +20,9 @@ public sealed class MsspSubscriptionFactory(IMsspClient client, MsspOptions opti
     /// <inheritdoc />
     public ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default) {
         var from = (fromPosition, startFromEnd) switch {
-            ({} pos, _) => new GlobalPosition(pos),
+            // MSSP starts at the given position (inclusive) and positions are consecutive, so the
+            // first event after the exclusive fromPosition is at pos + 1.
+            ({} pos, _) => new GlobalPosition(pos + 1),
             (null, true) => GlobalPosition.End,
             _ => GlobalPosition.Start
         };
