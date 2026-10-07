@@ -126,7 +126,7 @@ services
     });
 ```
 
-`ScanAssemblies` discovers all `ICommand<TState, TEvent>` implementations in the given assemblies and registers a handler for each.
+`ScanAssemblies` discovers all `ICommand<TState, TEvent>` implementations in the given assemblies and registers a handler for each. To register an explicit set of commands instead, use `ScanTypes(typeof(AddItem), ...)`; `AddSagas`, `AddPolicies` and `AddProjections` offer the same choice.
 
 ---
 
@@ -311,3 +311,28 @@ services
 ```
 
 `ScanAssemblies` discovers all `IProjection<TEvent>` implementations and registers a subscription hosted service for each. `AddKurrentDb`/`AddMssp` supplies the `ISubscriptionFactory` and `ICheckpointStore`.
+
+---
+
+## Running the tests
+
+```bash
+dotnet test src/Aggregates.slnx
+```
+
+The integration tests run against real stores and need Docker: KurrentDB and SQL Server are started in containers through [Testcontainers](https://dotnet.testcontainers.org/), and MSSP runs embedded. Without Docker, they fail rather than being skipped. To run only the unit tests:
+
+```bash
+dotnet test src/Aggregates.slnx --filter "Category!=Integration"
+```
+
+Integration tests are marked with `[Trait("Category", "Integration")]`. Tests for known bugs are skipped; the reasons are listed in `src/Aggregates.Tests/Testing/KnownIssues.cs`.
+
+## Releasing
+
+Packages are published to NuGet from tags only:
+
+1. Bump `VersionPrefix`/`VersionSuffix` in `src/Directory.Build.props` and merge to `main`.
+2. Tag that commit with `v<version>` (e.g. `v1.0.0`) and push the tag.
+
+The publish workflow runs the full build and test suite, and fails when the tag doesn't match the version.
