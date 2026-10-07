@@ -82,7 +82,7 @@ sealed class MsspStoreFixture : IStoreFixture {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(Eventually.DefaultTimeout);
         await foreach (var e in _client.SubscribeAsync(SubscriptionFilter.All, GlobalPosition.Start, timeout.Token)) {
-            events.Add(new StoredEvent(e.StreamId.Value, e.EventType, e.Position.Value, e.Data));
+            events.Add(new StoredEvent(e.StreamId.Value, e.EventType, e.Position.Value, e.Data, e.Metadata));
             if (e.Position >= end)
                 break;
         }

@@ -17,6 +17,8 @@ sealed class TestHostOptions {
     internal List<Type> CommandTypes { get; } = [];
     internal List<Type> ProjectionTypes { get; } = [];
     internal List<Type> PolicyTypes { get; } = [];
+    internal bool UseProjections { get; private set; }
+    internal bool UsePolicies { get; private set; }
     internal Action<SagasOptions>? ConfigureSagas { get; private set; }
     internal Action<IServiceCollection>? ConfigureServices { get; private set; }
 
@@ -37,17 +39,21 @@ sealed class TestHostOptions {
     }
 
     /// <summary>
-    /// The projections to register, each with its subscription.
+    /// The projections to register, each with its subscription. Without types, only the
+    /// transport's subscription infrastructure is registered.
     /// </summary>
     public TestHostOptions Projections(params Type[] types) {
+        UseProjections = true;
         ProjectionTypes.AddRange(types);
         return this;
     }
 
     /// <summary>
-    /// The policies to register, each with its subscription.
+    /// The policies to register, each with its subscription. Without types, only the
+    /// transport's subscription infrastructure is registered.
     /// </summary>
     public TestHostOptions Policies(params Type[] types) {
+        UsePolicies = true;
         PolicyTypes.AddRange(types);
         return this;
     }
@@ -81,9 +87,10 @@ sealed class TestHost : IAsyncDisposable {
     readonly IHost _host;
     readonly TaskCompletionSource _stopping = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    TestHost(IHost host, HandlerProbe probe) {
+    TestHost(IHost host, HandlerProbe probe, SerializationSetup serialization) {
         _host = host;
         Probe = probe;
+        Serialization = serialization;
         host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.Register(() => _stopping.TrySetResult());
     }
 
@@ -91,6 +98,11 @@ sealed class TestHost : IAsyncDisposable {
     /// What the scenario's handlers and the serializer did in this host.
     /// </summary>
     public HandlerProbe Probe { get; }
+
+    /// <summary>
+    /// The serialization the host uses, for writing or reading events outside of Aggregates.
+    /// </summary>
+    public SerializationSetup Serialization { get; }
 
     /// <summary>
     /// The host's root service provider.
@@ -131,9 +143,9 @@ sealed class TestHost : IAsyncDisposable {
         var aggregates = builder.Services.AddAggregates(o => o.ScanTypes([.. options.CommandTypes]));
         store.ConfigureAggregates(aggregates, serialization);
 
-        if (options.ProjectionTypes.Count > 0)
+        if (options.UseProjections)
             store.ConfigureProjections(builder.Services.AddProjections(o => o.ScanTypes([.. options.ProjectionTypes])));
-        if (options.PolicyTypes.Count > 0)
+        if (options.UsePolicies)
             store.ConfigurePolicies(aggregates.AddPolicies(o => o.ScanTypes([.. options.PolicyTypes])));
         if (options.ConfigureSagas is { } configureSagas)
             store.ConfigureSagas(aggregates.AddSagas(configureSagas));
@@ -142,7 +154,7 @@ sealed class TestHost : IAsyncDisposable {
 
         var host = builder.Build();
         await host.StartAsync(TestContext.Current.CancellationToken);
-        return new TestHost(host, probe);
+        return new TestHost(host, probe, serialization);
     }
 
     /// <summary>

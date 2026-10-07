@@ -79,7 +79,7 @@ sealed class KurrentDbStoreFixture : IStoreFixture {
             var record = resolved.Event;
             if (record.EventStreamId.StartsWith('$'))
                 continue;
-            events.Add(new StoredEvent(record.EventStreamId, record.EventType, record.Position.CommitPosition, record.Data));
+            events.Add(new StoredEvent(record.EventStreamId, record.EventType, record.Position.CommitPosition, record.Data, record.Metadata));
         }
         return events;
     }

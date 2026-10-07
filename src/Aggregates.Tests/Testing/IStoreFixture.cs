@@ -26,7 +26,8 @@ public enum Transport {
 /// <param name="EventType">The stored event type name.</param>
 /// <param name="Position">The global position of the event.</param>
 /// <param name="Data">The stored payload.</param>
-sealed record StoredEvent(string Stream, string EventType, ulong Position, ReadOnlyMemory<byte> Data);
+/// <param name="Metadata">The stored metadata; empty when none was written.</param>
+sealed record StoredEvent(string Stream, string EventType, ulong Position, ReadOnlyMemory<byte> Data, ReadOnlyMemory<byte> Metadata);
 
 /// <summary>
 /// A fresh event store for a single test, and the transport-specific wiring of the Aggregates
