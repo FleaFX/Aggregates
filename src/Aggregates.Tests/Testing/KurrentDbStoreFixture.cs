@@ -1,4 +1,5 @@
 using Aggregates.KurrentDB;
+using Docker.DotNet.Models;
 using Aggregates.Policies;
 using Aggregates.Policies.KurrentDB;
 using Aggregates.Projections;
@@ -31,6 +32,12 @@ sealed class KurrentDbStoreFixture : IStoreFixture {
     public static async Task<KurrentDbStoreFixture> StartAsync() {
         var container = new KurrentDbContainerBuilder(TestImages.KurrentDb)
             .WithEnvironment("KURRENTDB_MEM_DB", "true")
+            .WithEnvironment("KURRENTDB_RUN_PROJECTIONS", "None")
+            .WithEnvironment("KURRENTDB_START_STANDARD_PROJECTIONS", "false")
+            // The image checks health every 5 s, which dominates the start-up time. Probe faster during
+            // a start period instead (the check itself is inherited); failures in that period do not
+            // count towards the failing streak that makes Testcontainers give up.
+            .WithCreateParameterModifier(p => p.Healthcheck = new HealthcheckConfig { StartPeriod = TimeSpan.FromSeconds(60), StartInterval = TimeSpan.FromMilliseconds(250) })
             .Build();
         await container.StartAsync(TestContext.Current.CancellationToken);
 

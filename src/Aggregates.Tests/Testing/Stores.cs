@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Aggregates.Testing;
 
 /// <summary>
@@ -12,9 +14,14 @@ public static class Stores {
     /// <summary>
     /// Starts a fresh, empty store for <paramref name="transport"/>.
     /// </summary>
-    internal static async Task<IStoreFixture> StartAsync(Transport transport) => transport switch {
-        Transport.KurrentDB => await KurrentDbStoreFixture.StartAsync(),
-        Transport.MSSP => await MsspStoreFixture.StartAsync(),
-        _ => throw new ArgumentOutOfRangeException(nameof(transport), transport, null)
-    };
+    internal static async Task<IStoreFixture> StartAsync(Transport transport) {
+        var stopwatch = Stopwatch.StartNew();
+        IStoreFixture store = transport switch {
+            Transport.KurrentDB => await KurrentDbStoreFixture.StartAsync(),
+            Transport.MSSP => await MsspStoreFixture.StartAsync(),
+            _ => throw new ArgumentOutOfRangeException(nameof(transport), transport, null)
+        };
+        TestContext.Current.TestOutputHelper?.WriteLine($"{transport} store started in {stopwatch.ElapsedMilliseconds} ms");
+        return store;
+    }
 }
