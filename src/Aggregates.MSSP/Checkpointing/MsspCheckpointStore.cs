@@ -8,8 +8,13 @@ namespace Aggregates.MSSP;
 /// An <see cref="ICheckpointStore"/> implementation that stores checkpoint positions in MSSP.
 /// Each subscription gets its own stream in the format <c>checkpoint-{subscriptionId}</c>.
 /// </summary>
+/// <remarks>
+/// Checkpoint events use the <c>$aggregates-checkpoint</c> event type. Events whose type starts
+/// with <c>$</c> are never delivered to subscriptions, so storing a checkpoint does not feed
+/// back into the subscriptions that produce them.
+/// </remarks>
 public sealed class MsspCheckpointStore(IMsspClient client) : ICheckpointStore {
-    const string CheckpointEventType = "CheckpointStored";
+    const string CheckpointEventType = "$aggregates-checkpoint";
 
     /// <inheritdoc />
     public async ValueTask<ulong?> GetAsync(string subscriptionId, CancellationToken cancellationToken = default) {

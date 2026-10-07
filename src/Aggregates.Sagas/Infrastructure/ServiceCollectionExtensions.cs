@@ -37,6 +37,10 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton(new SubscriptionErrorHandlingOptions());
         builder.Services.TryAddSingleton<SubscriptionRetryPolicy>();
 
+        // Subscription checkpointing — positions are written in batches
+        builder.Services.TryAddSingleton(new SubscriptionCheckpointOptions());
+        builder.Services.TryAddSingleton(TimeProvider.System);
+
         // Per ISaga<,> implementation: register the saga class and its concrete handler
         var registeredSagas = new List<(Type StateType, Type EventType, Type SagaType)>();
 

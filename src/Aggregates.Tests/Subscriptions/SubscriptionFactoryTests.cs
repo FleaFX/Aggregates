@@ -37,6 +37,18 @@ public class SubscriptionFactoryTests(ITestOutputHelper output) {
     }
 
     [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task Subscribe_SkipsEventsWithSystemEventType(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Projections());
+        await store.AppendRawAsync("checkpoint-subscription-1", "$aggregates-checkpoint", new byte[sizeof(ulong)]);
+        await store.AppendAsync(host.Serialization, "order-1", new OrderPlaced("order-1", "alice"));
+
+        var messages = await host.Services.GetRequiredService<ISubscriptionFactory>().TakeAsync(null, false, 1);
+
+        messages.Single().Event.Should().Be(new OrderPlaced("order-1", "alice"));
+    }
+
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
     public async Task Subscribe_FromEnd_DeliversOnlyNewEvents(Transport transport) {
         await using var store = await Stores.StartAsync(transport);
         await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Projections());

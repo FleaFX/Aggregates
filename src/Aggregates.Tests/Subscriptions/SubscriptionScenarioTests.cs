@@ -1,5 +1,6 @@
 using Aggregates.Testing;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates.Subscriptions;
 
@@ -11,7 +12,6 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
     [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task Restart_ContinuesAfterCheckpoint(HandlerKind kind, Transport transport) {
         Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
-        // Passes on MSSP today only because checkpoint events move the checkpoint past order-1.
         Assert.SkipWhen(transport == Transport.MSSP, KnownIssues.MsspStartPositionInclusive);
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.Probe(kind);
@@ -19,7 +19,7 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
         await using (var first = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, handler))) {
             await store.AppendAsync(first.Serialization, "order-1", new OrderPlaced("order-1", "alice"));
             await Eventually.UntilAsync(() => first.Probe.Count(handler) >= 1, "the first host handles order-1");
-            // Give the subscription time to store the checkpoint after handling.
+            // Let the handling of order-1 complete; its checkpoint is written when the host stops.
             await Eventually.QuietAsync();
         }
 
@@ -69,24 +69,28 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
         host.Stopping.IsCompleted.Should().BeFalse("the host keeps running");
     }
 
-    [Theory(Skip = KnownIssues.CheckpointFeedback), MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
+    [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task SingleEvent_IsHandledOnce_AndCheckpointsSettle(HandlerKind kind, Transport transport) {
         Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.Probe(kind);
-        await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, handler));
+        await using var host = await TestHost.StartAsync(store, output, o => o
+            .Events(Orders.EventTypes)
+            .Handlers(kind, handler)
+            .Services(CheckpointEveryMessage));
 
         await AssertHandledOnceAndSettledAsync(store, host, [handler]);
     }
 
-    [Theory(Skip = KnownIssues.CheckpointFeedback), MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
     public async Task SingleEvent_IsHandledOnceByEachKind_AndCheckpointsSettle(Transport transport) {
-        Assert.Skip(KnownIssues.SagaEventCopies);
+        // The saga joins once its event copies no longer reach the other subscriptions.
+        HandlerKind[] kinds = [HandlerKind.Projection, HandlerKind.Policy];
         await using var store = await Stores.StartAsync(transport);
-        var handlers = Enum.GetValues<HandlerKind>().Select(ScenarioHandlers.Probe).ToArray();
+        var handlers = kinds.Select(ScenarioHandlers.Probe).ToArray();
         await using var host = await TestHost.StartAsync(store, output, o => {
-            o.Events(Orders.EventTypes);
-            foreach (var kind in Enum.GetValues<HandlerKind>())
+            o.Events(Orders.EventTypes).Services(CheckpointEveryMessage);
+            foreach (var kind in kinds)
                 o.Handlers(kind, ScenarioHandlers.Probe(kind));
         });
 
@@ -129,21 +133,32 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
         host.Probe.Count(second).Should().Be(1);
     }
 
+    // Without batching every message writes a checkpoint, so a checkpoint event that is delivered
+    // again shows up as a growing checkpoint stream.
+    static void CheckpointEveryMessage(IServiceCollection services) =>
+        services.AddSingleton(new SubscriptionCheckpointOptions { MaxBatchSize = 1 });
+
     static async Task AssertHandledOnceAndSettledAsync(IStoreFixture store, TestHost host, Type[] handlers) {
         await store.AppendAsync(host.Serialization, "order-1", new OrderPlaced("order-1", "alice"));
 
         await Eventually.UntilAsync(() => handlers.All(h => host.Probe.Count(h) >= 1), "every handler handles order-1");
+        await Eventually.UntilAsync(async () => (await CountCheckpointsAsync(store)).Count == handlers.Length,
+            "every subscription checkpoints order-1");
         var checkpointsBefore = await CountCheckpointsAsync(store);
         await Eventually.QuietAsync();
         var checkpointsAfter = await CountCheckpointsAsync(store);
 
         foreach (var handler in handlers)
             host.Probe.Count(handler).Should().Be(1, $"{handler.Name} handles order-1 once");
-        checkpointsAfter.Should().Be(checkpointsBefore, "an idle store does not get new checkpoints");
+        checkpointsAfter.Should().Equal(checkpointsBefore, "an idle store does not get new checkpoints");
+        checkpointsAfter.Values.Should().OnlyContain(count => count == 1, "each subscription checkpoints order-1 and nothing else");
         host.Probe.DeserializeCalls.Keys.Should().BeSubsetOf(Orders.EventTypes.Select(host.Serialization.TypeName),
             "only domain events are deserialized");
     }
 
-    static async Task<int> CountCheckpointsAsync(IStoreFixture store) =>
-        (await store.ReadAllAsync()).Count(e => e.Stream.StartsWith("checkpoint-"));
+    static async Task<Dictionary<string, int>> CountCheckpointsAsync(IStoreFixture store) =>
+        (await store.ReadAllAsync())
+            .Where(e => e.Stream.StartsWith("checkpoint-"))
+            .CountBy(e => e.Stream)
+            .ToDictionary();
 }

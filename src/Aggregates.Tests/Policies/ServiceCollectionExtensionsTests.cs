@@ -1,3 +1,4 @@
+using Aggregates.Subscriptions;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -47,6 +48,31 @@ public class ServiceCollectionExtensionsTests {
                 d.ServiceType == typeof(IPolicy<PolicyTestEvent>) && d.ImplementationType == typeof(TestPolicy));
             services.Should().ContainSingle(d =>
                 d.ServiceType == typeof(IPolicy<OtherPolicyTestEvent>) && d.ImplementationType == typeof(OtherTestPolicy));
+        }
+
+        [Fact]
+        public void RegistersDefaultCheckpointOptionsAndSystemTimeProvider() {
+            var services = new ServiceCollection();
+
+            services.AddAggregates().AddPolicies();
+
+            using var provider = services.BuildServiceProvider();
+            var options = provider.GetRequiredService<SubscriptionCheckpointOptions>();
+            options.MaxBatchSize.Should().Be(100);
+            options.MaxInterval.Should().Be(TimeSpan.FromSeconds(5));
+            provider.GetRequiredService<TimeProvider>().Should().BeSameAs(TimeProvider.System);
+        }
+
+        [Fact]
+        public void KeepsCheckpointOptionsRegisteredBefore() {
+            var services = new ServiceCollection();
+            var options = new SubscriptionCheckpointOptions { MaxBatchSize = 10 };
+            services.AddSingleton(options);
+
+            services.AddAggregates().AddPolicies();
+
+            services.Should().ContainSingle(d => d.ServiceType == typeof(SubscriptionCheckpointOptions))
+                .Which.ImplementationInstance.Should().BeSameAs(options);
         }
     }
 }

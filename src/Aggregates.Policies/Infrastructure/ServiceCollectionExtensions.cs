@@ -35,6 +35,10 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton(new SubscriptionErrorHandlingOptions());
         builder.Services.TryAddSingleton<SubscriptionRetryPolicy>();
 
+        // Subscription checkpointing — positions are written in batches
+        builder.Services.TryAddSingleton(new SubscriptionCheckpointOptions());
+        builder.Services.TryAddSingleton(TimeProvider.System);
+
         var registeredPolicies = new List<(Type EventType, Type PolicyType)>();
 
         foreach (var (policyType, eventType) in
