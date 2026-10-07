@@ -141,6 +141,46 @@ public class CheckpointTrackerTests {
         }
     }
 
+    public class LastPosition : CheckpointTrackerTests {
+        [Fact]
+        public void GivenNoMessage_IsNull() {
+            BuildTracker().LastPosition.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task GivenUnwrittenPositions_IsLastRecordedPosition() {
+            var tracker = BuildTracker(maxBatchSize: 3);
+
+            await tracker.AdvanceAsync(1, Token);
+            await tracker.AdvanceAsync(2, Token);
+
+            tracker.LastPosition.Should().Be(2UL);
+            A.CallTo(() => _store.StoreAsync(A<string>._, A<ulong>._, A<CancellationToken>._)).MustNotHaveHappened();
+        }
+
+        [Fact]
+        public async Task GivenWrittenPosition_IsKept() {
+            var tracker = BuildTracker();
+            await tracker.AdvanceAsync(1, Token);
+
+            await tracker.FlushAsync(Token);
+
+            tracker.LastPosition.Should().Be(1UL);
+        }
+
+        [Fact]
+        public async Task GivenFailedWrite_IsKept() {
+            var tracker = BuildTracker(maxBatchSize: 1);
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 1UL, A<CancellationToken>._))
+                .ThrowsAsync(new InvalidOperationException("store unavailable"));
+
+            var act = async () => await tracker.AdvanceAsync(1, Token);
+            await act.Should().ThrowAsync<InvalidOperationException>();
+
+            tracker.LastPosition.Should().Be(1UL);
+        }
+    }
+
     public class Constructor : CheckpointTrackerTests {
         [Fact]
         public void GivenMaxBatchSizeBelowOne_Throws() {
