@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions {
     /// Optional configuration callback. Use <see cref="ProjectionsOptions.ScanAssemblies"/> to
     /// automatically register a handler for every <see cref="IProjection{TEvent}"/> implementation
     /// found in those assemblies.
+    /// Use <see cref="ProjectionsOptions.ScanTypes"/> instead to register an explicit set of types.
     /// </param>
     public static IProjectionsBuilder AddProjections(this IServiceCollection services, Action<ProjectionsOptions>? configure = null) {
         var options = new ProjectionsOptions();
@@ -36,8 +37,7 @@ public static class ServiceCollectionExtensions {
         var registeredProjections = new List<(Type EventType, Type ProjectionType)>();
 
         foreach (var (projectionType, eventType) in
-            from assembly in options.Assemblies
-            from type in assembly.GetTypes()
+            from type in options.Types.Distinct()
             where !type.IsAbstract
             from @interface in type.GetInterfaces()
             where @interface.IsGenericType

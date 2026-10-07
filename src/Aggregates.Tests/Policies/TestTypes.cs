@@ -10,3 +10,10 @@ class TestPolicy : IPolicy<PolicyTestEvent> {
     public IAsyncEnumerable<ICommand> ReactAsync(PolicyTestEvent @event, CancellationToken cancellationToken = default) =>
         AsyncEnumerable.Empty<ICommand>();
 }
+
+record struct OtherPolicyTestEvent(int Value);
+
+class OtherTestPolicy : IPolicy<OtherPolicyTestEvent> {
+    public IAsyncEnumerable<ICommand> ReactAsync(OtherPolicyTestEvent @event, CancellationToken cancellationToken = default) =>
+        AsyncEnumerable.Empty<ICommand>();
+}

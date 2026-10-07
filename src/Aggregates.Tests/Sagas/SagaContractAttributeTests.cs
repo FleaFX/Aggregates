@@ -4,7 +4,7 @@ namespace Aggregates.Sagas;
 
 public class SagaContractAttributeTests {
 
-    public class ToString {
+    public new class ToString {
         [Fact]
         public void WithNameOnly_ReturnsNameAtVersion1() {
             var attr = new SagaContractAttribute("OrderFulfillment");

@@ -1,25 +1,34 @@
 name: Publish package
 
+# Releasing: bump VersionPrefix/VersionSuffix in src/Directory.Build.props, merge, then push a
+# tag "v<version>" (e.g. v1.0.0 or v1.0.0-preview.7) on that commit.
 on:
-    workflow_run:
-        workflows: ["Build & test"]
-        branches: [ "main" ]
-        types:
-        - completed
+    push:
+        tags: [ "v*" ]
 
 jobs:
-    publish:
+    test:
+        uses: ./.github/workflows/build.yml
 
+    publish:
+        needs: test
         runs-on: ubuntu-latest
-        if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
         steps:
-        - uses: actions/checkout@v4
+        - uses: actions/checkout@v7
 
         - name: Setup .NET
-          uses: actions/setup-dotnet@v4
+          uses: actions/setup-dotnet@v6
           with:
             dotnet-version: '10.0.x'
+
+        - name: Verify tag matches version
+          run: |
+            version=$(dotnet msbuild src/Aggregates/Aggregates.csproj -getProperty:Version)
+            if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match version v$version in src/Directory.Build.props"
+              exit 1
+            fi
 
         - name: Restore packages
           run: dotnet restore src/Aggregates.slnx

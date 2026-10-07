@@ -5,6 +5,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Aggregates.Projections.MSSP;
 
+/// <summary>
+/// Extension methods for registering <c>Aggregates.Projections.MSSP</c> with an
+/// <see cref="IServiceCollection"/>.
+/// </summary>
 public static class ServiceCollectionExtensions {
     /// <summary>
     /// Adds the MSSP subscription infrastructure for projections.

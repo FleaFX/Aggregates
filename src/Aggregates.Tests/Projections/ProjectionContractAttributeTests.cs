@@ -4,7 +4,7 @@ namespace Aggregates.Projections;
 
 public class ProjectionContractAttributeTests {
 
-    public class ToString {
+    public new class ToString {
         [Fact]
         public void WithNameOnly_ReturnsNameAtVersion1() {
             var attr = new ProjectionContractAttribute("Orders");

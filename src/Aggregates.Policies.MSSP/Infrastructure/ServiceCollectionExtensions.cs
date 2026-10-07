@@ -5,6 +5,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Aggregates.Policies.MSSP;
 
+/// <summary>
+/// Extension methods for registering <c>Aggregates.Policies.MSSP</c> with an
+/// <see cref="IServiceCollection"/>.
+/// </summary>
 public static class ServiceCollectionExtensions {
     /// <summary>
     /// Adds the MSSP subscription infrastructure for policies.

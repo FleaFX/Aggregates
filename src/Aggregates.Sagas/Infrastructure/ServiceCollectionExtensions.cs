@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions {
     /// Optional configuration callback. Use <see cref="SagasOptions.ScanAssemblies"/> to
     /// automatically register a handler for every <see cref="ISaga{TSagaState,TEvent}"/>
     /// implementation found in those assemblies.
+    /// Use <see cref="SagasOptions.ScanTypes"/> instead to register an explicit set of types.
     /// </param>
     public static ISagasBuilder AddSagas(this IAggregatesBuilder builder, Action<SagasOptions>? configure = null) {
         var options = new SagasOptions();
@@ -40,8 +41,7 @@ public static class ServiceCollectionExtensions {
         var registeredSagas = new List<(Type StateType, Type EventType, Type SagaType)>();
 
         foreach (var (sagaType, stateType, eventType) in
-            from assembly in options.Assemblies
-            from type in assembly.GetTypes()
+            from type in options.Types.Distinct()
             where !type.IsAbstract
             from @interface in type.GetInterfaces()
             where @interface.IsGenericType
