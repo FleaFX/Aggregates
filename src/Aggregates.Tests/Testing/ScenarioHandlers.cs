@@ -126,30 +126,30 @@ static class ScenarioHandlers {
         }
     }
 
-    [ProjectionContract("Probe", @namespace: "IntegrationTests")]
+    [ProjectionContract("Probe", @namespace: "IntegrationTests.Projections")]
     sealed class ProbeProjection(HandlerProbe probe) : ProjectionBase(probe);
 
-    [ProjectionContract("SecondProbe", @namespace: "IntegrationTests")]
+    [ProjectionContract("SecondProbe", @namespace: "IntegrationTests.Projections")]
     sealed class SecondProbeProjection(HandlerProbe probe) : ProjectionBase(probe);
 
-    [ProjectionContract("FromEndProbe", @namespace: "IntegrationTests", startFromEnd: true)]
+    [ProjectionContract("FromEndProbe", @namespace: "IntegrationTests.Projections", startFromEnd: true)]
     sealed class FromEndProjection(HandlerProbe probe) : ProjectionBase(probe);
 
-    [PolicyContract("Probe", @namespace: "IntegrationTests")]
+    [PolicyContract("Probe", @namespace: "IntegrationTests.Policies")]
     sealed class ProbePolicy(HandlerProbe probe) : PolicyBase(probe);
 
-    [PolicyContract("SecondProbe", @namespace: "IntegrationTests")]
+    [PolicyContract("SecondProbe", @namespace: "IntegrationTests.Policies")]
     sealed class SecondProbePolicy(HandlerProbe probe) : PolicyBase(probe);
 
-    [PolicyContract("FromEndProbe", @namespace: "IntegrationTests", startFromEnd: true)]
+    [PolicyContract("FromEndProbe", @namespace: "IntegrationTests.Policies", startFromEnd: true)]
     sealed class FromEndPolicy(HandlerProbe probe) : PolicyBase(probe);
 
-    [SagaContract("Probe", @namespace: "IntegrationTests")]
+    [SagaContract("Probe", @namespace: "IntegrationTests.Sagas")]
     sealed class ProbeSaga(HandlerProbe probe) : SagaBase(probe);
 
-    [SagaContract("SecondProbe", @namespace: "IntegrationTests")]
+    [SagaContract("SecondProbe", @namespace: "IntegrationTests.Sagas")]
     sealed class SecondProbeSaga(HandlerProbe probe) : SagaBase(probe);
 
-    [SagaContract("FromEndProbe", @namespace: "IntegrationTests", startFromEnd: true)]
+    [SagaContract("FromEndProbe", @namespace: "IntegrationTests.Sagas", startFromEnd: true)]
     sealed class FromEndSaga(HandlerProbe probe) : SagaBase(probe);
 }

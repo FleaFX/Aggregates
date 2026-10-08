@@ -6,7 +6,8 @@ namespace Aggregates.Projections;
 public class ProjectionHandlerTests {
 
     public class HandleAsync {
-        static ProjectionHandler<TestProjection, ProjectionTestEvent> BuildHandler(
+        // The interface itself as TProjection, so the projection can be faked.
+        static ProjectionHandler<IProjection<ProjectionTestEvent>, ProjectionTestEvent> BuildHandler(
             IProjection<ProjectionTestEvent> projection) =>
             new(projection);
 
