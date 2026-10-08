@@ -26,7 +26,7 @@ public class SagaRepositoryTests(ITestOutputHelper output) {
 
     static async Task HandleAsync(TestHost host, IOrderEvent @event) {
         await using var scope = host.Services.CreateAsyncScope();
-        await scope.ServiceProvider.GetRequiredService<ISagaHandler<CountingState, IOrderEvent>>()
+        await scope.ServiceProvider.GetRequiredService<LoggingSagaHandler<CountingSaga, CountingState, IOrderEvent>>()
             .HandleAsync("saga-1", @event, TestContext.Current.CancellationToken);
     }
 
