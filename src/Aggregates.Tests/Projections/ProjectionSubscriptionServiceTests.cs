@@ -11,19 +11,24 @@ public class ProjectionSubscriptionServiceTests {
     const string SubscriptionId = "sub-1";
 
     readonly ICheckpointStore _store = A.Fake<ICheckpointStore>();
-    readonly IProjectionHandler<ProjectionTestEvent> _handler = A.Fake<IProjectionHandler<ProjectionTestEvent>>();
+    readonly IProjection<ProjectionTestEvent> _handler = A.Fake<IProjection<ProjectionTestEvent>>();
 
     static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    ProjectionSubscriptionService<ProjectionTestEvent> BuildService(FakeSubscriptionFactory factory) {
+    // The interface itself as TProjection, so the projection can be faked behind the real handler chain.
+    ProjectionSubscriptionService<IProjection<ProjectionTestEvent>, ProjectionTestEvent> BuildService(FakeSubscriptionFactory factory) {
         var parkedMessageSink = A.Fake<IParkedMessageSink>();
+        var services = new ServiceCollection()
+            .AddLogging()
+            .AddSingleton(_handler)
+            .AddScoped(typeof(LoggingProjectionHandler<,>))
+            .AddScoped(typeof(ProjectionHandler<,>));
         return new(
             new SubscriptionLoop(factory, _store, parkedMessageSink, new SubscriptionCheckpointOptions(),
                 new SubscriptionResubscribeOptions(), TimeProvider.System, NullLogger<SubscriptionLoop>.Instance),
-            new ServiceCollection().AddSingleton(_handler).BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             new SubscriptionRetryPolicy(parkedMessageSink, new SubscriptionErrorHandlingOptions()),
-            SubscriptionId,
-            startFromEnd: false);
+            new SubscriptionRegistration(SubscriptionId, typeof(TestProjection), typeof(ProjectionTestEvent), StartFromEnd: false));
     }
 
     IEnumerable<ulong> StoredPositions() =>
@@ -41,8 +46,8 @@ public class ProjectionSubscriptionServiceTests {
         await factory.Drained.WaitAsync(Token);
         await service.StopAsync(Token);
 
-        A.CallTo(() => _handler.HandleAsync(A<ProjectionTestEvent>._, A<EventMetadata>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
-        A.CallTo(() => _handler.HandleAsync(new ProjectionTestEvent(1), A<EventMetadata>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _handler.ProjectAsync(A<ProjectionTestEvent>._, A<EventMetadata>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _handler.ProjectAsync(new ProjectionTestEvent(1), A<EventMetadata>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
         StoredPositions().Should().Equal(100UL, 200UL, 251UL);
     }
 

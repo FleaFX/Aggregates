@@ -4,57 +4,60 @@ using FluentAssertions;
 namespace Aggregates.Sagas;
 
 public class RetrySagaHandlerTests {
+    // The repository is the first thing the innermost handler calls, so it stands in for the inner handler.
+    readonly ISagaRepository<TestSagaState, TestEvent> _repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
+    readonly ISaga<TestSagaState, TestEvent> _saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
+
+    public RetrySagaHandlerTests() {
+        A.CallTo(() => _repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
+        A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(AsyncEnumerable.Empty<ICommand>());
+    }
+
     [Fact]
     public async Task GivenSuccessOnFirstAttempt_InvokesInnerOnce() {
-        var inner = A.Fake<SagaHandler<TestSagaState, TestEvent>>();
-        var handler = BuildHandler(inner, maxAttempts: 3);
+        await BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
 
-        await handler.HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
-
-        A.CallTo(() => inner.HandleAsync(A<AggregateIdentifier>._, A<TestEvent>._, A<CancellationToken>._))
-            .MustHaveHappenedOnceExactly();
+        InnerCalls().MustHaveHappenedOnceExactly();
     }
 
     [Fact]
     public async Task GivenConcurrencyExceptionThenSuccess_Retries() {
-        var inner = A.Fake<SagaHandler<TestSagaState, TestEvent>>();
-        A.CallTo(() => inner.HandleAsync(A<AggregateIdentifier>._, A<TestEvent>._, A<CancellationToken>._))
+        InnerCalls()
             .Throws(new ConcurrencyException("id", AggregateVersion.None, AggregateVersion.None)).Twice()
-            .Then.Returns(ValueTask.CompletedTask);
-        var handler = BuildHandler(inner, maxAttempts: 3);
+            .Then.Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
 
-        await handler.HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
+        await BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
 
-        A.CallTo(() => inner.HandleAsync(A<AggregateIdentifier>._, A<TestEvent>._, A<CancellationToken>._))
-            .MustHaveHappened(3, Times.Exactly);
+        InnerCalls().MustHaveHappened(3, Times.Exactly);
     }
 
     [Fact]
     public async Task GivenConcurrencyExceptionExceedsMaxAttempts_Throws() {
-        var inner = A.Fake<SagaHandler<TestSagaState, TestEvent>>();
-        A.CallTo(() => inner.HandleAsync(A<AggregateIdentifier>._, A<TestEvent>._, A<CancellationToken>._))
-            .Throws(new ConcurrencyException("id", AggregateVersion.None, AggregateVersion.None));
-        var handler = BuildHandler(inner, maxAttempts: 3);
+        InnerCalls().Throws(new ConcurrencyException("id", AggregateVersion.None, AggregateVersion.None));
 
-        var act = () => handler.HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken).AsTask();
+        var act = () => BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken).AsTask();
 
         await act.Should().ThrowAsync<ConcurrencyException>();
     }
 
     [Fact]
     public async Task GivenNonConcurrencyException_DoesNotRetry() {
-        var inner = A.Fake<SagaHandler<TestSagaState, TestEvent>>();
-        A.CallTo(() => inner.HandleAsync(A<AggregateIdentifier>._, A<TestEvent>._, A<CancellationToken>._))
-            .Throws<InvalidOperationException>();
-        var handler = BuildHandler(inner, maxAttempts: 3);
+        InnerCalls().Throws<InvalidOperationException>();
 
-        var act = () => handler.HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken).AsTask();
+        var act = () => BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken).AsTask();
 
         await act.Should().ThrowAsync<InvalidOperationException>();
-        A.CallTo(() => inner.HandleAsync(A<AggregateIdentifier>._, A<TestEvent>._, A<CancellationToken>._))
-            .MustHaveHappenedOnceExactly();
+        InnerCalls().MustHaveHappenedOnceExactly();
     }
 
-    static RetrySagaHandler<TestSagaState, TestEvent> BuildHandler(SagaHandler<TestSagaState, TestEvent> inner, int maxAttempts = 3) =>
-        new(new UnitOfWorkAwareSagaHandler<TestSagaState, TestEvent>(inner, _ => ValueTask.CompletedTask), maxAttempts);
+    FakeItEasy.Configuration.IReturnValueArgumentValidationConfiguration<ValueTask<SagaRoot<TestSagaState, TestEvent>?>> InnerCalls() =>
+        A.CallTo(() => _repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._));
+
+    // The interface itself as TSaga, so the saga can be faked.
+    RetrySagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent> BuildHandler(int maxAttempts) =>
+        new(new UnitOfWorkAwareSagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent>(
+            new SagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent>(_repository, _saga, A.Fake<ICommandDispatcher>()),
+            _ => ValueTask.CompletedTask), maxAttempts);
 }

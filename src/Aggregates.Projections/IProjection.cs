@@ -4,9 +4,14 @@ namespace Aggregates.Projections;
 /// Implements the projection logic for a single event type (or marker interface).
 /// The implementing class may declare constructor parameters — the DI container resolves them at runtime.
 /// </summary>
+/// <remarks>
+/// A class implements this interface once, and gets one subscription with its own checkpoint.
+/// Registration fails when a class implements it for several event types.
+/// </remarks>
 /// <typeparam name="TEvent">
-/// The event type to project. Use a marker interface to handle multiple related event types in a
-/// single <see cref="ProjectAsync"/> call, guaranteeing processing order across those event types.
+/// The event type to project. Use a marker interface (or <see cref="object"/>) to handle multiple
+/// event types in a single <see cref="ProjectAsync"/> call, guaranteeing processing order across
+/// those event types.
 /// </typeparam>
 public interface IProjection<in TEvent> {
     /// <summary>

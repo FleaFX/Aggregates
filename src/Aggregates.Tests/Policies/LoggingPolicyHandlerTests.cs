@@ -6,35 +6,43 @@ using Microsoft.Extensions.Logging.Testing;
 namespace Aggregates.Policies;
 
 public class LoggingPolicyHandlerTests {
+    readonly IPolicy<PolicyTestEvent> _policy = A.Fake<IPolicy<PolicyTestEvent>>();
+    readonly FakeLogger<LoggingPolicyHandler<IPolicy<PolicyTestEvent>, PolicyTestEvent>> _logger = new();
+
+    public LoggingPolicyHandlerTests() =>
+        A.CallTo(() => _policy.ReactAsync(A<PolicyTestEvent>._, A<CancellationToken>._))
+            .Returns(AsyncEnumerable.Empty<ICommand>());
+
     [Fact]
     public async Task GivenSuccess_LogsHandlingAndHandled() {
-        var logger = new FakeLogger<LoggingPolicyHandler<PolicyTestEvent>>();
-        var handler = BuildHandler(A.Fake<PolicyHandler<PolicyTestEvent>>(), logger);
+        await BuildHandler().HandleAsync(new PolicyTestEvent(1), TestContext.Current.CancellationToken);
 
-        await handler.HandleAsync(new PolicyTestEvent(1), TestContext.Current.CancellationToken);
-
-        logger.Collector.GetSnapshot()
+        _logger.Collector.GetSnapshot()
             .Should().Contain(r => r.Level == LogLevel.Debug && r.Message.Contains("Handling"))
             .And.Contain(r => r.Level == LogLevel.Debug && r.Message.Contains("Handled"));
     }
 
     [Fact]
-    public async Task GivenException_LogsErrorAndRethrows() {
-        var logger = new FakeLogger<LoggingPolicyHandler<PolicyTestEvent>>();
-        var inner = A.Fake<PolicyHandler<PolicyTestEvent>>();
-        A.CallTo(() => inner.HandleAsync(A<PolicyTestEvent>._, A<CancellationToken>._))
-            .Throws<InvalidOperationException>();
-        var handler = BuildHandler(inner, logger);
+    public async Task LogsTheEventTypeAndThePolicy() {
+        await BuildHandler().HandleAsync(new PolicyTestEvent(1), TestContext.Current.CancellationToken);
 
-        var act = () => handler.HandleAsync(new PolicyTestEvent(1), TestContext.Current.CancellationToken).AsTask();
+        _logger.Collector.GetSnapshot()
+            .Should().Contain(r => r.Message == "Handling PolicyTestEvent in IPolicy`1");
+    }
+
+    [Fact]
+    public async Task GivenException_LogsErrorAndRethrows() {
+        A.CallTo(() => _policy.ReactAsync(A<PolicyTestEvent>._, A<CancellationToken>._))
+            .Throws<InvalidOperationException>();
+
+        var act = () => BuildHandler().HandleAsync(new PolicyTestEvent(1), TestContext.Current.CancellationToken).AsTask();
 
         await act.Should().ThrowAsync<InvalidOperationException>();
-        logger.Collector.GetSnapshot()
+        _logger.Collector.GetSnapshot()
             .Should().Contain(r => r.Level == LogLevel.Error);
     }
 
-    static LoggingPolicyHandler<PolicyTestEvent> BuildHandler(
-        PolicyHandler<PolicyTestEvent> inner,
-        FakeLogger<LoggingPolicyHandler<PolicyTestEvent>> logger) =>
-        new(inner, logger);
+    // The interface itself as TPolicy, so the policy can be faked.
+    LoggingPolicyHandler<IPolicy<PolicyTestEvent>, PolicyTestEvent> BuildHandler() =>
+        new(new PolicyHandler<IPolicy<PolicyTestEvent>, PolicyTestEvent>(_policy, A.Fake<ICommandDispatcher>()), _logger);
 }

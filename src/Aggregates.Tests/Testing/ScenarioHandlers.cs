@@ -77,15 +77,20 @@ static class ScenarioHandlers {
     };
 
     /// <summary>
-    /// Registers <paramref name="handlerTypes"/> as handlers of <paramref name="kind"/>. Sagas get
-    /// a resolver that maps each order to the saga <c>saga-{OrderId}</c>.
+    /// Registers <paramref name="handlerTypes"/> as handlers of <paramref name="kind"/>. Each probe
+    /// saga gets its own resolver, so two probe sagas never share a saga stream: <see cref="Probe"/>
+    /// maps each order to the saga <c>saga-{OrderId}</c>, the others use their own prefix.
     /// </summary>
     public static TestHostOptions Handlers(this TestHostOptions options, HandlerKind kind, params Type[] handlerTypes) => kind switch {
         HandlerKind.Projection => options.Projections(handlerTypes),
         HandlerKind.Policy => options.Policies(handlerTypes),
-        _ => options.Sagas(s => s
-            .ScanTypes(handlerTypes)
-            .WithResolver<IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]))
+        _ => options.Sagas(s => handlerTypes.Aggregate(s.ScanTypes(handlerTypes), (sagas, sagaType) => OwnResolvers[sagaType](sagas)))
+    };
+
+    static readonly Dictionary<Type, Func<SagasOptions, SagasOptions>> OwnResolvers = new() {
+        [typeof(ProbeSaga)] = s => s.WithResolver<ProbeSaga, IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]),
+        [typeof(SecondProbeSaga)] = s => s.WithResolver<SecondProbeSaga, IOrderEvent>(e => [new AggregateIdentifier($"second-saga-{e.OrderId}")]),
+        [typeof(FromEndSaga)] = s => s.WithResolver<FromEndSaga, IOrderEvent>(e => [new AggregateIdentifier($"from-end-saga-{e.OrderId}")])
     };
 
     static void Handle(HandlerProbe probe, object handler, IOrderEvent @event, EventMetadata? metadata = null) {
@@ -126,30 +131,30 @@ static class ScenarioHandlers {
         }
     }
 
-    [ProjectionContract("Probe", @namespace: "IntegrationTests")]
+    [ProjectionContract("Probe", @namespace: "IntegrationTests.Projections")]
     sealed class ProbeProjection(HandlerProbe probe) : ProjectionBase(probe);
 
-    [ProjectionContract("SecondProbe", @namespace: "IntegrationTests")]
+    [ProjectionContract("SecondProbe", @namespace: "IntegrationTests.Projections")]
     sealed class SecondProbeProjection(HandlerProbe probe) : ProjectionBase(probe);
 
-    [ProjectionContract("FromEndProbe", @namespace: "IntegrationTests", startFromEnd: true)]
+    [ProjectionContract("FromEndProbe", @namespace: "IntegrationTests.Projections", startFromEnd: true)]
     sealed class FromEndProjection(HandlerProbe probe) : ProjectionBase(probe);
 
-    [PolicyContract("Probe", @namespace: "IntegrationTests")]
+    [PolicyContract("Probe", @namespace: "IntegrationTests.Policies")]
     sealed class ProbePolicy(HandlerProbe probe) : PolicyBase(probe);
 
-    [PolicyContract("SecondProbe", @namespace: "IntegrationTests")]
+    [PolicyContract("SecondProbe", @namespace: "IntegrationTests.Policies")]
     sealed class SecondProbePolicy(HandlerProbe probe) : PolicyBase(probe);
 
-    [PolicyContract("FromEndProbe", @namespace: "IntegrationTests", startFromEnd: true)]
+    [PolicyContract("FromEndProbe", @namespace: "IntegrationTests.Policies", startFromEnd: true)]
     sealed class FromEndPolicy(HandlerProbe probe) : PolicyBase(probe);
 
-    [SagaContract("Probe", @namespace: "IntegrationTests")]
+    [SagaContract("Probe", @namespace: "IntegrationTests.Sagas")]
     sealed class ProbeSaga(HandlerProbe probe) : SagaBase(probe);
 
-    [SagaContract("SecondProbe", @namespace: "IntegrationTests")]
+    [SagaContract("SecondProbe", @namespace: "IntegrationTests.Sagas")]
     sealed class SecondProbeSaga(HandlerProbe probe) : SagaBase(probe);
 
-    [SagaContract("FromEndProbe", @namespace: "IntegrationTests", startFromEnd: true)]
+    [SagaContract("FromEndProbe", @namespace: "IntegrationTests.Sagas", startFromEnd: true)]
     sealed class FromEndSaga(HandlerProbe probe) : SagaBase(probe);
 }

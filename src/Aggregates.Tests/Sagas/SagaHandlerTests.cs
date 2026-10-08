@@ -3,7 +3,8 @@ using FakeItEasy;
 namespace Aggregates.Sagas;
 
 public class SagaHandlerTests {
-    static SagaHandler<TestSaga, TestSagaState, TestEvent> BuildHandler(
+    // The interface itself as TSaga, so the saga can be faked.
+    static SagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent> BuildHandler(
         ISagaRepository<TestSagaState, TestEvent> repository,
         ISaga<TestSagaState, TestEvent> saga,
         ICommandDispatcher dispatcher) =>

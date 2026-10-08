@@ -8,61 +8,61 @@ namespace Aggregates.Projections;
 public class LoggingProjectionHandlerTests {
 
     public class HandleAsync {
-        static LoggingProjectionHandler<ProjectionTestEvent> BuildHandler(
-            ProjectionHandler<ProjectionTestEvent> inner,
-            FakeLogger<LoggingProjectionHandler<ProjectionTestEvent>> logger) =>
-            new(inner, logger);
+        readonly IProjection<ProjectionTestEvent> _projection = A.Fake<IProjection<ProjectionTestEvent>>();
+        readonly FakeLogger<LoggingProjectionHandler<IProjection<ProjectionTestEvent>, ProjectionTestEvent>> _logger = new();
+
+        // The interface itself as TProjection, so the projection can be faked.
+        LoggingProjectionHandler<IProjection<ProjectionTestEvent>, ProjectionTestEvent> BuildHandler() =>
+            new(new ProjectionHandler<IProjection<ProjectionTestEvent>, ProjectionTestEvent>(_projection), _logger);
+
+        void ProjectionThrows() =>
+            A.CallTo(() => _projection.ProjectAsync(A<ProjectionTestEvent>._, A<EventMetadata>._, A<CancellationToken>._))
+                .Throws<InvalidOperationException>();
 
         [Fact]
         public async Task GivenSuccess_LogsProjectingAndProjected() {
-            var logger = new FakeLogger<LoggingProjectionHandler<ProjectionTestEvent>>();
-            var handler = BuildHandler(A.Fake<ProjectionHandler<ProjectionTestEvent>>(), logger);
+            await BuildHandler().HandleAsync(new ProjectionTestEvent(1), EventMetadata.Empty, TestContext.Current.CancellationToken);
 
-            await handler.HandleAsync(new ProjectionTestEvent(1), EventMetadata.Empty, TestContext.Current.CancellationToken);
-
-            logger.Collector.GetSnapshot()
+            _logger.Collector.GetSnapshot()
                 .Should().Contain(r => r.Level == LogLevel.Debug && r.Message.Contains("Projecting"))
                 .And.Contain(r => r.Level == LogLevel.Debug && r.Message.Contains("Projected"));
         }
 
         [Fact]
+        public async Task LogsTheEventTypeAndTheProjection() {
+            await BuildHandler().HandleAsync(new ProjectionTestEvent(1), EventMetadata.Empty, TestContext.Current.CancellationToken);
+
+            _logger.Collector.GetSnapshot()
+                .Should().Contain(r => r.Message == "Projecting ProjectionTestEvent in IProjection`1");
+        }
+
+        [Fact]
         public async Task GivenSuccess_DoesNotLogError() {
-            var logger = new FakeLogger<LoggingProjectionHandler<ProjectionTestEvent>>();
-            var handler = BuildHandler(A.Fake<ProjectionHandler<ProjectionTestEvent>>(), logger);
+            await BuildHandler().HandleAsync(new ProjectionTestEvent(1), EventMetadata.Empty, TestContext.Current.CancellationToken);
 
-            await handler.HandleAsync(new ProjectionTestEvent(1), EventMetadata.Empty, TestContext.Current.CancellationToken);
-
-            logger.Collector.GetSnapshot()
+            _logger.Collector.GetSnapshot()
                 .Should().NotContain(r => r.Level == LogLevel.Error);
         }
 
         [Fact]
         public async Task GivenException_LogsError() {
-            var logger = new FakeLogger<LoggingProjectionHandler<ProjectionTestEvent>>();
-            var inner = A.Fake<ProjectionHandler<ProjectionTestEvent>>();
-            A.CallTo(() => inner.HandleAsync(A<ProjectionTestEvent>._, A<EventMetadata>._, A<CancellationToken>._))
-                .Throws<InvalidOperationException>();
-            var handler = BuildHandler(inner, logger);
+            ProjectionThrows();
 
-            var act = () => handler.HandleAsync(
+            var act = () => BuildHandler().HandleAsync(
                 new ProjectionTestEvent(1),
                 EventMetadata.Empty,
                 TestContext.Current.CancellationToken).AsTask();
 
             await act.Should().ThrowAsync<InvalidOperationException>();
-            logger.Collector.GetSnapshot()
+            _logger.Collector.GetSnapshot()
                 .Should().Contain(r => r.Level == LogLevel.Error);
         }
 
         [Fact]
         public async Task GivenException_Rethrows() {
-            var logger = new FakeLogger<LoggingProjectionHandler<ProjectionTestEvent>>();
-            var inner = A.Fake<ProjectionHandler<ProjectionTestEvent>>();
-            A.CallTo(() => inner.HandleAsync(A<ProjectionTestEvent>._, A<EventMetadata>._, A<CancellationToken>._))
-                .Throws<InvalidOperationException>();
-            var handler = BuildHandler(inner, logger);
+            ProjectionThrows();
 
-            var act = () => handler.HandleAsync(
+            var act = () => BuildHandler().HandleAsync(
                 new ProjectionTestEvent(1),
                 EventMetadata.Empty,
                 TestContext.Current.CancellationToken).AsTask();
@@ -71,15 +71,12 @@ public class LoggingProjectionHandlerTests {
         }
 
         [Fact]
-        public async Task DelegatesEventAndMetadataToInnerHandler() {
-            var logger = new FakeLogger<LoggingProjectionHandler<ProjectionTestEvent>>();
-            var inner = A.Fake<ProjectionHandler<ProjectionTestEvent>>();
-            var handler = BuildHandler(inner, logger);
+        public async Task DelegatesEventAndMetadataToTheProjection() {
             var @event = new ProjectionTestEvent(99);
 
-            await handler.HandleAsync(@event, EventMetadata.Empty, TestContext.Current.CancellationToken);
+            await BuildHandler().HandleAsync(@event, EventMetadata.Empty, TestContext.Current.CancellationToken);
 
-            A.CallTo(() => inner.HandleAsync(@event, EventMetadata.Empty, A<CancellationToken>._))
+            A.CallTo(() => _projection.ProjectAsync(@event, EventMetadata.Empty, A<CancellationToken>._))
                 .MustHaveHappenedOnceExactly();
         }
     }

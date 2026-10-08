@@ -21,12 +21,21 @@ public static class ServiceCollectionExtensions {
     /// found in those assemblies.
     /// Use <see cref="ProjectionsOptions.ScanTypes"/> instead to register an explicit set of types.
     /// </param>
+    /// <remarks>
+    /// Every projection class gets one subscription, with the string form of its
+    /// <see cref="ProjectionContractAttribute"/> as subscription id (or its full type name when it has none).
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// A class implements <see cref="IProjection{TEvent}"/> more than once, or two classes share a
+    /// subscription id.
+    /// </exception>
     public static IProjectionsBuilder AddProjections(this IServiceCollection services, Action<ProjectionsOptions>? configure = null) {
         var options = new ProjectionsOptions();
         configure?.Invoke(options);
 
-        // Decorator chain: IProjectionHandler<TEvent> → LoggingProjectionHandler<TEvent>
-        services.TryAddScoped(typeof(IProjectionHandler<>), typeof(LoggingProjectionHandler<>));
+        // Handler chain per projection class: LoggingProjectionHandler<,> → ProjectionHandler<,> → TProjection
+        services.TryAddScoped(typeof(LoggingProjectionHandler<,>));
+        services.TryAddScoped(typeof(ProjectionHandler<,>));
 
         // Subscription error handling — transport packages register their own IParkedMessageSink;
         // LoggingParkedMessageSink is the fallback for dev/test scenarios without a transport.
@@ -44,47 +53,29 @@ public static class ServiceCollectionExtensions {
 
         var registeredProjections = new List<(Type EventType, Type ProjectionType)>();
 
-        foreach (var (projectionType, eventType) in
-            from type in options.Types.Distinct()
-            where !type.IsAbstract
-            from @interface in type.GetInterfaces()
-            where @interface.IsGenericType
-            where @interface.GetGenericTypeDefinition() == typeof(IProjection<>)
-            let typeArgs = @interface.GetGenericArguments()
-            select (projectionType: type, eventType: typeArgs[0])) {
+        foreach (var (projectionType, projectionInterface) in SubscriptionRegistrations.FindHandlers(options.Types, typeof(IProjection<>))) {
+            var eventType = projectionInterface.GetGenericArguments()[0];
+            var contract = projectionType.GetCustomAttribute<ProjectionContractAttribute>();
+            var registration = new SubscriptionRegistration(
+                SubscriptionRegistrations.GetSubscriptionId(projectionType, contract),
+                projectionType,
+                eventType,
+                contract?.StartFromEnd ?? false);
 
-            services.TryAddScoped(
-                typeof(IProjection<>).MakeGenericType(eventType),
-                projectionType);
+            if (!SubscriptionRegistrations.Add(services, registration))
+                continue;
 
-            services.TryAddScoped(
-                typeof(ProjectionHandler<>).MakeGenericType(eventType),
-                typeof(ProjectionHandler<,>).MakeGenericType(projectionType, eventType));
+            services.TryAddScoped(projectionType);
+
+            // Subscription hosted service — one per projection class
+            var serviceType = typeof(ProjectionSubscriptionService<,>).MakeGenericType(projectionType, eventType);
+            services.AddSingleton(typeof(IHostedService), sp => ActivatorUtilities.CreateInstance(sp, serviceType, registration));
 
             registeredProjections.Add((eventType, projectionType));
         }
 
-        // Subscription hosted service — one per registered projection
-        foreach (var (eventType, projectionType) in registeredProjections) {
-            var subscriptionId = GetSubscriptionId(projectionType, eventType);
-            var startFromEnd = GetStartFromEnd(projectionType);
-            var serviceType = typeof(ProjectionSubscriptionService<>).MakeGenericType(eventType);
-
-            services.AddSingleton(typeof(IHostedService), sp =>
-                ActivatorUtilities.CreateInstance(sp, serviceType, subscriptionId, startFromEnd));
-        }
-
         return new ProjectionsBuilder(services, registeredProjections);
     }
-
-    static string GetSubscriptionId(Type projectionType, Type eventType) {
-        var attr = projectionType.GetCustomAttribute<ProjectionContractAttribute>();
-        var contract = attr?.ToString() ?? projectionType.FullName ?? projectionType.Name;
-        return $"{contract}-{eventType.Name}";
-    }
-
-    static bool GetStartFromEnd(Type projectionType) =>
-        projectionType.GetCustomAttribute<ProjectionContractAttribute>()?.StartFromEnd ?? false;
 }
 
 internal sealed class ProjectionsBuilder(

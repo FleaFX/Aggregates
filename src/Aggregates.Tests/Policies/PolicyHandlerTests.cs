@@ -3,7 +3,8 @@ using FakeItEasy;
 namespace Aggregates.Policies;
 
 public class PolicyHandlerTests {
-    static PolicyHandler<TestPolicy, PolicyTestEvent> BuildHandler(
+    // The interface itself as TPolicy, so the policy can be faked.
+    static PolicyHandler<IPolicy<PolicyTestEvent>, PolicyTestEvent> BuildHandler(
         IPolicy<PolicyTestEvent> policy,
         ICommandDispatcher dispatcher) =>
         new(policy, dispatcher);

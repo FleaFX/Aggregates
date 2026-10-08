@@ -4,8 +4,16 @@ namespace Aggregates.Sagas;
 /// Implements the reaction logic for a saga. The implementing class may declare
 /// constructor parameters — the DI container resolves them at runtime.
 /// </summary>
+/// <remarks>
+/// A class implements this interface once, and gets one subscription with its own checkpoint.
+/// Registration fails when a class implements it for several event types: the saga state is
+/// rebuilt from the events of <typeparamref name="TEvent"/> only.
+/// </remarks>
 /// <typeparam name="TSagaState">The type of the state object maintained by the saga.</typeparam>
-/// <typeparam name="TEvent">The type of events this saga reacts to.</typeparam>
+/// <typeparam name="TEvent">
+/// The type of events this saga reacts to. Use a marker interface to react to multiple event types,
+/// and pattern matching in <see cref="IState{TState,TEvent}.Apply"/> and <see cref="ReactAsync"/>.
+/// </typeparam>
 public interface ISaga<in TSagaState, in TEvent>
     where TSagaState : IState<TSagaState, TEvent> {
     /// <summary>

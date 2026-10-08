@@ -6,7 +6,7 @@ namespace Aggregates.Sagas;
 
 /// <summary>
 /// A hosted service that subscribes to an event stream and routes incoming events to the
-/// appropriate saga instances.
+/// instances of <typeparamref name="TSaga"/>.
 /// </summary>
 /// <remarks>
 /// The subscription runs in a <see cref="SubscriptionLoop"/>, which subscribes again after a
@@ -14,25 +14,28 @@ namespace Aggregates.Sagas;
 /// For each event that matches <typeparamref name="TEvent"/>, the service:
 /// <list type="number">
 ///   <item>Calls <see cref="ISagaIdResolver{TEvent}.Resolve"/> to determine which saga instances are interested. The event's stored metadata is passed directly so resolvers can read saga identifiers from it. A failing resolver is retried and the event parked via <see cref="SubscriptionRetryPolicy"/>; no saga handles it then.</item>
-///   <item>Creates a fresh DI scope per saga instance and resolves <see cref="ISagaHandler{TSagaState,TEvent}"/> from it.</item>
+///   <item>Creates a fresh DI scope per saga instance and resolves the handler chain of <typeparamref name="TSaga"/> from it.</item>
 ///   <item>Opens a <see cref="MetadataScope"/> seeded from the event's stored metadata so that commands dispatched by the saga inherit correlation/causation identifiers.</item>
-///   <item>Calls <see cref="ISagaHandler{TSagaState,TEvent}.HandleAsync"/> for every resolved saga identifier, with automatic retry and parked-message fallback via <see cref="SubscriptionRetryPolicy"/>.</item>
+///   <item>Handles the event for every resolved saga identifier, with automatic retry and parked-message fallback via <see cref="SubscriptionRetryPolicy"/>.</item>
 /// </list>
 /// A fresh DI scope is created per saga invocation so that scoped services are never captured
 /// as singletons by this long-lived hosted service.
 /// </remarks>
-sealed class SagaSubscriptionService<TSagaState, TEvent>(
+/// <typeparam name="TSaga">The saga class.</typeparam>
+/// <typeparam name="TSagaState">The saga state type.</typeparam>
+/// <typeparam name="TEvent">The event type the saga reacts to.</typeparam>
+sealed class SagaSubscriptionService<TSaga, TSagaState, TEvent>(
     SubscriptionLoop loop,
-    ISagaIdResolver<TEvent> resolver,
     IServiceScopeFactory scopeFactory,
     SubscriptionRetryPolicy retryPolicy,
-    string subscriptionId,
-    bool startFromEnd) : BackgroundService
+    SubscriptionRegistration registration,
+    ISagaIdResolver<TEvent> resolver) : BackgroundService
+    where TSaga : ISaga<TSagaState, TEvent>
     where TSagaState : IState<TSagaState, TEvent> {
 
     /// <inheritdoc/>
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        loop.RunAsync(subscriptionId, startFromEnd, ProcessAsync, stoppingToken);
+        loop.RunAsync(registration.SubscriptionId, registration.StartFromEnd, ProcessAsync, stoppingToken);
 
     async ValueTask ProcessAsync(SubscriptionMessage message, CancellationToken cancellationToken) {
         if (message.Event is not TEvent typedEvent)
@@ -43,18 +46,18 @@ sealed class SagaSubscriptionService<TSagaState, TEvent>(
         await retryPolicy.ExecuteAsync(ct => {
             sagaIds = [.. resolver.Resolve(typedEvent, message.Metadata)];
             return ValueTask.CompletedTask;
-        }, subscriptionId, message, cancellationToken);
+        }, registration.SubscriptionId, message, cancellationToken);
 
         // Null when the resolver failed and the event was parked.
         foreach (var sagaId in sagaIds ?? []) {
             await retryPolicy.ExecuteAsync(async ct => {
                 await using var scope = scopeFactory.CreateAsyncScope();
-                var handler = scope.ServiceProvider.GetRequiredService<ISagaHandler<TSagaState, TEvent>>();
+                var handler = scope.ServiceProvider.GetRequiredService<LoggingSagaHandler<TSaga, TSagaState, TEvent>>();
                 // Seed the metadata scope with the incoming event's metadata so that commands
                 // dispatched by the saga inherit correlation/causation identifiers.
                 await using var metadataScope = new MetadataScope(message.Metadata);
                 await handler.HandleAsync(sagaId, typedEvent, ct);
-            }, subscriptionId, message, cancellationToken);
+            }, registration.SubscriptionId, message, cancellationToken);
         }
     }
 }

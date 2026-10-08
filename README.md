@@ -211,7 +211,7 @@ services
     .AddMssp();
 ```
 
-`WithResolver` determines which saga instance(s) should handle a given event. The subscription hosted service is registered automatically for every saga that has a resolver.
+`WithResolver` determines which saga instance(s) should handle a given event. The subscription hosted service is registered automatically for every saga that has a resolver. When several sagas react to the same event type, give each its own resolver with `WithResolver<TSaga, TEvent>(...)`.
 
 ---
 

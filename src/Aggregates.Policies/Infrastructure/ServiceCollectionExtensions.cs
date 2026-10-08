@@ -22,12 +22,21 @@ public static class ServiceCollectionExtensions {
     /// found in those assemblies.
     /// Use <see cref="PoliciesOptions.ScanTypes"/> instead to register an explicit set of types.
     /// </param>
+    /// <remarks>
+    /// Every policy class gets one subscription, with the string form of its
+    /// <see cref="PolicyContractAttribute"/> as subscription id (or its full type name when it has none).
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// A class implements <see cref="IPolicy{TEvent}"/> more than once, or two classes share a
+    /// subscription id.
+    /// </exception>
     public static IPoliciesBuilder AddPolicies(this IAggregatesBuilder builder, Action<PoliciesOptions>? configure = null) {
         var options = new PoliciesOptions();
         configure?.Invoke(options);
 
-        // Decorator chain: IPolicyHandler<TEvent> → LoggingPolicyHandler<TEvent>
-        builder.Services.TryAddScoped(typeof(IPolicyHandler<>), typeof(LoggingPolicyHandler<>));
+        // Handler chain per policy class: LoggingPolicyHandler<,> → PolicyHandler<,> → TPolicy
+        builder.Services.TryAddScoped(typeof(LoggingPolicyHandler<,>));
+        builder.Services.TryAddScoped(typeof(PolicyHandler<,>));
 
         // Subscription error handling — transport packages register their own IParkedMessageSink;
         // LoggingParkedMessageSink is the fallback for dev/test scenarios without a transport.
@@ -45,46 +54,29 @@ public static class ServiceCollectionExtensions {
 
         var registeredPolicies = new List<(Type EventType, Type PolicyType)>();
 
-        foreach (var (policyType, eventType) in
-            from type in options.Types.Distinct()
-            where !type.IsAbstract
-            from @interface in type.GetInterfaces()
-            where @interface.IsGenericType
-            where @interface.GetGenericTypeDefinition() == typeof(IPolicy<>)
-            let typeArgs = @interface.GetGenericArguments()
-            select (policyType: type, eventType: typeArgs[0])) {
+        foreach (var (policyType, policyInterface) in SubscriptionRegistrations.FindHandlers(options.Types, typeof(IPolicy<>))) {
+            var eventType = policyInterface.GetGenericArguments()[0];
+            var contract = policyType.GetCustomAttribute<PolicyContractAttribute>();
+            var registration = new SubscriptionRegistration(
+                SubscriptionRegistrations.GetSubscriptionId(policyType, contract),
+                policyType,
+                eventType,
+                contract?.StartFromEnd ?? false);
 
-            builder.Services.TryAddScoped(
-                typeof(IPolicy<>).MakeGenericType(eventType),
-                policyType);
+            if (!SubscriptionRegistrations.Add(builder.Services, registration))
+                continue;
 
-            builder.Services.TryAddScoped(
-                typeof(PolicyHandler<>).MakeGenericType(eventType),
-                typeof(PolicyHandler<,>).MakeGenericType(policyType, eventType));
+            builder.Services.TryAddScoped(policyType);
+
+            // Subscription hosted service — one per policy class
+            var serviceType = typeof(PolicySubscriptionService<,>).MakeGenericType(policyType, eventType);
+            builder.Services.AddSingleton(typeof(IHostedService), sp => ActivatorUtilities.CreateInstance(sp, serviceType, registration));
 
             registeredPolicies.Add((eventType, policyType));
         }
 
-        // Subscription hosted service — one per registered policy
-        foreach (var (eventType, policyType) in registeredPolicies) {
-            var subscriptionId = GetSubscriptionId(policyType);
-            var startFromEnd = GetStartFromEnd(policyType);
-            var serviceType = typeof(PolicySubscriptionService<>).MakeGenericType(eventType);
-
-            builder.Services.AddSingleton(typeof(IHostedService), sp =>
-                ActivatorUtilities.CreateInstance(sp, serviceType, subscriptionId, startFromEnd));
-        }
-
         return new PoliciesBuilder(builder.Services, registeredPolicies);
     }
-
-    static string GetSubscriptionId(Type policyType) {
-        var attr = policyType.GetCustomAttribute<PolicyContractAttribute>();
-        return attr?.ToString() ?? policyType.FullName ?? policyType.Name;
-    }
-
-    static bool GetStartFromEnd(Type policyType) =>
-        policyType.GetCustomAttribute<PolicyContractAttribute>()?.StartFromEnd ?? false;
 }
 
 internal sealed class PoliciesBuilder(
