@@ -11,19 +11,29 @@ public class PolicySubscriptionServiceTests {
     const string SubscriptionId = "sub-1";
 
     readonly ICheckpointStore _store = A.Fake<ICheckpointStore>();
-    readonly IPolicyHandler<PolicyTestEvent> _handler = A.Fake<IPolicyHandler<PolicyTestEvent>>();
+    readonly IPolicy<PolicyTestEvent> _handler = A.Fake<IPolicy<PolicyTestEvent>>();
 
     static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    PolicySubscriptionService<PolicyTestEvent> BuildService(FakeSubscriptionFactory factory) {
+    public PolicySubscriptionServiceTests() =>
+        A.CallTo(() => _handler.ReactAsync(A<PolicyTestEvent>._, A<CancellationToken>._))
+            .Returns(AsyncEnumerable.Empty<ICommand>());
+
+    // The interface itself as TPolicy, so the policy can be faked behind the real handler chain.
+    PolicySubscriptionService<IPolicy<PolicyTestEvent>, PolicyTestEvent> BuildService(FakeSubscriptionFactory factory) {
         var parkedMessageSink = A.Fake<IParkedMessageSink>();
+        var services = new ServiceCollection()
+            .AddLogging()
+            .AddSingleton(_handler)
+            .AddSingleton(A.Fake<ICommandDispatcher>())
+            .AddScoped(typeof(LoggingPolicyHandler<,>))
+            .AddScoped(typeof(PolicyHandler<,>));
         return new(
             new SubscriptionLoop(factory, _store, parkedMessageSink, new SubscriptionCheckpointOptions(),
                 new SubscriptionResubscribeOptions(), TimeProvider.System, NullLogger<SubscriptionLoop>.Instance),
-            new ServiceCollection().AddSingleton(_handler).BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
             new SubscriptionRetryPolicy(parkedMessageSink, new SubscriptionErrorHandlingOptions()),
-            SubscriptionId,
-            startFromEnd: false);
+            new SubscriptionRegistration(SubscriptionId, typeof(TestPolicy), typeof(PolicyTestEvent), StartFromEnd: false));
     }
 
     IEnumerable<ulong> StoredPositions() =>
@@ -41,8 +51,8 @@ public class PolicySubscriptionServiceTests {
         await factory.Drained.WaitAsync(Token);
         await service.StopAsync(Token);
 
-        A.CallTo(() => _handler.HandleAsync(A<PolicyTestEvent>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
-        A.CallTo(() => _handler.HandleAsync(new PolicyTestEvent(1), A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _handler.ReactAsync(A<PolicyTestEvent>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _handler.ReactAsync(new PolicyTestEvent(1), A<CancellationToken>._)).MustHaveHappenedOnceExactly();
         StoredPositions().Should().Equal(100UL, 200UL, 251UL);
     }
 
