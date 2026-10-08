@@ -77,15 +77,20 @@ static class ScenarioHandlers {
     };
 
     /// <summary>
-    /// Registers <paramref name="handlerTypes"/> as handlers of <paramref name="kind"/>. Sagas get
-    /// a resolver that maps each order to the saga <c>saga-{OrderId}</c>.
+    /// Registers <paramref name="handlerTypes"/> as handlers of <paramref name="kind"/>. Each probe
+    /// saga gets its own resolver, so two probe sagas never share a saga stream: <see cref="Probe"/>
+    /// maps each order to the saga <c>saga-{OrderId}</c>, the others use their own prefix.
     /// </summary>
     public static TestHostOptions Handlers(this TestHostOptions options, HandlerKind kind, params Type[] handlerTypes) => kind switch {
         HandlerKind.Projection => options.Projections(handlerTypes),
         HandlerKind.Policy => options.Policies(handlerTypes),
-        _ => options.Sagas(s => s
-            .ScanTypes(handlerTypes)
-            .WithResolver<IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]))
+        _ => options.Sagas(s => handlerTypes.Aggregate(s.ScanTypes(handlerTypes), (sagas, sagaType) => OwnResolvers[sagaType](sagas)))
+    };
+
+    static readonly Dictionary<Type, Func<SagasOptions, SagasOptions>> OwnResolvers = new() {
+        [typeof(ProbeSaga)] = s => s.WithResolver<ProbeSaga, IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]),
+        [typeof(SecondProbeSaga)] = s => s.WithResolver<SecondProbeSaga, IOrderEvent>(e => [new AggregateIdentifier($"second-saga-{e.OrderId}")]),
+        [typeof(FromEndSaga)] = s => s.WithResolver<FromEndSaga, IOrderEvent>(e => [new AggregateIdentifier($"from-end-saga-{e.OrderId}")])
     };
 
     static void Handle(HandlerProbe probe, object handler, IOrderEvent @event, EventMetadata? metadata = null) {

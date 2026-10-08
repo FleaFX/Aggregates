@@ -155,7 +155,7 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
         host.Probe.Events(handler).Should().Equal(new OrderPlaced("order-1", "alice"), new OrderPlaced("order-2", "bob"));
     }
 
-    [Theory(Skip = KnownIssues.OneHandlerPerEventType), MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
+    [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task TwoHandlersOfSameKindOnSameEvent_BothHandleIt(HandlerKind kind, Transport transport) {
         Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(transport);
