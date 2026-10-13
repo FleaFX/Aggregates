@@ -14,8 +14,13 @@ namespace Aggregates.Subscriptions;
 /// <param name="StartFromEnd">
 /// Whether the subscription starts from the end of the store when it has no checkpoint yet.
 /// </param>
+/// <param name="Predecessors">
+/// The subscription ids whose checkpoint this subscription continues from when it has none of its
+/// own, nearest first; null or empty when the subscription has no predecessor.
+/// </param>
 public sealed record SubscriptionRegistration(
     string SubscriptionId,
     Type HandlerType,
     Type EventType,
-    bool StartFromEnd);
+    bool StartFromEnd,
+    IReadOnlyList<string>? Predecessors = null);

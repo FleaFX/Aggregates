@@ -89,10 +89,19 @@ public class ServiceCollectionExtensionsTests {
 
             services.AddProjections(o => o.ScanTypes(typeof(FullContractProjection)));
 
-            Registrations(services).Should().Equal(
-                new SubscriptionRegistration("Fulfillment.Orders@v2", typeof(FullContractProjection), typeof(ProjectionTestEvent), StartFromEnd: true));
+            Registrations(services).Should().ContainSingle().Which.Should().BeEquivalentTo(
+                new SubscriptionRegistration("Fulfillment.Orders@v2", typeof(FullContractProjection), typeof(ProjectionTestEvent), StartFromEnd: true,
+                    Predecessors: ["Fulfillment.Orders@v1"]));
         }
 
+        [Fact]
+        public void GivenAVersion1Contract_RegistersNoPredecessors() {
+            var services = new ServiceCollection();
+
+            services.AddProjections(o => o.ScanTypes(typeof(PlainContractProjection)));
+
+            Registrations(services).Should().ContainSingle().Which.Predecessors.Should().BeEmpty();
+        }
         [Fact]
         public void GivenAnObjectProjection_RegistersObjectAsEventType() {
             var services = new ServiceCollection();

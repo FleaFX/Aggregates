@@ -35,7 +35,7 @@ sealed class SagaSubscriptionService<TSaga, TSagaState, TEvent>(
 
     /// <inheritdoc/>
     protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        loop.RunAsync(registration.SubscriptionId, registration.StartFromEnd, ProcessAsync, stoppingToken);
+        loop.RunAsync(registration, ProcessAsync, stoppingToken);
 
     async ValueTask ProcessAsync(SubscriptionMessage message, CancellationToken cancellationToken) {
         if (message.Event is not TEvent typedEvent)

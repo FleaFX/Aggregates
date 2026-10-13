@@ -65,7 +65,9 @@ public static class SubscriptionRegistrations {
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Another handler class is registered under the same subscription id. Both would share one
-    /// checkpoint and one parked-message stream.
+    /// checkpoint and one parked-message stream. Also thrown when the subscription continues from
+    /// itself, or from a subscription id that is registered in the same host by another handler
+    /// class: both versions would process the same events.
     /// </exception>
     public static bool Add(IServiceCollection services, SubscriptionRegistration registration) {
         var existing = services
@@ -84,9 +86,31 @@ public static class SubscriptionRegistrations {
                 "a different contract name, namespace or version.");
         }
 
+        if (registration.Predecessors?.Contains(registration.SubscriptionId, StringComparer.Ordinal) == true)
+            throw new InvalidOperationException(
+                $"Subscription '{registration.SubscriptionId}' of {registration.HandlerType.FullName} continues from itself: " +
+                "set continueFrom to the id of an older contract, or to \"\" for none.");
+
+        foreach (var other in services
+            .Where(descriptor => descriptor.ServiceType == typeof(SubscriptionRegistration))
+            .Select(descriptor => descriptor.ImplementationInstance)
+            .OfType<SubscriptionRegistration>()) {
+            if (registration.Predecessors?.Contains(other.SubscriptionId, StringComparer.Ordinal) == true)
+                throw ContinuesFromARegisteredType(registration.SubscriptionId, other.SubscriptionId, other.HandlerType);
+            if (other.Predecessors?.Contains(registration.SubscriptionId, StringComparer.Ordinal) == true)
+                throw ContinuesFromARegisteredType(other.SubscriptionId, registration.SubscriptionId, registration.HandlerType);
+        }
+
         services.AddSingleton(registration);
         return true;
     }
+
+    // The message of the same-host predecessor check in Add.
+    static InvalidOperationException ContinuesFromARegisteredType(string successor, string predecessor, Type handlerType) =>
+        new(
+            $"'{successor}' continues from '{predecessor}', which is registered in the same host by {handlerType.FullName}. " +
+            "Both would process the same events: remove the old version, or set continueFrom: " +
+            "ContinueFrom.None on the new one to replay.");
 
     // IProjection<OrderPlaced> instead of IProjection`1.
     static string DisplayName(Type type) {

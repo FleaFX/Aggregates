@@ -77,6 +77,46 @@ static class ScenarioHandlers {
     };
 
     /// <summary>
+    /// The probe handler of <paramref name="kind"/> whose contract is version 2 of <see cref="Probe"/>
+    /// and continues from its checkpoint.
+    /// </summary>
+    public static Type ProbeV2(HandlerKind kind) => kind switch {
+        HandlerKind.Projection => typeof(ProbeV2Projection),
+        HandlerKind.Policy => typeof(ProbeV2Policy),
+        _ => typeof(ProbeV2Saga)
+    };
+
+    /// <summary>
+    /// The probe handler of <paramref name="kind"/> whose contract is version 3 of <see cref="Probe"/>
+    /// and continues from its checkpoint, skipping version 2 when that never ran.
+    /// </summary>
+    public static Type ProbeV3(HandlerKind kind) => kind switch {
+        HandlerKind.Projection => typeof(ProbeV3Projection),
+        HandlerKind.Policy => typeof(ProbeV3Policy),
+        _ => typeof(ProbeV3Saga)
+    };
+
+    /// <summary>
+    /// The probe handler of <paramref name="kind"/> whose contract starts from the end of the
+    /// store and has no predecessor with a checkpoint.
+    /// </summary>
+    public static Type FromEndBump(HandlerKind kind) => kind switch {
+        HandlerKind.Projection => typeof(FromEndBumpProjection),
+        HandlerKind.Policy => typeof(FromEndBumpPolicy),
+        _ => typeof(FromEndBumpSaga)
+    };
+
+    /// <summary>
+    /// The probe handler of <paramref name="kind"/> whose contract is version 2 of <see cref="Probe"/>
+    /// and continues from no predecessor: it replays from the beginning.
+    /// </summary>
+    public static Type ReplayProbeV2(HandlerKind kind) => kind switch {
+        HandlerKind.Projection => typeof(ReplayProbeV2Projection),
+        HandlerKind.Policy => typeof(ReplayProbeV2Policy),
+        _ => typeof(ReplayProbeV2Saga)
+    };
+
+    /// <summary>
     /// Registers <paramref name="handlerTypes"/> as handlers of <paramref name="kind"/>. Each probe
     /// saga gets its own resolver, so two probe sagas never share a saga stream: <see cref="Probe"/>
     /// maps each order to the saga <c>saga-{OrderId}</c>, the others use their own prefix.
@@ -90,7 +130,14 @@ static class ScenarioHandlers {
     static readonly Dictionary<Type, Func<SagasOptions, SagasOptions>> OwnResolvers = new() {
         [typeof(ProbeSaga)] = s => s.WithResolver<ProbeSaga, IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]),
         [typeof(SecondProbeSaga)] = s => s.WithResolver<SecondProbeSaga, IOrderEvent>(e => [new AggregateIdentifier($"second-saga-{e.OrderId}")]),
-        [typeof(FromEndSaga)] = s => s.WithResolver<FromEndSaga, IOrderEvent>(e => [new AggregateIdentifier($"from-end-saga-{e.OrderId}")])
+        [typeof(FromEndSaga)] = s => s.WithResolver<FromEndSaga, IOrderEvent>(e => [new AggregateIdentifier($"from-end-saga-{e.OrderId}")]),
+        // A version bump keeps the same saga stream, so the V2 and V3 sagas resolve like ProbeSaga.
+        [typeof(ProbeV2Saga)] = s => s.WithResolver<ProbeV2Saga, IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]),
+        [typeof(ProbeV3Saga)] = s => s.WithResolver<ProbeV3Saga, IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]),
+        // A saga reacts once per linked event, so a replay into ProbeSaga's streams would not react
+        // to events v1 already linked: the replay saga gets streams of its own.
+        [typeof(ReplayProbeV2Saga)] = s => s.WithResolver<ReplayProbeV2Saga, IOrderEvent>(e => [new AggregateIdentifier($"replay-saga-{e.OrderId}")]),
+        [typeof(FromEndBumpSaga)] = s => s.WithResolver<FromEndBumpSaga, IOrderEvent>(e => [new AggregateIdentifier($"from-end-bump-saga-{e.OrderId}")])
     };
 
     static void Handle(HandlerProbe probe, object handler, IOrderEvent @event, EventMetadata? metadata = null) {
@@ -157,4 +204,40 @@ static class ScenarioHandlers {
 
     [SagaContract("FromEndProbe", @namespace: "IntegrationTests.Sagas", startFromEnd: true)]
     sealed class FromEndSaga(HandlerProbe probe) : SagaBase(probe);
+
+    [ProjectionContract("Probe", version: 2, @namespace: "IntegrationTests.Projections")]
+    sealed class ProbeV2Projection(HandlerProbe probe) : ProjectionBase(probe);
+
+    [ProjectionContract("Probe", version: 3, @namespace: "IntegrationTests.Projections")]
+    sealed class ProbeV3Projection(HandlerProbe probe) : ProjectionBase(probe);
+
+    [ProjectionContract("FromEndBump", version: 2, @namespace: "IntegrationTests.Projections", startFromEnd: true)]
+    sealed class FromEndBumpProjection(HandlerProbe probe) : ProjectionBase(probe);
+
+    [ProjectionContract("Probe", version: 2, @namespace: "IntegrationTests.Projections", continueFrom: Aggregates.Subscriptions.ContinueFrom.None)]
+    sealed class ReplayProbeV2Projection(HandlerProbe probe) : ProjectionBase(probe);
+
+    [PolicyContract("Probe", version: 2, @namespace: "IntegrationTests.Policies")]
+    sealed class ProbeV2Policy(HandlerProbe probe) : PolicyBase(probe);
+
+    [PolicyContract("Probe", version: 3, @namespace: "IntegrationTests.Policies")]
+    sealed class ProbeV3Policy(HandlerProbe probe) : PolicyBase(probe);
+
+    [PolicyContract("FromEndBump", version: 2, @namespace: "IntegrationTests.Policies", startFromEnd: true)]
+    sealed class FromEndBumpPolicy(HandlerProbe probe) : PolicyBase(probe);
+
+    [PolicyContract("Probe", version: 2, @namespace: "IntegrationTests.Policies", continueFrom: Aggregates.Subscriptions.ContinueFrom.None)]
+    sealed class ReplayProbeV2Policy(HandlerProbe probe) : PolicyBase(probe);
+
+    [SagaContract("Probe", version: 2, @namespace: "IntegrationTests.Sagas")]
+    sealed class ProbeV2Saga(HandlerProbe probe) : SagaBase(probe);
+
+    [SagaContract("Probe", version: 3, @namespace: "IntegrationTests.Sagas")]
+    sealed class ProbeV3Saga(HandlerProbe probe) : SagaBase(probe);
+
+    [SagaContract("FromEndBump", version: 2, @namespace: "IntegrationTests.Sagas", startFromEnd: true)]
+    sealed class FromEndBumpSaga(HandlerProbe probe) : SagaBase(probe);
+
+    [SagaContract("Probe", version: 2, @namespace: "IntegrationTests.Sagas", continueFrom: Aggregates.Subscriptions.ContinueFrom.None)]
+    sealed class ReplayProbeV2Saga(HandlerProbe probe) : SagaBase(probe);
 }

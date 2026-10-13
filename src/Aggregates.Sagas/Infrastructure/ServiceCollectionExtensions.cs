@@ -82,7 +82,8 @@ public static class ServiceCollectionExtensions {
                 SubscriptionRegistrations.GetSubscriptionId(sagaType, contract),
                 sagaType,
                 eventType,
-                contract?.StartFromEnd ?? false);
+                contract?.StartFromEnd ?? false,
+                contract?.Predecessors);
 
             if (!SubscriptionRegistrations.Add(builder.Services, registration))
                 continue;
