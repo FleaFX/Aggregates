@@ -11,7 +11,6 @@ namespace Aggregates.Subscriptions;
 public class SubscriptionScenarioTests(ITestOutputHelper output) {
     [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task Restart_ContinuesAfterCheckpoint(HandlerKind kind, Transport transport) {
-        Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.Probe(kind);
 
@@ -32,7 +31,6 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
 
     [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task StartFromEnd_SkipsEventsBeforeFirstStart(HandlerKind kind, Transport transport) {
-        Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.FromEnd(kind);
         await store.AppendAsync(new SerializationSetup(new HandlerProbe(), Orders.EventTypes), "order-before", new OrderPlaced("order-before", "alice"));
@@ -53,7 +51,6 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
 
     [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task FailingHandler_ParksEventAndContinues(HandlerKind kind, Transport transport) {
-        Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.Probe(kind);
         await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, handler));
@@ -70,7 +67,6 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
 
     [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task SingleEvent_IsHandledOnce_AndCheckpointsSettle(HandlerKind kind, Transport transport) {
-        Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.Probe(kind);
         await using var host = await TestHost.StartAsync(store, output, o => o
@@ -83,8 +79,7 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
 
     [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
     public async Task SingleEvent_IsHandledOnceByEachKind_AndCheckpointsSettle(Transport transport) {
-        // The saga joins once its event copies no longer reach the other subscriptions.
-        HandlerKind[] kinds = [HandlerKind.Projection, HandlerKind.Policy];
+        HandlerKind[] kinds = [HandlerKind.Projection, HandlerKind.Policy, HandlerKind.Saga];
         await using var store = await Stores.StartAsync(transport);
         var handlers = kinds.Select(ScenarioHandlers.Probe).ToArray();
         await using var host = await TestHost.StartAsync(store, output, o => {
@@ -98,7 +93,6 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
 
     [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task FailingDeserialization_ParksEventAndContinues(HandlerKind kind, Transport transport) {
-        Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.Probe(kind);
         await using var host = await TestHost.StartAsync(store, output, o => o
@@ -118,7 +112,6 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
 
     [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task UnknownEventType_IsSkipped_NotParked(HandlerKind kind, Transport transport) {
-        Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.Probe(kind);
         await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, handler));
@@ -137,7 +130,6 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
     // E9 covers projections; the store can only be interrupted on KurrentDB.
     [Theory, InlineData(HandlerKind.Policy), InlineData(HandlerKind.Saga)]
     public async Task StoreInterruption_SubscribesAgain(HandlerKind kind) {
-        Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(Transport.KurrentDB);
         var handler = ScenarioHandlers.Probe(kind);
         await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, handler));
@@ -157,7 +149,6 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
 
     [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
     public async Task TwoHandlersOfSameKindOnSameEvent_BothHandleIt(HandlerKind kind, Transport transport) {
-        Assert.SkipWhen(kind == HandlerKind.Saga, KnownIssues.SagaEventCopies);
         await using var store = await Stores.StartAsync(transport);
         var first = ScenarioHandlers.Probe(kind);
         var second = ScenarioHandlers.SecondProbe(kind);

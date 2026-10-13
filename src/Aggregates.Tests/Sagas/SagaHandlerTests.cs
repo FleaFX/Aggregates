@@ -1,4 +1,6 @@
+using Aggregates.Subscriptions;
 using FakeItEasy;
+using FluentAssertions;
 
 namespace Aggregates.Sagas;
 
@@ -19,11 +21,31 @@ public class SagaHandlerTests {
             .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Returns(AsyncEnumerable.Empty<ICommand>());
+        var source = new EventReference("stream-1", 0);
 
-        await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
+        await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), source, TestContext.Current.CancellationToken);
 
         A.CallTo(() => repository.Add(A<AggregateIdentifier>._, A<SagaRoot<TestSagaState, TestEvent>>._))
             .MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    public async Task HandleAsync_PassesTheSourceToTheSagaRoot() {
+        var repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
+        var dispatcher = A.Fake<ICommandDispatcher>();
+        SagaRoot<TestSagaState, TestEvent>? createdRoot = null;
+        A.CallTo(() => repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
+        A.CallTo(() => repository.Add(A<AggregateIdentifier>._, A<SagaRoot<TestSagaState, TestEvent>>._))
+            .Invokes(call => createdRoot = call.GetArgument<SagaRoot<TestSagaState, TestEvent>>(1));
+        A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(AsyncEnumerable.Empty<ICommand>());
+
+        await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 7), TestContext.Current.CancellationToken);
+
+        createdRoot.Should().NotBeNull();
+        createdRoot!.GetChanges().Should().Contain(new EventReference("stream-1", 7));
     }
 
     [Fact]
@@ -37,7 +59,7 @@ public class SagaHandlerTests {
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Returns(AsyncEnumerable.Empty<ICommand>());
 
-        await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
+        await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
 
         A.CallTo(() => repository.Add(A<AggregateIdentifier>._, A<SagaRoot<TestSagaState, TestEvent>>._))
             .MustNotHaveHappened();
@@ -54,7 +76,7 @@ public class SagaHandlerTests {
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Returns(new ICommand[] { command }.ToAsyncEnumerable());
 
-        await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
+        await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
 
         A.CallTo(() => dispatcher.DispatchAsync(command, A<CancellationToken>._))
             .MustHaveHappenedOnceExactly();
@@ -70,7 +92,7 @@ public class SagaHandlerTests {
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Returns(AsyncEnumerable.Empty<ICommand>());
 
-        await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
+        await BuildHandler(repository, saga, dispatcher).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
 
         A.CallTo(() => dispatcher.DispatchAsync(A<ICommand>._, A<CancellationToken>._))
             .MustNotHaveHappened();

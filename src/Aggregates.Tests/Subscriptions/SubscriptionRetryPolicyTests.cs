@@ -8,7 +8,7 @@ public class SubscriptionRetryPolicyTests {
 
     public class ExecuteAsync {
         static readonly SubscriptionMessage AnyMessage =
-            new(Event: null, CommitPosition: 42UL, Metadata: EventMetadata.Empty);
+            new(Event: null, CommitPosition: 42UL, Source: new EventReference("stream-1", 42), Metadata: EventMetadata.Empty);
 
         static SubscriptionRetryPolicy BuildPolicy(IParkedMessageSink sink, int maxRetries = 3) =>
             new(sink, new SubscriptionErrorHandlingOptions {
@@ -107,7 +107,7 @@ public class SubscriptionRetryPolicyTests {
         public async Task GivenPark_CorrectSubscriptionIdAndMessageForwarded() {
             var sink = A.Fake<IParkedMessageSink>();
             var policy = BuildPolicy(sink, maxRetries: 1);
-            var message = new SubscriptionMessage(Event: null, CommitPosition: 99UL, Metadata: EventMetadata.Empty);
+            var message = new SubscriptionMessage(Event: null, CommitPosition: 99UL, Source: new EventReference("stream-1", 99), Metadata: EventMetadata.Empty);
 
             await policy.ExecuteAsync(
                 _ => throw new InvalidOperationException(),

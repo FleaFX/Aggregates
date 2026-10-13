@@ -1,3 +1,5 @@
+using Aggregates.Subscriptions;
+
 namespace Aggregates.Sagas;
 
 /// <summary>
@@ -18,14 +20,15 @@ sealed class SagaHandler<TSaga, TSagaState, TEvent>(ISagaRepository<TSagaState, 
     /// </summary>
     /// <param name="sagaId">Identifies the saga instance to update.</param>
     /// <param name="event">The event to handle.</param>
+    /// <param name="source">Identifies the stored event that triggered the saga.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    public async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, CancellationToken cancellationToken = default) {
+    public async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, EventReference source, CancellationToken cancellationToken = default) {
         var sagaRoot = await repository.TryGetAsync(sagaId, cancellationToken);
         if (sagaRoot is null) {
             sagaRoot = new SagaRoot<TSagaState, TEvent>(default, AggregateVersion.None);
             repository.Add(sagaId, sagaRoot);
         }
-        var commands = await sagaRoot.AcceptAsync(@event, saga, cancellationToken);
+        var commands = await sagaRoot.AcceptAsync(@event, source, saga, cancellationToken);
         foreach (var command in commands)
             await dispatcher.DispatchAsync(command, cancellationToken);
     }

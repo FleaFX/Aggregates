@@ -15,7 +15,7 @@ public class ParkedMessageSinkTests(ITestOutputHelper output) {
 
         await sink.ParkAsync(
             "subscription-1",
-            new SubscriptionMessage(new OrderPlaced("order-1", "alice"), 42, EventMetadata.Empty),
+            new SubscriptionMessage(new OrderPlaced("order-1", "alice"), 42, new EventReference("order-1", 0), EventMetadata.Empty),
             new InvalidOperationException("boom"),
             TestContext.Current.CancellationToken);
 

@@ -1,3 +1,5 @@
+using Aggregates.Subscriptions;
+
 namespace Aggregates.Sagas;
 
 /// <summary>
@@ -20,10 +22,11 @@ sealed class UnitOfWorkAwareSagaHandler<TSaga, TSagaState, TEvent>(SagaHandler<T
     /// </summary>
     /// <param name="sagaId">Identifies the saga instance to update.</param>
     /// <param name="event">The event to handle.</param>
+    /// <param name="source">Identifies the stored event that triggered the saga.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    public async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, CancellationToken cancellationToken = default) {
+    public async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, EventReference source, CancellationToken cancellationToken = default) {
         await using var scope = new UnitOfWorkScope(new UnitOfWork(), uow => commitDelegate(uow));
-        await inner.HandleAsync(sagaId, @event, cancellationToken);
+        await inner.HandleAsync(sagaId, @event, source, cancellationToken);
         scope.Complete();
     }
 }

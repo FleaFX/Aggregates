@@ -1,3 +1,4 @@
+using Aggregates.Subscriptions;
 using FakeItEasy;
 using FluentAssertions;
 
@@ -17,7 +18,7 @@ public class RetrySagaHandlerTests {
 
     [Fact]
     public async Task GivenSuccessOnFirstAttempt_InvokesInnerOnce() {
-        await BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
+        await BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
 
         InnerCalls().MustHaveHappenedOnceExactly();
     }
@@ -28,7 +29,7 @@ public class RetrySagaHandlerTests {
             .Throws(new ConcurrencyException("id", AggregateVersion.None, AggregateVersion.None)).Twice()
             .Then.Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
 
-        await BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
+        await BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
 
         InnerCalls().MustHaveHappened(3, Times.Exactly);
     }
@@ -37,7 +38,7 @@ public class RetrySagaHandlerTests {
     public async Task GivenConcurrencyExceptionExceedsMaxAttempts_Throws() {
         InnerCalls().Throws(new ConcurrencyException("id", AggregateVersion.None, AggregateVersion.None));
 
-        var act = () => BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken).AsTask();
+        var act = () => BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken).AsTask();
 
         await act.Should().ThrowAsync<ConcurrencyException>();
     }
@@ -46,7 +47,7 @@ public class RetrySagaHandlerTests {
     public async Task GivenNonConcurrencyException_DoesNotRetry() {
         InnerCalls().Throws<InvalidOperationException>();
 
-        var act = () => BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken).AsTask();
+        var act = () => BuildHandler(maxAttempts: 3).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken).AsTask();
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         InnerCalls().MustHaveHappenedOnceExactly();

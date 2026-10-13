@@ -30,15 +30,16 @@ sealed class KurrentDbSubscription(Func<ValueTask> dispose, IAsyncEnumerable<Str
     // the subscription can park it and continue with the next one.
     SubscriptionMessage ToMessage(EventRecord record) {
         var commitPosition = record.Position.CommitPosition;
+        var source = new EventReference(record.EventStreamId, record.EventNumber.ToUInt64());
         try {
             var domainEvent = options.Deserialize!(record.EventType, record.Data);
             var metadata = options.DeserializeMetadata is not null && !record.Metadata.IsEmpty
                 ? options.DeserializeMetadata(record.Metadata)
                 : EventMetadata.Empty;
 
-            return new SubscriptionMessage(domainEvent, commitPosition, metadata);
+            return new SubscriptionMessage(domainEvent, commitPosition, source, metadata);
         } catch (Exception exception) when (exception is not OperationCanceledException) {
-            return new SubscriptionMessage(null, commitPosition, EventMetadata.Empty) { DeserializationError = exception };
+            return new SubscriptionMessage(null, commitPosition, source, EventMetadata.Empty) { DeserializationError = exception };
         }
     }
 

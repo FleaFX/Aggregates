@@ -26,14 +26,15 @@ sealed class MsspSubscription(Func<ValueTask> dispose, IAsyncEnumerable<Subscrip
     // A failing deserializer must not end the enumeration: the error travels with the message, so
     // the subscription can park it and continue with the next one.
     SubscriptionMessage ToMessage(SubscriptionEvent message) {
+        var source = new EventReference(message.StreamId.ToString(), message.Revision);
         try {
             var domainEvent = options.Deserialize!(message.EventType, message.Data);
             var metadata = options.DeserializeMetadata is not null && !message.Metadata.IsEmpty
                 ? options.DeserializeMetadata(message.Metadata)
                 : EventMetadata.Empty;
-            return new SubscriptionMessage(domainEvent, message.Position.Value, metadata);
+            return new SubscriptionMessage(domainEvent, message.Position.Value, source, metadata);
         } catch (Exception exception) when (exception is not OperationCanceledException) {
-            return new SubscriptionMessage(null, message.Position.Value, EventMetadata.Empty) { DeserializationError = exception };
+            return new SubscriptionMessage(null, message.Position.Value, source, EventMetadata.Empty) { DeserializationError = exception };
         }
     }
 
