@@ -9,9 +9,22 @@ namespace Aggregates.MSSP;
 public sealed class MsspCommitHandler(IMsspClient client, MsspOptions options) {
 
     /// <summary>
-    /// Appends the single changed aggregate's events to its MSSP stream.
+    /// Appends the single changed aggregate's events to its MSSP stream, serialized with
+    /// <see cref="MsspOptions.Serialize"/>.
     /// </summary>
-    public async ValueTask CommitAsync(UnitOfWork unitOfWork) {
+    /// <param name="unitOfWork">The unit of work holding the aggregate to commit.</param>
+    public ValueTask CommitAsync(UnitOfWork unitOfWork) => CommitAsync(unitOfWork, options.Serialize!);
+
+    /// <summary>
+    /// Appends the single changed aggregate's events to its MSSP stream, serialized with
+    /// <paramref name="serialize"/> instead of <see cref="MsspOptions.Serialize"/>. Only the
+    /// event type and data of the result are stored; the metadata comes from
+    /// <see cref="MsspOptions.SerializeMetadata"/> as usual. Used by saga commits, whose changes
+    /// are references to source events rather than the events themselves.
+    /// </summary>
+    /// <param name="unitOfWork">The unit of work holding the aggregate to commit.</param>
+    /// <param name="serialize">Serializes a change into the event to store.</param>
+    public async ValueTask CommitAsync(UnitOfWork unitOfWork, Func<object, EventData> serialize) {
         if (unitOfWork.GetChanged() is not { } aggregate)
             return;
 
@@ -30,7 +43,7 @@ public sealed class MsspCommitHandler(IMsspClient client, MsspOptions options) {
                 identifier.ToString(),
                 version < 0 ? StreamRevision.NoStream : (ulong)version,
                 from change in changes
-                let serialized = options.Serialize!(change)
+                let serialized = serialize(change)
                 select new EventData(serialized.EventType, serialized.Data, serializedMetadata)
             );
         } catch (OptimisticConcurrencyException ex) {

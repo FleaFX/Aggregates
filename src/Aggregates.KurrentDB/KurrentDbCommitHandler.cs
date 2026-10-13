@@ -18,9 +18,21 @@ namespace Aggregates.KurrentDB;
 /// </remarks>
 public sealed class KurrentDbCommitHandler(KurrentDBClient client, KurrentDbOptions options) {
     /// <summary>
-    /// Appends the single changed aggregate's events to its KurrentDB stream.
+    /// Appends the single changed aggregate's events to its KurrentDB stream, serialized with
+    /// <see cref="KurrentDbOptions.Serialize"/>.
     /// </summary>
-    public async ValueTask CommitAsync(UnitOfWork unitOfWork) {
+    /// <param name="unitOfWork">The unit of work holding the aggregate to commit.</param>
+    public ValueTask CommitAsync(UnitOfWork unitOfWork) => CommitAsync(unitOfWork, options.Serialize!);
+
+    /// <summary>
+    /// Appends the single changed aggregate's events to its KurrentDB stream, serialized with
+    /// <paramref name="serialize"/> instead of <see cref="KurrentDbOptions.Serialize"/>. Used by
+    /// saga commits, whose changes are references to source events rather than the events
+    /// themselves.
+    /// </summary>
+    /// <param name="unitOfWork">The unit of work holding the aggregate to commit.</param>
+    /// <param name="serialize">Serializes a change into the event to store.</param>
+    public async ValueTask CommitAsync(UnitOfWork unitOfWork, Func<object, SerializedEvent> serialize) {
         if (unitOfWork.GetChanged() is not { } aggregate)
             return;
 
@@ -35,7 +47,7 @@ public sealed class KurrentDbCommitHandler(KurrentDBClient client, KurrentDbOpti
         var serializedMetadata = options.SerializeMetadata?.Invoke(metadata);
 
         var eventData = changes.Select((e, i) => {
-            var serialized = options.Serialize!(e);
+            var serialized = serialize(e);
             // version is the last persisted revision; the first new event lands at version + 1,
             // the second at version + 2, etc. For a brand-new stream (version < 0) the first
             // event lands at position 0.

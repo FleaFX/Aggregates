@@ -1,3 +1,5 @@
+using Aggregates.Subscriptions;
+
 namespace Aggregates.Sagas;
 
 /// <summary>
@@ -10,6 +12,17 @@ namespace Aggregates.Sagas;
 public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<TSagaState, TEvent>
     where TSagaState : IState<TSagaState, TEvent> {
 
+    /// <summary>
+    /// One entry of a saga stream: the link it holds and, when the link could be resolved and
+    /// deserialized to <typeparamref name="TEvent"/>, the event it points to.
+    /// </summary>
+    /// <param name="Link">Identifies the stored event the entry links to.</param>
+    /// <param name="Event">
+    /// The linked event, or <see langword="null"/> when the link could not be resolved or does
+    /// not hold a <typeparamref name="TEvent"/>.
+    /// </param>
+    protected readonly record struct SagaStreamEntry(EventReference Link, TEvent? Event);
+
     /// <inheritdoc/>
     async ValueTask<SagaRoot<TSagaState, TEvent>?> ISagaRepository<TSagaState, TEvent>.TryGetAsync(AggregateIdentifier sagaId, CancellationToken cancellationToken) {
         var unitOfWork = UnitOfWorkScope.Current?.UnitOfWork ?? new UnitOfWork();
@@ -19,10 +32,11 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
             return (SagaRoot<TSagaState, TEvent>)existing.AggregateRoot;
 
         try {
-            var events = await ReadEventsAsync(sagaId, cancellationToken).ToArrayAsync(cancellationToken);
+            var entries = await ReadStreamAsync(sagaId, cancellationToken).ToArrayAsync(cancellationToken);
             var root = new SagaRoot<TSagaState, TEvent>(
-                events.Aggregate(TSagaState.Initial, (state, @event) => state.Apply(@event)),
-                new AggregateVersion(events.Length - 1L));
+                entries.Aggregate(TSagaState.Initial, (state, entry) => entry.Event is { } @event ? state.Apply(@event) : state),
+                new AggregateVersion(entries.Length - 1L),
+                entries.Select(entry => entry.Link).ToHashSet());
             unitOfWork.Attach(new Aggregate(sagaId, root));
             return root;
         } catch (AggregateRootNotFoundException) {
@@ -35,12 +49,13 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
         (UnitOfWorkScope.Current?.UnitOfWork ?? new UnitOfWork()).Attach(new Aggregate(sagaId, sagaRoot));
 
     /// <summary>
-    /// Reads the persisted events for <paramref name="sagaId"/> in chronological order.
+    /// Reads the persisted entries for <paramref name="sagaId"/> in chronological order. The
+    /// version of the saga counts every entry, also the ones whose link could not be resolved.
     /// </summary>
     /// <param name="sagaId">The identifier of the saga to read.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <exception cref="AggregateRootNotFoundException">
     /// Thrown when no saga exists for <paramref name="sagaId"/>.
     /// </exception>
-    protected abstract IAsyncEnumerable<TEvent> ReadEventsAsync(AggregateIdentifier sagaId, CancellationToken cancellationToken = default);
+    protected abstract IAsyncEnumerable<SagaStreamEntry> ReadStreamAsync(AggregateIdentifier sagaId, CancellationToken cancellationToken = default);
 }

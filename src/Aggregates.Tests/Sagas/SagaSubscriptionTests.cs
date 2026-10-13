@@ -8,7 +8,7 @@ namespace Aggregates.Sagas;
 
 [Trait("Category", "Integration")]
 public class SagaSubscriptionTests(ITestOutputHelper output) {
-    [Theory(Skip = KnownIssues.SagaEventCopies), MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
     public async Task SagaDoesNotRetriggerHandlersOfItsEvent(Transport transport) {
         await using var store = await Stores.StartAsync(transport);
         await using var host = await TestHost.StartAsync(store, output, o => o
@@ -39,7 +39,7 @@ public class SagaSubscriptionTests(ITestOutputHelper output) {
         public PlacedState Apply(OrderPlaced @event) => this with { Seen = Seen + 1 };
     }
 
-    [SagaContract("Placed", @namespace: "IntegrationTests")]
+    [SagaContract("PlacedSaga", @namespace: "IntegrationTests")]
     sealed class PlacedSaga(HandlerProbe probe) : ISaga<PlacedState, OrderPlaced> {
         public async IAsyncEnumerable<ICommand> ReactAsync(PlacedState state, OrderPlaced @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
             probe.Record(this, @event);
@@ -47,7 +47,7 @@ public class SagaSubscriptionTests(ITestOutputHelper output) {
         }
     }
 
-    [ProjectionContract("Placed", @namespace: "IntegrationTests")]
+    [ProjectionContract("PlacedProjection", @namespace: "IntegrationTests")]
     sealed class PlacedProjection(HandlerProbe probe) : IProjection<OrderPlaced> {
         public ValueTask<ICommit> ProjectAsync(OrderPlaced @event, EventMetadata metadata, CancellationToken cancellationToken = default) {
             probe.Record(this, @event, metadata);
@@ -55,7 +55,7 @@ public class SagaSubscriptionTests(ITestOutputHelper output) {
         }
     }
 
-    [PolicyContract("Placed", @namespace: "IntegrationTests")]
+    [PolicyContract("PlacedPolicy", @namespace: "IntegrationTests")]
     sealed class PlacedPolicy(HandlerProbe probe) : IPolicy<OrderPlaced> {
         public async IAsyncEnumerable<ICommand> ReactAsync(OrderPlaced @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
             probe.Record(this, @event);

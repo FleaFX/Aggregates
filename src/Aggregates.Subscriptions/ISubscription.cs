@@ -10,12 +10,13 @@ namespace Aggregates.Subscriptions;
 /// parked) or when deserialization failed (see <see cref="DeserializationError"/>).
 /// </param>
 /// <param name="CommitPosition">The commit position of the event in the underlying stream.</param>
+/// <param name="Source">Identifies the stored event by its stream and its revision within that stream.</param>
 /// <param name="Metadata">
 /// The metadata associated with the event. <see cref="EventMetadata.Empty"/> when the storage
 /// integration was not configured with a <c>DeserializeMetadata</c> delegate, when the
 /// event was written without metadata, or when deserialization failed.
 /// </param>
-public readonly record struct SubscriptionMessage(object? Event, ulong CommitPosition, EventMetadata Metadata) {
+public readonly record struct SubscriptionMessage(object? Event, ulong CommitPosition, EventReference Source, EventMetadata Metadata) {
     /// <summary>
     /// The exception thrown by the <c>Deserialize</c> or <c>DeserializeMetadata</c> delegate, or
     /// <see langword="null"/> when the message was deserialized. When set, <see cref="Event"/> is

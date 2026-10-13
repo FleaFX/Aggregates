@@ -88,6 +88,21 @@ public class SagaSubscriptionServiceTests {
     }
 
     [Fact]
+    public async Task GivenMatchingEvent_PassesItsSourceToTheSaga() {
+        // The fake assigns each message the source "stream-1" at its commit position.
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, position => new TestEvent(1)));
+        using var service = BuildService(factory);
+
+        await service.StartAsync(Token);
+        await factory.Drained.WaitAsync(Token);
+        await service.StopAsync(Token);
+
+        A.CallTo(() => _repository.Add(A<AggregateIdentifier>._, A<SagaRoot<TestSagaState, TestEvent>>.That.Matches(
+                root => root.GetChanges().OfType<EventReference>().Single().StreamId == "stream-1")))
+            .MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
     public async Task GivenResolverFails_ParksEvent_AndContinues() {
         var failure = new InvalidOperationException("resolver failed");
         A.CallTo(() => _resolver.Resolve(new TestEvent(3), A<EventMetadata>._)).Throws(failure);

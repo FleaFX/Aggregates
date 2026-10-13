@@ -22,7 +22,7 @@ sealed class FakeSubscriptionFactory(IReadOnlyList<SubscriptionMessage> messages
     /// <paramref name="event"/> chooses the event for each position.
     /// </summary>
     public static IReadOnlyList<SubscriptionMessage> Messages(int count, Func<ulong, object?> @event) =>
-        [.. Enumerable.Range(1, count).Select(i => new SubscriptionMessage(@event((ulong)i), (ulong)i, EventMetadata.Empty))];
+        [.. Enumerable.Range(1, count).Select(i => new SubscriptionMessage(@event((ulong)i), (ulong)i, new EventReference("stream-1", (ulong)i), EventMetadata.Empty))];
 
     /// <inheritdoc/>
     public ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default) =>

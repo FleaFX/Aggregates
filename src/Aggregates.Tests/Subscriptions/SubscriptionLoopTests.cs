@@ -292,7 +292,7 @@ public class SubscriptionLoopTests {
 
         [Fact]
         public async Task GivenUnknownEventType_ProcessesMessage_WithoutParking() {
-            var factory = new ScriptedSubscriptionFactory().Then(new SubscriptionMessage(null, 1, EventMetadata.Empty));
+            var factory = new ScriptedSubscriptionFactory().Then(new SubscriptionMessage(null, 1, new EventReference("stream-1", 1), EventMetadata.Empty));
 
             await RunUntilIdleAsync(factory);
 

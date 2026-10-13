@@ -1,3 +1,5 @@
+using Aggregates.Subscriptions;
+
 namespace Aggregates.Sagas;
 
 /// <summary>
@@ -19,12 +21,13 @@ sealed class RetrySagaHandler<TSaga, TSagaState, TEvent>(UnitOfWorkAwareSagaHand
     /// </summary>
     /// <param name="sagaId">Identifies the saga instance to update.</param>
     /// <param name="event">The event to handle.</param>
+    /// <param name="source">Identifies the stored event that triggered the saga.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    public async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, CancellationToken cancellationToken = default) {
+    public async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, EventReference source, CancellationToken cancellationToken = default) {
         var attempt = 0;
         while (true) {
             try {
-                await inner.HandleAsync(sagaId, @event, cancellationToken);
+                await inner.HandleAsync(sagaId, @event, source, cancellationToken);
                 return;
             } catch (ConcurrencyException) when (++attempt < maxAttempts) {
                 // The inner handler's UnitOfWorkScope.DisposeAsync already cleared the

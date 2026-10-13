@@ -1,3 +1,4 @@
+using Aggregates.Subscriptions;
 using FakeItEasy;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -19,7 +20,7 @@ public class LoggingSagaHandlerTests {
 
     [Fact]
     public async Task GivenSuccess_LogsHandlingAndHandled() {
-        await BuildHandler().HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
+        await BuildHandler().HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
 
         _logger.Collector.GetSnapshot()
             .Should().Contain(r => r.Level == LogLevel.Debug && r.Message.Contains("Handling"))
@@ -27,11 +28,11 @@ public class LoggingSagaHandlerTests {
     }
 
     [Fact]
-    public async Task LogsTheEventTypeTheSagaAndTheSagaId() {
-        await BuildHandler().HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken);
+    public async Task LogsTheEventTypeTheSourceTheSagaAndTheSagaId() {
+        await BuildHandler().HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
 
         _logger.Collector.GetSnapshot()
-            .Should().Contain(r => r.Message == "Handling TestEvent in ISaga`2 for saga saga-1");
+            .Should().Contain(r => r.Message == "Handling TestEvent (0@stream-1) in ISaga`2 for saga saga-1");
     }
 
     [Fact]
@@ -39,7 +40,7 @@ public class LoggingSagaHandlerTests {
         A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Throws<InvalidOperationException>();
 
-        var act = () => BuildHandler().HandleAsync("saga-1", new TestEvent(1), TestContext.Current.CancellationToken).AsTask();
+        var act = () => BuildHandler().HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken).AsTask();
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         _logger.Collector.GetSnapshot()

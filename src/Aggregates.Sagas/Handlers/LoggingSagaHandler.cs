@@ -1,3 +1,4 @@
+using Aggregates.Subscriptions;
 using Microsoft.Extensions.Logging;
 
 namespace Aggregates.Sagas;
@@ -22,26 +23,27 @@ sealed partial class LoggingSagaHandler<TSaga, TSagaState, TEvent>(
     /// </summary>
     /// <param name="sagaId">Identifies the saga instance to update.</param>
     /// <param name="event">The event to handle.</param>
+    /// <param name="source">Identifies the stored event that triggered the saga.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    public async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, CancellationToken cancellationToken = default) {
+    public async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, EventReference source, CancellationToken cancellationToken = default) {
         var eventType = @event?.GetType().Name ?? typeof(TEvent).Name;
         var saga = typeof(TSaga).Name;
-        LogHandling(logger, eventType, saga, sagaId);
+        LogHandling(logger, eventType, source, saga, sagaId);
         try {
-            await inner.HandleAsync(sagaId, @event, cancellationToken);
-            LogHandled(logger, eventType, saga, sagaId);
+            await inner.HandleAsync(sagaId, @event, source, cancellationToken);
+            LogHandled(logger, eventType, source, saga, sagaId);
         } catch (Exception ex) {
-            LogFailed(logger, ex, eventType, saga, sagaId);
+            LogFailed(logger, ex, eventType, source, saga, sagaId);
             throw;
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Handling {EventType} in {Saga} for saga {SagaId}")]
-    static partial void LogHandling(ILogger logger, string eventType, string saga, AggregateIdentifier sagaId);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Handling {EventType} ({Source}) in {Saga} for saga {SagaId}")]
+    static partial void LogHandling(ILogger logger, string eventType, EventReference source, string saga, AggregateIdentifier sagaId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Handled {EventType} in {Saga} for saga {SagaId}")]
-    static partial void LogHandled(ILogger logger, string eventType, string saga, AggregateIdentifier sagaId);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Handled {EventType} ({Source}) in {Saga} for saga {SagaId}")]
+    static partial void LogHandled(ILogger logger, string eventType, EventReference source, string saga, AggregateIdentifier sagaId);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to handle {EventType} in {Saga} for saga {SagaId}")]
-    static partial void LogFailed(ILogger logger, Exception exception, string eventType, string saga, AggregateIdentifier sagaId);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to handle {EventType} ({Source}) in {Saga} for saga {SagaId}")]
+    static partial void LogFailed(ILogger logger, Exception exception, string eventType, EventReference source, string saga, AggregateIdentifier sagaId);
 }

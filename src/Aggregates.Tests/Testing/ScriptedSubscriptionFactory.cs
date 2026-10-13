@@ -17,13 +17,13 @@ sealed class ScriptedSubscriptionFactory(Func<Exception, bool>? isTransient = nu
     /// <summary>
     /// A message at <paramref name="position"/> whose event is the position itself.
     /// </summary>
-    public static SubscriptionMessage Message(ulong position) => new(position, position, EventMetadata.Empty);
+    public static SubscriptionMessage Message(ulong position) => new(position, position, new EventReference("stream-1", position), EventMetadata.Empty);
 
     /// <summary>
     /// A message at <paramref name="position"/> that could not be deserialized.
     /// </summary>
     public static SubscriptionMessage Undeserializable(ulong position, Exception error) =>
-        new(null, position, EventMetadata.Empty) { DeserializationError = error };
+        new(null, position, new EventReference("stream-1", position), EventMetadata.Empty) { DeserializationError = error };
 
     /// <summary>
     /// The <c>fromPosition</c> of every call to <see cref="Subscribe"/>, in order.

@@ -5,8 +5,4 @@ namespace Aggregates.Testing;
 /// documents what is wrong; the fix removes the skip.
 /// </summary>
 static class KnownIssues {
-    /// <summary>
-    /// Saga streams contain copies of the trigger events.
-    /// </summary>
-    public const string SagaEventCopies = "Sagas store a copy of their trigger event, which is delivered to every subscription again";
 }
