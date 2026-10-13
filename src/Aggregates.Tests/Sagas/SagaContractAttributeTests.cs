@@ -69,6 +69,73 @@ public class SagaContractAttributeTests {
 
             attr.ContinueFrom.Should().Be("Legacy.OrderFulfillment@v1");
         }
+
+        [Fact]
+        public void WhenEmpty_ReturnsNull() {
+            var attr = new SagaContractAttribute("OrderFulfillment", version: 3, continueFrom: "");
+
+            attr.ContinueFrom.Should().BeNull();
+        }
+
+        [Fact]
+        public void WhenNone_ReturnsNull() {
+            var attr = new SagaContractAttribute("OrderFulfillment", version: 3,
+                continueFrom: Aggregates.Subscriptions.ContinueFrom.None);
+
+            attr.ContinueFrom.Should().BeNull();
+        }
+    }
+
+    public class Predecessors {
+        [Fact]
+        public void WhenVersion1_IsEmpty() {
+            var attr = new SagaContractAttribute("OrderFulfillment", version: 1);
+
+            attr.Predecessors.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void WhenVersion2_ContainsPreviousVersion() {
+            var attr = new SagaContractAttribute("OrderFulfillment", version: 2);
+
+            attr.Predecessors.Should().Equal("OrderFulfillment@v1");
+        }
+
+        [Fact]
+        public void WhenVersion3_ContainsEveryPreviousVersionNearestFirst() {
+            var attr = new SagaContractAttribute("OrderFulfillment", version: 3);
+
+            attr.Predecessors.Should().Equal("OrderFulfillment@v2", "OrderFulfillment@v1");
+        }
+
+        [Fact]
+        public void WhenVersion3WithNamespace_IncludesNamespaceInEveryId() {
+            var attr = new SagaContractAttribute("OrderFulfillment", version: 3, @namespace: "Orders");
+
+            attr.Predecessors.Should().Equal("Orders.OrderFulfillment@v2", "Orders.OrderFulfillment@v1");
+        }
+
+        [Fact]
+        public void WhenExplicitlySet_ContainsOnlyTheExplicitId() {
+            var attr = new SagaContractAttribute("OrderFulfillment", version: 3, continueFrom: "Legacy.OrderFulfillment@v5");
+
+            attr.Predecessors.Should().Equal("Legacy.OrderFulfillment@v5");
+        }
+
+        [Fact]
+        public void WhenEmpty_IsEmpty() {
+            var attr = new SagaContractAttribute("OrderFulfillment", version: 3, continueFrom: "");
+
+            attr.Predecessors.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void WhenNone_IsEmpty() {
+            var attr = new SagaContractAttribute("OrderFulfillment", version: 3,
+                continueFrom: Aggregates.Subscriptions.ContinueFrom.None);
+
+            attr.Predecessors.Should().BeEmpty();
+        }
     }
 
     public class StartFromEnd {
@@ -82,6 +149,14 @@ public class SagaContractAttributeTests {
         [Fact]
         public void WhenSetToTrue_ReturnsTrue() {
             var attr = new SagaContractAttribute("OrderFulfillment", startFromEnd: true);
+
+            attr.StartFromEnd.Should().BeTrue();
+        }
+
+        [Fact]
+        public void WhenSetAlongsideContinueFrom_ReturnsTrue() {
+            var attr = new SagaContractAttribute("OrderFulfillment", version: 2,
+                continueFrom: "Legacy.OrderFulfillment@v5", startFromEnd: true);
 
             attr.StartFromEnd.Should().BeTrue();
         }

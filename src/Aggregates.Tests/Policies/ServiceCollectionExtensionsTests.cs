@@ -91,10 +91,19 @@ public class ServiceCollectionExtensionsTests {
 
             services.AddAggregates().AddPolicies(o => o.ScanTypes(typeof(FullContractPolicy)));
 
-            Registrations(services).Should().Equal(
-                new SubscriptionRegistration("Fulfillment.Shipping@v2", typeof(FullContractPolicy), typeof(PolicyTestEvent), StartFromEnd: true));
+            Registrations(services).Should().ContainSingle().Which.Should().BeEquivalentTo(
+                new SubscriptionRegistration("Fulfillment.Shipping@v2", typeof(FullContractPolicy), typeof(PolicyTestEvent), StartFromEnd: true,
+                    Predecessors: ["Fulfillment.Shipping@v1"]));
         }
 
+        [Fact]
+        public void GivenAVersion1Contract_RegistersNoPredecessors() {
+            var services = new ServiceCollection();
+
+            services.AddAggregates().AddPolicies(o => o.ScanTypes(typeof(PlainContractPolicy)));
+
+            Registrations(services).Should().ContainSingle().Which.Predecessors.Should().BeEmpty();
+        }
         [Fact]
         public void GivenAClassWithTwoPolicyInterfaces_Throws() {
             var add = () => new ServiceCollection().AddAggregates().AddPolicies(o => o.ScanTypes(typeof(DoublePolicy)));

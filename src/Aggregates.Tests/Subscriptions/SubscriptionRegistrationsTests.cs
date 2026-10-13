@@ -65,8 +65,9 @@ public class SubscriptionRegistrationsTests {
     public class Add {
         readonly ServiceCollection _services = new();
 
-        static SubscriptionRegistration Registration(string id, Type handlerType) =>
-            new(id, handlerType, typeof(IFirstEvent), StartFromEnd: false);
+        static SubscriptionRegistration Registration(string id, Type handlerType, params string[] predecessors) =>
+            new(id, handlerType, typeof(IFirstEvent), StartFromEnd: false,
+                Predecessors: predecessors.Length == 0 ? null : predecessors);
 
         [Fact]
         public void AddsTheRegistrationAsSingletonInstance() {
@@ -111,6 +112,53 @@ public class SubscriptionRegistrationsTests {
             SubscriptionRegistrations.Add(_services, Registration("Orders@v2", typeof(OtherHandler))).Should().BeTrue();
 
             _services.Count(d => d.ServiceType == typeof(SubscriptionRegistration)).Should().Be(2);
+        }
+
+        [Fact]
+        public void GivenARegistrationThatContinuesFromItself_Throws() {
+            var add = () => SubscriptionRegistrations.Add(_services, Registration("Orders@v2", typeof(SingleHandler), "Orders@v2"));
+
+            add.Should().Throw<InvalidOperationException>()
+                .WithMessage("*'Orders@v2'*continues from itself*");
+        }
+
+        [Fact]
+        public void GivenAPredecessorAlreadyRegistered_Throws() {
+            SubscriptionRegistrations.Add(_services, Registration("Orders@v1", typeof(SingleHandler)));
+
+            var add = () => SubscriptionRegistrations.Add(_services, Registration("Orders@v2", typeof(OtherHandler), "Orders@v1"));
+
+            add.Should().Throw<InvalidOperationException>()
+                .WithMessage($"*'Orders@v2'*'Orders@v1'*{typeof(SingleHandler).FullName}*");
+        }
+
+        [Fact]
+        public void GivenASuccessorAlreadyRegistered_Throws() {
+            SubscriptionRegistrations.Add(_services, Registration("Orders@v2", typeof(OtherHandler), "Orders@v1"));
+
+            var add = () => SubscriptionRegistrations.Add(_services, Registration("Orders@v1", typeof(SingleHandler)));
+
+            add.Should().Throw<InvalidOperationException>()
+                .WithMessage($"*'Orders@v2'*'Orders@v1'*{typeof(SingleHandler).FullName}*");
+        }
+
+        [Fact]
+        public void GivenAPredecessorTwoLevelsDown_Throws() {
+            SubscriptionRegistrations.Add(_services, Registration("Orders@v1", typeof(SingleHandler)));
+
+            var add = () => SubscriptionRegistrations.Add(_services,
+                Registration("Orders@v3", typeof(OtherHandler), "Orders@v2", "Orders@v1"));
+
+            add.Should().Throw<InvalidOperationException>()
+                .WithMessage($"*'Orders@v3'*'Orders@v1'*{typeof(SingleHandler).FullName}*");
+        }
+
+        [Fact]
+        public void GivenUnrelatedPredecessors_AddsTheRegistration() {
+            SubscriptionRegistrations.Add(_services, Registration("Orders@v1", typeof(SingleHandler)));
+
+            SubscriptionRegistrations.Add(_services, Registration("Orders@v2", typeof(OtherHandler), "Legacy.Orders@v1"))
+                .Should().BeTrue();
         }
     }
 

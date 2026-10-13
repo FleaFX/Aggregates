@@ -41,6 +41,103 @@ public class ProjectionContractAttributeTests {
         }
     }
 
+    public class ContinueFrom {
+        [Fact]
+        public void WhenVersion1_ReturnsNull() {
+            var attr = new ProjectionContractAttribute("Orders", version: 1);
+
+            attr.ContinueFrom.Should().BeNull();
+        }
+
+        [Fact]
+        public void WhenVersion2_DefaultsToPreviousVersion() {
+            var attr = new ProjectionContractAttribute("Orders", version: 2);
+
+            attr.ContinueFrom.Should().Be("Orders@v1");
+        }
+
+        [Fact]
+        public void WhenVersion2WithNamespace_IncludesNamespaceInDefault() {
+            var attr = new ProjectionContractAttribute("Orders", version: 2, @namespace: "Fulfillment");
+
+            attr.ContinueFrom.Should().Be("Fulfillment.Orders@v1");
+        }
+
+        [Fact]
+        public void WhenExplicitlySet_ReturnsExplicitValue() {
+            var attr = new ProjectionContractAttribute("Orders", version: 3, continueFrom: "Legacy.Orders@v5");
+
+            attr.ContinueFrom.Should().Be("Legacy.Orders@v5");
+        }
+
+        [Fact]
+        public void WhenEmpty_ReturnsNull() {
+            var attr = new ProjectionContractAttribute("Orders", version: 3, continueFrom: "");
+
+            attr.ContinueFrom.Should().BeNull();
+        }
+
+        [Fact]
+        public void WhenNone_ReturnsNull() {
+            var attr = new ProjectionContractAttribute("Orders", version: 3,
+                continueFrom: Aggregates.Subscriptions.ContinueFrom.None);
+
+            attr.ContinueFrom.Should().BeNull();
+        }
+    }
+
+    public class Predecessors {
+        [Fact]
+        public void WhenVersion1_IsEmpty() {
+            var attr = new ProjectionContractAttribute("Orders", version: 1);
+
+            attr.Predecessors.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void WhenVersion2_ContainsPreviousVersion() {
+            var attr = new ProjectionContractAttribute("Orders", version: 2);
+
+            attr.Predecessors.Should().Equal("Orders@v1");
+        }
+
+        [Fact]
+        public void WhenVersion3_ContainsEveryPreviousVersionNearestFirst() {
+            var attr = new ProjectionContractAttribute("Orders", version: 3);
+
+            attr.Predecessors.Should().Equal("Orders@v2", "Orders@v1");
+        }
+
+        [Fact]
+        public void WhenVersion3WithNamespace_IncludesNamespaceInEveryId() {
+            var attr = new ProjectionContractAttribute("Orders", version: 3, @namespace: "Fulfillment");
+
+            attr.Predecessors.Should().Equal("Fulfillment.Orders@v2", "Fulfillment.Orders@v1");
+        }
+
+        [Fact]
+        public void WhenExplicitlySet_ContainsOnlyTheExplicitId() {
+            var attr = new ProjectionContractAttribute("Orders", version: 3, continueFrom: "Legacy.Orders@v5");
+
+            attr.Predecessors.Should().Equal("Legacy.Orders@v5");
+        }
+
+        [Fact]
+        public void WhenEmpty_IsEmpty() {
+            var attr = new ProjectionContractAttribute("Orders", version: 3, continueFrom: "");
+
+            attr.Predecessors.Should().BeEmpty();
+        }
+
+        [Fact]
+        public void WhenNone_IsEmpty() {
+            var attr = new ProjectionContractAttribute("Orders", version: 3,
+                continueFrom: Aggregates.Subscriptions.ContinueFrom.None);
+
+            attr.Predecessors.Should().BeEmpty();
+        }
+    }
+
     public class StartFromEnd {
         [Fact]
         public void DefaultsToFalse() {
@@ -52,6 +149,14 @@ public class ProjectionContractAttributeTests {
         [Fact]
         public void WhenSetToTrue_ReturnsTrue() {
             var attr = new ProjectionContractAttribute("Orders", startFromEnd: true);
+
+            attr.StartFromEnd.Should().BeTrue();
+        }
+
+        [Fact]
+        public void WhenSetAlongsideContinueFrom_ReturnsTrue() {
+            var attr = new ProjectionContractAttribute("Orders", version: 2,
+                continueFrom: "Legacy.Orders@v5", startFromEnd: true);
 
             attr.StartFromEnd.Should().BeTrue();
         }

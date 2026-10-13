@@ -118,10 +118,19 @@ public class ServiceCollectionExtensionsTests {
 
             services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(FullContractSaga)).WithResolver<TestEvent>(_ => []));
 
-            Registrations(services).Should().Equal(
-                new SubscriptionRegistration("Orders.Fulfillment@v2", typeof(FullContractSaga), typeof(TestEvent), StartFromEnd: true));
+            Registrations(services).Should().ContainSingle().Which.Should().BeEquivalentTo(
+                new SubscriptionRegistration("Orders.Fulfillment@v2", typeof(FullContractSaga), typeof(TestEvent), StartFromEnd: true,
+                    Predecessors: ["Orders.Fulfillment@v1"]));
         }
 
+        [Fact]
+        public void GivenAVersion1Contract_RegistersNoPredecessors() {
+            var services = new ServiceCollection();
+
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(PlainContractSaga)).WithResolver<TestEvent>(_ => []));
+
+            Registrations(services).Should().ContainSingle().Which.Predecessors.Should().BeEmpty();
+        }
         [Fact]
         public void GivenAClassWithTwoSagaInterfaces_Throws_WithAHint() {
             var add = () => new ServiceCollection().AddAggregates().AddSagas(o => o.ScanTypes(typeof(DoubleSaga)));

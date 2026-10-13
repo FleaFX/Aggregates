@@ -61,7 +61,8 @@ public static class ServiceCollectionExtensions {
                 SubscriptionRegistrations.GetSubscriptionId(policyType, contract),
                 policyType,
                 eventType,
-                contract?.StartFromEnd ?? false);
+                contract?.StartFromEnd ?? false,
+                contract?.Predecessors);
 
             if (!SubscriptionRegistrations.Add(builder.Services, registration))
                 continue;

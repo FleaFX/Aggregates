@@ -12,6 +12,12 @@ namespace Aggregates.Subscriptions;
 ///   subscribes again after the last processed message, which can be ahead of the stored
 ///   checkpoint (see <see cref="SubscriptionCheckpointOptions"/>), so a reconnect delivers no
 ///   message twice.</item>
+///   <item>When the subscription has no checkpoint of its own, the loop continues after the
+///   checkpoint of the nearest predecessor that has one (see
+///   <see cref="SubscriptionRegistration.Predecessors"/>), adopts it by writing it as the
+///   subscription's own first checkpoint before subscribing, and starts after it. A predecessor's
+///   checkpoint wins over starting from the end. Without a predecessor checkpoint, the
+///   subscription starts from the beginning, or from the end when the registration says so.</item>
 ///   <item>Whether a failure is transient is decided by <see cref="ISubscriptionFactory.IsTransient"/>.
 ///   Transient failures, and a subscription that ends without failure, lead to a new subscription
 ///   after a delay as configured by <see cref="SubscriptionResubscribeOptions"/>. Any other
@@ -42,9 +48,9 @@ public sealed partial class SubscriptionLoop(
     /// Runs the subscription until <paramref name="stoppingToken"/> is cancelled or a failure
     /// that is not transient occurs.
     /// </summary>
-    /// <param name="subscriptionId">The identifier of the subscription, used for its checkpoint and parked messages.</param>
-    /// <param name="startFromEnd">
-    /// When <see langword="true"/> and there is no checkpoint yet, starts from the current end of the stream.
+    /// <param name="registration">
+    /// The subscription to run: its id, whether it starts from the end of the store when it has
+    /// no checkpoint yet, and the predecessors whose checkpoint it continues from.
     /// </param>
     /// <param name="process">
     /// Handles one deserialized message. Exceptions it throws are treated as subscription failures;
@@ -52,11 +58,11 @@ public sealed partial class SubscriptionLoop(
     /// </param>
     /// <param name="stoppingToken">Stops the loop.</param>
     public async Task RunAsync(
-        string subscriptionId,
-        bool startFromEnd,
+        SubscriptionRegistration registration,
         Func<SubscriptionMessage, CancellationToken, ValueTask> process,
         CancellationToken stoppingToken) {
 
+        var subscriptionId = registration.SubscriptionId;
         var tracker = new CheckpointTracker(checkpointStore, subscriptionId, checkpointOptions, timeProvider);
         var failures = 0;
         try {
@@ -64,10 +70,10 @@ public sealed partial class SubscriptionLoop(
                 var from = tracker.LastPosition;
                 TimeSpan delay;
                 try {
-                    from ??= await checkpointStore.GetAsync(subscriptionId, stoppingToken);
-                    LogSubscribing(logger, failures == 0 ? LogLevel.Information : LogLevel.Debug, subscriptionId, from, startFromEnd);
+                    from ??= await GetStartPositionAsync(registration, stoppingToken);
+                    LogSubscribing(logger, failures == 0 ? LogLevel.Information : LogLevel.Debug, subscriptionId, from, registration.StartFromEnd);
 
-                    await using var subscription = subscriptionFactory.Subscribe(from, startFromEnd, stoppingToken);
+                    await using var subscription = subscriptionFactory.Subscribe(from, registration.StartFromEnd, stoppingToken);
                     await foreach (var message in subscription.WithCancellation(stoppingToken)) {
                         if (message.DeserializationError is { } error) {
                             LogParkingUndeserializable(logger, error, subscriptionId, message.CommitPosition);
@@ -108,6 +114,32 @@ public sealed partial class SubscriptionLoop(
         }
     }
 
+    // The start position: the subscription's own checkpoint, or the nearest predecessor's,
+    // which is adopted before subscribing. Null for a fresh start (or end) without adoption.
+    async ValueTask<ulong?> GetStartPositionAsync(SubscriptionRegistration registration, CancellationToken stoppingToken) {
+        if (await checkpointStore.GetAsync(registration.SubscriptionId, stoppingToken) is { } own)
+            return own;
+
+        var predecessors = registration.Predecessors ?? [];
+        for (var i = 0; i < predecessors.Count; i++) {
+            if (await checkpointStore.GetAsync(predecessors[i], stoppingToken) is not { } inherited)
+                continue;
+
+            await checkpointStore.StoreAsync(registration.SubscriptionId, inherited, stoppingToken);
+            if (i == 0)
+                LogContinuingFromPredecessor(logger, registration.SubscriptionId, predecessors[i], inherited);
+            else
+                LogContinuingFromOlderPredecessor(logger, registration.SubscriptionId, predecessors[i], inherited,
+                    string.Join(", ", predecessors.Take(i)));
+            return inherited;
+        }
+
+        if (predecessors.Count > 0)
+            LogNoPredecessorCheckpoint(logger, registration.SubscriptionId,
+                string.Join(", ", predecessors), registration.StartFromEnd ? "end" : "beginning");
+        return null;
+    }
+
     TimeSpan NextDelay(int failures) =>
         Backoff.Delay(failures, resubscribeOptions.InitialDelay, resubscribeOptions.MaxDelay, resubscribeOptions.BackoffMultiplier);
 
@@ -120,6 +152,15 @@ public sealed partial class SubscriptionLoop(
             LogFinalFlushFailed(logger, exception, subscriptionId, tracker.LastPosition);
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Subscription '{SubscriptionId}' has no checkpoint; continuing from '{Predecessor}' after position {Position}")]
+    static partial void LogContinuingFromPredecessor(ILogger logger, string subscriptionId, string predecessor, ulong position);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Subscription '{SubscriptionId}' has no checkpoint; continuing from '{Predecessor}' after position {Position}, because {Skipped} has no checkpoint. If a skipped version replayed on purpose, that replay did not happen here.")]
+    static partial void LogContinuingFromOlderPredecessor(ILogger logger, string subscriptionId, string predecessor, ulong position, string skipped);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Subscription '{SubscriptionId}' has no checkpoint and neither have its predecessors {Predecessors}; starting from the {Start}")]
+    static partial void LogNoPredecessorCheckpoint(ILogger logger, string subscriptionId, string predecessors, string start);
 
     [LoggerMessage(Message = "Subscription '{SubscriptionId}' subscribing after position {Position} (start from end: {StartFromEnd})")]
     static partial void LogSubscribing(ILogger logger, LogLevel level, string subscriptionId, ulong? position, bool startFromEnd);

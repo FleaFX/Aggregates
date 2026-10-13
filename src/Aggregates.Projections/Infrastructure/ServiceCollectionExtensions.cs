@@ -60,7 +60,8 @@ public static class ServiceCollectionExtensions {
                 SubscriptionRegistrations.GetSubscriptionId(projectionType, contract),
                 projectionType,
                 eventType,
-                contract?.StartFromEnd ?? false);
+                contract?.StartFromEnd ?? false,
+                contract?.Predecessors);
 
             if (!SubscriptionRegistrations.Add(services, registration))
                 continue;
