@@ -232,6 +232,25 @@ public class SagaTimeoutSchedulerTests {
     }
 
     [Fact]
+    public async Task ContinuesFromAnOlderPredecessorsCheckpoint_AndWarnsAboutTheSkippedOne() {
+        var registration = new SubscriptionRegistration("Test.Reminders@v3", typeof(TestSaga), typeof(TestEvent), false, ["Test.Reminders@v2", "Test.Reminders@v1"]);
+        _store.Append(SagaTimeouts.SubscriptionId("Test.Reminders@v3"), SagaTimeoutFormat.MarkerEventType, "activated"u8.ToArray());
+        var activation = new SagaTimeoutActivation<TestSaga>(_store, [registration]);
+        await _checkpointStore.StoreAsync(SagaTimeouts.SubscriptionId("Test.Reminders@v1"), 7, TestContext.Current.CancellationToken);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var delivered = new ConcurrentQueue<OpenSagaTimeout>();
+
+        var run = Scheduler().RunAsync(registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        await CaughtUpAsync(_logger);
+        await cts.CancelAsync();
+        await run;
+
+        _checkpointStore.Stored.Should().Contain((SagaTimeouts.SubscriptionId("Test.Reminders@v3"), 7));
+        _logger.Collector.GetSnapshot().Should().Contain(record =>
+            record.Level == LogLevel.Warning && record.Message.Contains("because timeouts-Test.Reminders@v2 has no checkpoint"));
+    }
+
+    [Fact]
     public async Task WaitsUntilActivated() {
         _store.AppendRequest("saga-1", Owner, Start.AddDays(-1));
         var activation = new SagaTimeoutActivation<TestSaga>(_store, [Registration]);
