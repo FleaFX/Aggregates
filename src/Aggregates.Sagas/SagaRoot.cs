@@ -4,7 +4,8 @@ namespace Aggregates.Sagas;
 
 /// <summary>
 /// The root of a saga aggregate. Maintains state by applying incoming events and
-/// delegates reaction logic to the saga class.
+/// delegates reaction logic to the saga class. Its changes are links to source events
+/// (<see cref="EventReference"/>) and planned commands (<see cref="SagaTimeoutRequest"/>).
 /// </summary>
 /// <typeparam name="TSagaState">The type of the state object.</typeparam>
 /// <typeparam name="TEvent">The type of the events applicable to this saga.</typeparam>
@@ -14,7 +15,7 @@ namespace Aggregates.Sagas;
 public sealed class SagaRoot<TSagaState, TEvent>(TSagaState? state, AggregateVersion version, IReadOnlySet<EventReference>? handled = null) : IAggregateRoot
     where TSagaState : IState<TSagaState, TEvent> {
 
-    readonly List<EventReference> _changes = [];
+    readonly List<object> _changes = [];
 
     /// <summary>
     /// Gets the current state of the saga.
@@ -25,13 +26,14 @@ public sealed class SagaRoot<TSagaState, TEvent>(TSagaState? state, AggregateVer
     public AggregateVersion Version { get; } = version;
 
     /// <inheritdoc/>
-    public IEnumerable<object> GetChanges() => _changes.Cast<object>();
+    public IEnumerable<object> GetChanges() => _changes;
 
     /// <summary>
     /// Applies <paramref name="event"/> to the current state, then eagerly materializes
     /// the commands produced by <see cref="ISaga{TSagaState,TEvent}.ReactAsync"/>. Records
     /// <paramref name="source"/> as a change, so the commit stores a link to the source event
-    /// instead of a copy of it.
+    /// instead of a copy of it. A <see cref="SagaTimeout"/> the saga yields is recorded as a
+    /// <see cref="SagaTimeoutRequest"/> change instead of returned.
     /// </summary>
     /// <param name="event">The event to apply.</param>
     /// <param name="source">Identifies the stored event that triggered this saga.</param>
@@ -51,8 +53,13 @@ public sealed class SagaRoot<TSagaState, TEvent>(TSagaState? state, AggregateVer
         _changes.Add(source);
         State = State.Apply(@event);
         var commands = new List<ICommand>();
-        await foreach (var command in saga.ReactAsync(State, @event, cancellationToken))
-            commands.Add(command);
+        await foreach (var command in saga.ReactAsync(State, @event, cancellationToken)) {
+            // A planned command is stored with the saga's state and executed when it is due, not now.
+            if (command is SagaTimeout timeout)
+                _changes.Add(new SagaTimeoutRequest(SagaTimeouts.OwnerOf(saga.GetType()), timeout.Due, timeout.Command));
+            else
+                commands.Add(command);
+        }
         return commands;
     }
 }

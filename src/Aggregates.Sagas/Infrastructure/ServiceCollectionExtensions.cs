@@ -27,6 +27,8 @@ public static class ServiceCollectionExtensions {
     /// <see cref="SagaContractAttribute"/> as subscription id (or its full type name when it has none).
     /// The resolver registered for the saga with <see cref="SagasOptions.WithResolver{TSaga,TEvent}(ISagaIdResolver{TEvent})"/>
     /// takes precedence over the one registered for its event type.
+    /// Each saga's hosted service also runs its timeout scheduler, which waits until the saga
+    /// plans its first command with <see cref="SagaTimeout"/>.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// A class implements <see cref="ISaga{TSagaState,TEvent}"/> more than once, two classes share a
@@ -55,6 +57,11 @@ public static class ServiceCollectionExtensions {
         // Subscription loop — subscribes again after a transient failure
         builder.Services.TryAddSingleton(new SubscriptionResubscribeOptions());
         builder.Services.TryAddSingleton<SubscriptionLoop>();
+
+        // Saga timeouts — one scheduler and dispatcher serve every saga; the activation is per saga class
+        builder.Services.TryAddSingleton<SagaTimeoutScheduler>();
+        builder.Services.TryAddSingleton<SagaTimeoutDispatcher>();
+        builder.Services.TryAddSingleton(typeof(SagaTimeoutActivation<>));
 
         // ISagaIdResolver<TEvent> registrations, shared by every saga on TEvent
         foreach (var (eventType, resolver) in options.Resolvers)

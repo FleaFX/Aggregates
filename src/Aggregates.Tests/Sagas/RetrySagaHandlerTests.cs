@@ -59,6 +59,6 @@ public class RetrySagaHandlerTests {
     // The interface itself as TSaga, so the saga can be faked.
     RetrySagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent> BuildHandler(int maxAttempts) =>
         new(new UnitOfWorkAwareSagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent>(
-            new SagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent>(_repository, _saga, A.Fake<ICommandDispatcher>()),
+            new SagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent>(_repository, _saga, A.Fake<ICommandDispatcher>(), new SagaTimeoutActivation<ISaga<TestSagaState, TestEvent>>(A.Fake<ISagaTimeoutStore>(), [])),
             _ => ValueTask.CompletedTask), maxAttempts);
 }

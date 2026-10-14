@@ -10,6 +10,8 @@ namespace Aggregates.Sagas.KurrentDB;
 /// <see cref="AggregateIdentifier.ToString"/> of the saga identifier. The stream is read with
 /// <c>resolveLinkTos</c>, so the <c>$&gt;</c> links a saga stream holds are resolved to the
 /// events they point to; unresolved links count for the version but leave the state untouched.
+/// Timeout requests count for the version; the commands they plan are executed by the timeout
+/// scheduler.
 /// </summary>
 sealed class KurrentDbSagaRepository<TSagaState, TEvent>(KurrentDBClient client, KurrentDbOptions options) : BaseSagaRepository<TSagaState, TEvent>
     where TSagaState : IState<TSagaState, TEvent> {
@@ -27,11 +29,17 @@ sealed class KurrentDbSagaRepository<TSagaState, TEvent>(KurrentDBClient client,
             throw new AggregateRootNotFoundException(sagaId);
 
         await foreach (var resolvedEvent in result.WithCancellation(cancellationToken)) {
-            // The entry in the saga stream: the link itself, whether resolved or not.
-            if (resolvedEvent.OriginalEvent.EventType != EventReference.LinkEventType)
+            // The entry in the saga stream: a link (resolved or not) or a timeout request.
+            var entry = resolvedEvent.OriginalEvent;
+            var revision = entry.EventNumber.ToUInt64();
+            if (entry.EventType == SagaTimeoutFormat.RequestEventType) {
+                yield return SagaStreamEntry.TimeoutRequest(new EventReference(sagaId.ToString(), revision));
+                continue;
+            }
+            if (entry.EventType != EventReference.LinkEventType)
                 throw new InvalidOperationException(
-                    $"Stream '{sagaId}' is not a saga stream: it contains '{resolvedEvent.OriginalEvent.EventType}' at revision {resolvedEvent.OriginalEvent.EventNumber.ToUInt64()}. "
-                    + $"Saga streams only hold links; does the resolver of {typeof(TEvent).Name} return an aggregate id?");
+                    $"Stream '{sagaId}' is not a saga stream: it contains '{entry.EventType}' at revision {revision}. "
+                    + $"Saga streams only hold links and timeout requests; does the resolver of {typeof(TEvent).Name} return an aggregate id?");
 
             if (!EventReference.TryParseLinkData(resolvedEvent.OriginalEvent.Data.Span, out var link))
                 throw new InvalidOperationException(

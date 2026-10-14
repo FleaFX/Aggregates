@@ -52,7 +52,8 @@ public sealed partial class SubscriptionLoop(
     SubscriptionResubscribeOptions resubscribeOptions,
     TimeProvider timeProvider,
     ILogger<SubscriptionLoop> logger,
-    EventTypeRegistry? eventTypeRegistry = null) {
+    EventTypeRegistry? eventTypeRegistry = null
+) {
 
     static readonly TimeSpan FinalFlushTimeout = TimeSpan.FromSeconds(5);
 
@@ -141,21 +142,14 @@ public sealed partial class SubscriptionLoop(
     // The start position: the subscription's own checkpoint, or the nearest predecessor's,
     // which is adopted before subscribing. Null for a fresh start (or end) without adoption.
     async ValueTask<ulong?> GetStartPositionAsync(SubscriptionRegistration registration, CancellationToken stoppingToken) {
-        if (await checkpointStore.GetAsync(registration.SubscriptionId, stoppingToken) is { } own)
-            return own;
-
         var predecessors = registration.Predecessors ?? [];
-        for (var i = 0; i < predecessors.Count; i++) {
-            if (await checkpointStore.GetAsync(predecessors[i], stoppingToken) is not { } inherited)
-                continue;
-
-            await checkpointStore.StoreAsync(registration.SubscriptionId, inherited, stoppingToken);
-            if (i == 0)
-                LogContinuingFromPredecessor(logger, registration.SubscriptionId, predecessors[i], inherited);
-            else
-                LogContinuingFromOlderPredecessor(logger, registration.SubscriptionId, predecessors[i], inherited,
+        if (await checkpointStore.GetOrAdoptAsync(registration.SubscriptionId, predecessors, stoppingToken) is { } checkpoint) {
+            if (checkpoint.AdoptedFrom == 0)
+                LogContinuingFromPredecessor(logger, registration.SubscriptionId, predecessors[0], checkpoint.Position);
+            else if (checkpoint.AdoptedFrom is { } i)
+                LogContinuingFromOlderPredecessor(logger, registration.SubscriptionId, predecessors[i], checkpoint.Position,
                     string.Join(", ", predecessors.Take(i)));
-            return inherited;
+            return checkpoint.Position;
         }
 
         if (predecessors.Count > 0)

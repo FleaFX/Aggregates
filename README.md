@@ -2,7 +2,7 @@
 
 [![Build & test](https://github.com/FleaFX/aggregates/actions/workflows/build.yml/badge.svg)](https://github.com/FleaFX/aggregates/actions/workflows/build.yml)
 
-> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.8`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
+> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.9`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
 
 This library provides all the boilerplate code needed to do event sourcing, leaving you with just the core functionality of your domain to write.
 
@@ -318,13 +318,13 @@ services
 ## Running the tests
 
 ```bash
-dotnet test src/Aggregates.slnx
+dotnet test --solution src/Aggregates.slnx
 ```
 
 The integration tests run against real stores and need Docker: KurrentDB and SQL Server are started in containers through [Testcontainers](https://dotnet.testcontainers.org/), and MSSP runs embedded. Without Docker, they fail rather than being skipped. To run only the unit tests:
 
 ```bash
-dotnet test src/Aggregates.slnx --filter "Category!=Integration"
+dotnet test --solution src/Aggregates.slnx --filter "Category!=Integration"
 ```
 
 Integration tests are marked with `[Trait("Category", "Integration")]`. Tests for known bugs are skipped; the reasons are listed in `src/Aggregates.Tests/Testing/KnownIssues.cs`.

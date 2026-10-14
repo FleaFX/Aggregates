@@ -9,8 +9,11 @@ public class SagaHandlerTests {
     static SagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent> BuildHandler(
         ISagaRepository<TestSagaState, TestEvent> repository,
         ISaga<TestSagaState, TestEvent> saga,
-        ICommandDispatcher dispatcher) =>
-        new(repository, saga, dispatcher);
+        ICommandDispatcher dispatcher,
+        ISagaTimeoutStore? store = null) =>
+        new(repository, saga, dispatcher, new SagaTimeoutActivation<ISaga<TestSagaState, TestEvent>>(
+            store ?? A.Fake<ISagaTimeoutStore>(),
+            [new SubscriptionRegistration("Test.Saga@v1", typeof(ISaga<TestSagaState, TestEvent>), typeof(TestEvent), false)]));
 
     [Fact]
     public async Task HandleAsync_WhenSagaNotFound_CreatesSagaRoot() {
@@ -96,5 +99,40 @@ public class SagaHandlerTests {
 
         A.CallTo(() => dispatcher.DispatchAsync(A<ICommand>._, A<CancellationToken>._))
             .MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithARequestedTimeout_ActivatesTheSchedulerBeforeDispatching() {
+        var command = new TestCommand();
+        var repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
+        var dispatcher = A.Fake<ICommandDispatcher>();
+        var store = A.Fake<ISagaTimeoutStore>();
+        A.CallTo(() => repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
+        A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(new ICommand[] { SagaTimeout.At(DateTimeOffset.UtcNow, command), command }.ToAsyncEnumerable());
+
+        await BuildHandler(repository, saga, dispatcher, store).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
+
+        A.CallTo(() => store.AppendAsync("timeouts-Test.Saga@v1", SagaTimeoutFormat.MarkerEventType, A<ReadOnlyMemory<byte>>._, A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly()
+            .Then(A.CallTo(() => dispatcher.DispatchAsync(command, A<CancellationToken>._)).MustHaveHappenedOnceExactly());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WithoutTimeouts_DoesNotTouchTheTimeoutStore() {
+        var repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
+        var dispatcher = A.Fake<ICommandDispatcher>();
+        var store = A.Fake<ISagaTimeoutStore>();
+        A.CallTo(() => repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
+        A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(new ICommand[] { new TestCommand() }.ToAsyncEnumerable());
+
+        await BuildHandler(repository, saga, dispatcher, store).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
+
+        A.CallTo(store).MustNotHaveHappened();
     }
 }
