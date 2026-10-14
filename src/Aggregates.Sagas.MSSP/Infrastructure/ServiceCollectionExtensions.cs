@@ -24,9 +24,10 @@ public static class ServiceCollectionExtensions {
     ///   <item><see cref="MsspSagaRepository{TSagaState,TEvent}"/> as the saga repository.</item>
     ///   <item>
     ///     A <see cref="SagaCommitDelegate"/> backed by <see cref="MsspCommitHandler"/> that
-    ///     serializes the saga's changes as <c>$&gt;</c> links to their source events, so a saga
-    ///     stream never holds copies of the events it reacts to.
+    ///     serializes the saga's changes as <c>$&gt;</c> links to their source events and as
+    ///     timeout requests, so a saga stream never holds copies of the events it reacts to.
     ///   </item>
+    ///   <item><see cref="MsspSagaTimeoutStore"/> as <see cref="ISagaTimeoutStore"/>.</item>
     /// </list>
     /// </remarks>
     public static ISagasMsspBuilder AddMssp(this ISagasBuilder builder) {
@@ -39,30 +40,44 @@ public static class ServiceCollectionExtensions {
         // Saga repository
         builder.UseSagaRepository(typeof(MsspSagaRepository<,>));
 
-        // Saga commit delegate — reuses the same MsspCommitHandler as regular aggregates,
-        // but serializes the saga's changes as links to their source events instead of copies.
+        // Saga commit delegate — reuses the same MsspCommitHandler as regular aggregates, but
+        // serializes the saga's changes as links to their source events and as timeout requests,
+        // never as copies.
         builder.Services.TryAddSingleton<SagaCommitDelegate>(sp => {
             var handler = sp.GetRequiredService<MsspCommitHandler>();
-            return uow => handler.CommitAsync(uow, SerializeLink);
+            var options = sp.GetRequiredService<MsspOptions>();
+            return uow => handler.CommitAsync(uow, change => SerializeChange(change, options));
         });
 
         // Parked-message sink — Replace overrides the LoggingParkedMessageSink fallback registered
         // by AddSagas, regardless of the order in which AddMssp was called.
         builder.Services.Replace(ServiceDescriptor.Singleton<IParkedMessageSink, MsspParkedMessageSink>());
 
+        // Timeout store — read by the timeout scheduler of every saga
+        builder.Services.TryAddSingleton<ISagaTimeoutStore, MsspSagaTimeoutStore>();
+
         return new SagasMsspBuilder(builder.Services);
     }
 
     /// <summary>
-    /// Serializes a saga change into the link stored in the saga stream.
+    /// Serializes a saga change into the entry stored in the saga stream.
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the change is not an <see cref="EventReference"/>.
+    /// Thrown when the change is neither an <see cref="EventReference"/> nor a
+    /// <see cref="SagaTimeoutRequest"/>.
     /// </exception>
-    static EventData SerializeLink(object change) =>
-        change is EventReference reference
-            ? new EventData(EventReference.LinkEventType, reference.ToLinkData())
-            : throw new InvalidOperationException($"A saga's changes are references to source events, but got a {change.GetType().Name}.");
+    static EventData SerializeChange(object change, MsspOptions options) {
+        switch (change) {
+            case EventReference reference:
+                return new EventData(EventReference.LinkEventType, reference.ToLinkData());
+            case SagaTimeoutRequest request:
+                var command = options.Serialize!(request.Command);
+                return new EventData(SagaTimeoutFormat.RequestEventType,
+                    SagaTimeoutFormat.WriteRequest(request.Owner, request.Due, command.EventType, command.Data.Span));
+            default:
+                throw new InvalidOperationException($"A saga's changes are links and timeout requests, but got a {change.GetType().Name}.");
+        }
+    }
 }
 
 sealed class SagasMsspBuilder(IServiceCollection services) : ISagasMsspBuilder {

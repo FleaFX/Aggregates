@@ -20,6 +20,9 @@ namespace Aggregates.Sagas;
 /// </list>
 /// A fresh DI scope is created per saga invocation so that scoped services are never captured
 /// as singletons by this long-lived hosted service.
+/// Next to the subscription it runs the saga's <see cref="SagaTimeoutScheduler"/>, which executes
+/// the commands the saga planned with <see cref="SagaTimeout"/> when they are due, with retries
+/// and parking under <c>timeouts-{subscription id}</c>.
 /// </remarks>
 /// <typeparam name="TSaga">The saga class.</typeparam>
 /// <typeparam name="TSagaState">The saga state type.</typeparam>
@@ -28,14 +31,26 @@ sealed class SagaSubscriptionService<TSaga, TSagaState, TEvent>(
     SubscriptionLoop loop,
     IServiceScopeFactory scopeFactory,
     SubscriptionRetryPolicy retryPolicy,
+    SagaTimeoutScheduler scheduler,
+    SagaTimeoutDispatcher dispatcher,
+    SagaTimeoutActivation<TSaga> activation,
     SubscriptionRegistration registration,
     ISagaIdResolver<TEvent> resolver) : BackgroundService
     where TSaga : ISaga<TSagaState, TEvent>
     where TSagaState : IState<TSagaState, TEvent> {
 
     /// <inheritdoc/>
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        loop.RunAsync(registration, ProcessAsync, stoppingToken);
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+        var timeoutSubscriptionId = SagaTimeouts.SubscriptionId(registration.SubscriptionId);
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var events = loop.RunAsync(registration, ProcessAsync, stop.Token);
+        var timeouts = scheduler.RunAsync(registration, activation,
+            (timeout, ct) => dispatcher.DeliverAsync(timeoutSubscriptionId, timeout, ct), stop.Token);
+        // Each ends only when the host stops or after a failure that is not transient; the other stops with it.
+        await Task.WhenAny(events, timeouts);
+        await stop.CancelAsync();
+        await Task.WhenAll(events, timeouts);
+    }
 
     async ValueTask ProcessAsync(SubscriptionMessage message, CancellationToken cancellationToken) {
         if (message.Event is not TEvent typedEvent)

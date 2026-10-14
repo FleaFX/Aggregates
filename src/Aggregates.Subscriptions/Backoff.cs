@@ -1,17 +1,17 @@
 namespace Aggregates.Subscriptions;
 
 /// <summary>
-/// Exponential backoff with an upper bound and ±10% jitter, shared by the handler retries and
-/// the resubscribe loop.
+/// Computes exponential backoff delays with ±10% jitter, for retries and resubscribes.
 /// </summary>
-static class Backoff {
+public static class Backoff {
     /// <summary>
     /// Returns the delay before the next attempt, after <paramref name="attempt"/> failed attempts.
     /// </summary>
-    /// <param name="attempt">The number of failed attempts so far; 1 or higher.</param>
+    /// <param name="attempt">The number of failed attempts so far; 1-based.</param>
     /// <param name="initialDelay">The delay after the first failed attempt.</param>
     /// <param name="maxDelay">The upper bound before jitter.</param>
     /// <param name="multiplier">The factor applied to the delay after each failed attempt.</param>
+    /// <returns>The delay to wait before the next attempt.</returns>
     public static TimeSpan Delay(int attempt, TimeSpan initialDelay, TimeSpan maxDelay, double multiplier) {
         var ms = Math.Min(
             initialDelay.TotalMilliseconds * Math.Pow(multiplier, attempt - 1),

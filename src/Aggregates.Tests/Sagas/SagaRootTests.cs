@@ -104,4 +104,45 @@ public class SagaRootTests {
         root.GetChanges().Should().BeEmpty();
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._)).MustNotHaveHappened();
     }
+
+    [Fact]
+    public async Task AcceptAsync_RecordsATimeout_AndDoesNotReturnItAsACommand() {
+        var due = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero);
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
+        A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(new ICommand[] { SagaTimeout.At(due, new TestCommand()), new TestCommand() }.ToAsyncEnumerable());
+        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var source = new EventReference("stream-1", 3);
+
+        var commands = await root.AcceptAsync(new TestEvent(1), source, saga, TestContext.Current.CancellationToken);
+
+        var owner = SubscriptionRegistrations.GetSubscriptionId(saga.GetType(), null);
+        root.GetChanges().Should().Equal(source, new SagaTimeoutRequest(owner, due, new TestCommand()));
+        commands.Should().ContainSingle().Which.Should().BeOfType<TestCommand>();
+    }
+
+    [Fact]
+    public async Task AcceptAsync_TheOwnerIsTheSubscriptionIdOfTheSaga() {
+        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+
+        await root.AcceptAsync(new TestEvent(1), new EventReference("stream-1", 0), new TimeoutTestSaga(), TestContext.Current.CancellationToken);
+
+        root.GetChanges().OfType<SagaTimeoutRequest>().Should().ContainSingle()
+            .Which.Owner.Should().Be("Tests.TimeoutTest@v1");
+    }
+
+    [Fact]
+    public async Task AcceptAsync_ForAHandledSource_RecordsNoTimeout() {
+        var source = new EventReference("stream-1", 0);
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
+        A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(new ICommand[] { SagaTimeout.At(DateTimeOffset.UtcNow, new TestCommand()) }.ToAsyncEnumerable());
+        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None, new HashSet<EventReference> { source });
+
+        var commands = await root.AcceptAsync(new TestEvent(1), source, saga, TestContext.Current.CancellationToken);
+
+        root.GetChanges().Should().BeEmpty();
+        commands.Should().BeEmpty();
+        A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._)).MustNotHaveHappened();
+    }
 }

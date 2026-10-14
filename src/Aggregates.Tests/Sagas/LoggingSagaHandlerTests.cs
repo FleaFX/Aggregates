@@ -49,7 +49,7 @@ public class LoggingSagaHandlerTests {
 
     // The interface itself as TSaga, so the saga can be faked behind the real chain.
     LoggingSagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent> BuildHandler() {
-        var inner = new SagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent>(_repository, _saga, A.Fake<ICommandDispatcher>());
+        var inner = new SagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent>(_repository, _saga, A.Fake<ICommandDispatcher>(), new SagaTimeoutActivation<ISaga<TestSagaState, TestEvent>>(A.Fake<ISagaTimeoutStore>(), []));
         var uow = new UnitOfWorkAwareSagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent>(inner, _ => ValueTask.CompletedTask);
         var retry = new RetrySagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent>(uow);
         return new(retry, _logger);

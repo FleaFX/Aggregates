@@ -13,15 +13,43 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
     where TSagaState : IState<TSagaState, TEvent> {
 
     /// <summary>
+    /// The kind of a saga stream entry.
+    /// </summary>
+    protected enum SagaStreamEntryKind {
+        /// <summary>
+        /// A <c>$&gt;</c> link to a source event the saga reacted to.
+        /// </summary>
+        Link,
+
+        /// <summary>
+        /// A command the saga planned (<see cref="SagaTimeoutFormat.RequestEventType"/>): it counts for the
+        /// version, but doesn't change the state.
+        /// </summary>
+        TimeoutRequest
+    }
+
+    /// <summary>
     /// One entry of a saga stream: the link it holds and, when the link could be resolved and
     /// deserialized to <typeparamref name="TEvent"/>, the event it points to.
     /// </summary>
-    /// <param name="Link">Identifies the stored event the entry links to.</param>
+    /// <param name="Link">For a link: the source event it points to. For a timeout request: the entry itself.</param>
     /// <param name="Event">
     /// The linked event, or <see langword="null"/> when the link could not be resolved or does
-    /// not hold a <typeparamref name="TEvent"/>.
+    /// not hold a <typeparamref name="TEvent"/>; <see langword="null"/> for a timeout request.
     /// </param>
-    protected readonly record struct SagaStreamEntry(EventReference Link, TEvent? Event);
+    protected readonly record struct SagaStreamEntry(EventReference Link, TEvent? Event) {
+        /// <summary>
+        /// The kind of the entry; <see cref="SagaStreamEntryKind.Link"/> unless created with <see cref="TimeoutRequest"/>.
+        /// </summary>
+        public SagaStreamEntryKind Kind { get; init; }
+
+        /// <summary>
+        /// A timeout request.
+        /// </summary>
+        /// <param name="request">The saga stream and revision of the request.</param>
+        public static SagaStreamEntry TimeoutRequest(EventReference request) =>
+            new(request, default) { Kind = SagaStreamEntryKind.TimeoutRequest };
+    }
 
     /// <inheritdoc/>
     async ValueTask<SagaRoot<TSagaState, TEvent>?> ISagaRepository<TSagaState, TEvent>.TryGetAsync(AggregateIdentifier sagaId, CancellationToken cancellationToken) {
@@ -33,10 +61,12 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
 
         try {
             var entries = await ReadStreamAsync(sagaId, cancellationToken).ToArrayAsync(cancellationToken);
+            // A timeout request counts for the version only: the command it plans runs outside the saga.
+            var links = entries.Where(entry => entry.Kind == SagaStreamEntryKind.Link).ToArray();
             var root = new SagaRoot<TSagaState, TEvent>(
-                entries.Aggregate(TSagaState.Initial, (state, entry) => entry.Event is { } @event ? state.Apply(@event) : state),
+                links.Aggregate(TSagaState.Initial, (state, entry) => entry.Event is { } @event ? state.Apply(@event) : state),
                 new AggregateVersion(entries.Length - 1L),
-                entries.Select(entry => entry.Link).ToHashSet());
+                links.Select(entry => entry.Link).ToHashSet());
             unitOfWork.Attach(new Aggregate(sagaId, root));
             return root;
         } catch (AggregateRootNotFoundException) {
@@ -49,8 +79,9 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
         (UnitOfWorkScope.Current?.UnitOfWork ?? new UnitOfWork()).Attach(new Aggregate(sagaId, sagaRoot));
 
     /// <summary>
-    /// Reads the persisted entries for <paramref name="sagaId"/> in chronological order. The
-    /// version of the saga counts every entry, also the ones whose link could not be resolved.
+    /// Reads the persisted entries for <paramref name="sagaId"/>: links and timeout requests,
+    /// in stream order. The version of the saga counts every entry, also the ones whose link could
+    /// not be resolved.
     /// </summary>
     /// <param name="sagaId">The identifier of the saga to read.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>

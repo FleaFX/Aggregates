@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace Aggregates.Sagas;
 
 record struct TestEvent(int Value);
@@ -26,4 +28,12 @@ record OtherTestSagaState(int Total) : IState<OtherTestSagaState, OtherTestEvent
 class OtherTestSaga : ISaga<OtherTestSagaState, OtherTestEvent> {
     public IAsyncEnumerable<ICommand> ReactAsync(OtherTestSagaState state, OtherTestEvent @event, CancellationToken cancellationToken = default) =>
         AsyncEnumerable.Empty<ICommand>();
+}
+
+[SagaContract("TimeoutTest", @namespace: "Tests")]
+class TimeoutTestSaga : ISaga<TestSagaState, TestEvent> {
+    public async IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
+        yield return SagaTimeout.At(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), new TestCommand());
+        await Task.CompletedTask;
+    }
 }

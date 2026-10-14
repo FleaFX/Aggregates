@@ -24,30 +24,35 @@ sealed class MsspSagaRepository<TSagaState, TEvent>(IMsspClient client, MsspOpti
         if (recordedEvents.Length == 0)
             throw new AggregateRootNotFoundException(sagaId);
 
-        var links = new EventReference[recordedEvents.Length];
+        var entries = new SagaStreamEntry[recordedEvents.Length];
+        var links = new List<int>();
         for (var i = 0; i < recordedEvents.Length; i++) {
             var recorded = recordedEvents[i];
+            if (recorded.EventType == SagaTimeoutFormat.RequestEventType) {
+                entries[i] = SagaStreamEntry.TimeoutRequest(new EventReference(sagaId.ToString(), recorded.Revision));
+                continue;
+            }
             if (recorded.EventType != EventReference.LinkEventType)
                 throw new InvalidOperationException(
                     $"Stream '{sagaId}' is not a saga stream: it contains '{recorded.EventType}' at revision {recorded.Revision}. "
-                    + $"Saga streams only hold links; does the resolver of {typeof(TEvent).Name} return an aggregate id?");
+                    + $"Saga streams only hold links and timeout requests; does the resolver of {typeof(TEvent).Name} return an aggregate id?");
             if (!EventReference.TryParseLinkData(recorded.Data.Span, out var link))
                 throw new InvalidOperationException($"Stream '{sagaId}' holds an invalid link at revision {recorded.Revision}.");
-            links[i] = link;
+            entries[i] = new SagaStreamEntry(link, default);
+            links.Add(i);
         }
 
-        var events = new TEvent?[links.Length];
-        await Parallel.ForEachAsync(Enumerable.Range(0, links.Length), new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = cancellationToken }, async (i, token) => {
-            await foreach (var target in client.ReadAsync(links[i].StreamId, links[i].Revision, maxCount: 1, cancellationToken: token)) {
-                if (target.Revision != links[i].Revision)
-                    break;
-                if (options.Deserialize!(target.EventType, target.Data) is TEvent typedEvent)
-                    events[i] = typedEvent;
+        // Only links need a read; a timeout request holds its own data.
+        await Parallel.ForEachAsync(links, new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = cancellationToken }, async (i, token) => {
+            var link = entries[i].Link;
+            await foreach (var target in client.ReadAsync(link.StreamId, link.Revision, maxCount: 1, cancellationToken: token)) {
+                if (target.Revision == link.Revision && options.Deserialize!(target.EventType, target.Data) is TEvent typedEvent)
+                    entries[i] = new SagaStreamEntry(link, typedEvent);
                 break;
             }
         });
 
-        for (var i = 0; i < links.Length; i++)
-            yield return new SagaStreamEntry(links[i], events[i]);
+        foreach (var entry in entries)
+            yield return entry;
     }
 }
