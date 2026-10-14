@@ -2,7 +2,7 @@
 
 [![Build & test](https://github.com/FleaFX/aggregates/actions/workflows/build.yml/badge.svg)](https://github.com/FleaFX/aggregates/actions/workflows/build.yml)
 
-> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.6`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
+> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.7`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
 
 This library provides all the boilerplate code needed to do event sourcing, leaving you with just the core functionality of your domain to write.
 
@@ -328,11 +328,3 @@ dotnet test src/Aggregates.slnx --filter "Category!=Integration"
 
 Integration tests are marked with `[Trait("Category", "Integration")]`. Tests for known bugs are skipped; the reasons are listed in `src/Aggregates.Tests/Testing/KnownIssues.cs`.
 
-## Releasing
-
-Packages are published to NuGet from tags only:
-
-1. Bump `VersionPrefix`/`VersionSuffix` in `src/Directory.Build.props` and merge to `main`.
-2. Tag that commit with `v<version>` (e.g. `v1.0.0`) and push the tag.
-
-The publish workflow runs the full build and test suite, and fails when the tag doesn't match the version.
