@@ -114,7 +114,8 @@ public class SubscriptionScenarioTests(ITestOutputHelper output) {
     public async Task UnknownEventType_IsSkipped_NotParked(HandlerKind kind, Transport transport) {
         await using var store = await Stores.StartAsync(transport);
         var handler = ScenarioHandlers.Probe(kind);
-        await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, handler));
+        // Without a registry the unknown event type reaches the subscription, which skips it.
+        await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).WithoutEventTypeRegistry().Handlers(kind, handler));
 
         // The serializer doesn't know this type, so Deserialize returns null.
         await store.AppendRawAsync("other-1", "IntegrationTests.Unknown@v1", "{}"u8.ToArray());

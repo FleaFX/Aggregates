@@ -47,4 +47,15 @@ public class KurrentDbSubscriptionFactoryTests {
 
         public ValueTask DisposeAsync() => _client.DisposeAsync();
     }
+
+    public class CheckpointInterval {
+        [Theory]
+        [InlineData(1, 1)]
+        [InlineData(32, 1)]
+        [InlineData(33, 2)]
+        [InlineData(4096, 128)]
+        public void RoundsUpToAMultipleOf32(int progressInterval, uint expected) {
+            KurrentDbSubscriptionFactory.CheckpointInterval(progressInterval).Should().Be(expected);
+        }
+    }
 }

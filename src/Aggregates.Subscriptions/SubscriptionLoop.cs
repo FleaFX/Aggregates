@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 
 namespace Aggregates.Subscriptions;
@@ -17,7 +18,20 @@ namespace Aggregates.Subscriptions;
 ///   <see cref="SubscriptionRegistration.Predecessors"/>), adopts it by writing it as the
 ///   subscription's own first checkpoint before subscribing, and starts after it. A predecessor's
 ///   checkpoint wins over starting from the end. Without a predecessor checkpoint, the
-///   subscription starts from the beginning, or from the end when the registration says so.</item>
+///   subscription starts from the beginning, or from the end when the registration says so,
+///   fixed at the end position the transport reports before the first subscribe, so a
+///   subscription that stops before its first event misses none appended meanwhile.</item>
+///   <item>When an <see cref="EventTypeRegistry"/> is registered, the loop asks it for the
+///   stored names of the event types the registration can receive (see
+///   <see cref="EventTypeRegistry.GetTypeNames"/>) and the transport delivers only those.
+///   Without a registry, for a registration on <see langword="object"/>, or when the registry
+///   knows no matching event type (logged as a warning), the subscription receives every event
+///   type. The names are computed once per run and reused by every resubscribe.</item>
+///   <item>A progress message (see <see cref="SubscriptionMessage.IsProgress"/>) reports how far
+///   the store read events the subscription's filter excluded; it is not processed, but written
+///   as the checkpoint right away. The store reports one per
+///   <see cref="SubscriptionCheckpointOptions.MaxFilteredEvents"/> events it read, so a quiet
+///   subscription still advances.</item>
 ///   <item>Whether a failure is transient is decided by <see cref="ISubscriptionFactory.IsTransient"/>.
 ///   Transient failures, and a subscription that ends without failure, lead to a new subscription
 ///   after a delay as configured by <see cref="SubscriptionResubscribeOptions"/>. Any other
@@ -37,7 +51,8 @@ public sealed partial class SubscriptionLoop(
     SubscriptionCheckpointOptions checkpointOptions,
     SubscriptionResubscribeOptions resubscribeOptions,
     TimeProvider timeProvider,
-    ILogger<SubscriptionLoop> logger) {
+    ILogger<SubscriptionLoop> logger,
+    EventTypeRegistry? eventTypeRegistry = null) {
 
     static readonly TimeSpan FinalFlushTimeout = TimeSpan.FromSeconds(5);
 
@@ -64,6 +79,7 @@ public sealed partial class SubscriptionLoop(
 
         var subscriptionId = registration.SubscriptionId;
         var tracker = new CheckpointTracker(checkpointStore, subscriptionId, checkpointOptions, timeProvider);
+        var eventTypes = GetEventTypes(registration);
         var failures = 0;
         try {
             while (true) {
@@ -71,18 +87,26 @@ public sealed partial class SubscriptionLoop(
                 TimeSpan delay;
                 try {
                     from ??= await GetStartPositionAsync(registration, stoppingToken);
-                    LogSubscribing(logger, failures == 0 ? LogLevel.Information : LogLevel.Debug, subscriptionId, from, registration.StartFromEnd);
+                    LogSubscribing(logger, failures == 0 ? LogLevel.Information : LogLevel.Debug, subscriptionId, from,
+                        registration.StartFromEnd, eventTypes?.Count.ToString(CultureInfo.InvariantCulture) ?? "all");
 
-                    await using var subscription = subscriptionFactory.Subscribe(from, registration.StartFromEnd, stoppingToken);
+                    await using var subscription = subscriptionFactory.Subscribe(
+                        new SubscriptionRequest(from, registration.StartFromEnd, eventTypes, checkpointOptions.MaxFilteredEvents), stoppingToken);
                     await foreach (var message in subscription.WithCancellation(stoppingToken)) {
-                        if (message.DeserializationError is { } error) {
-                            LogParkingUndeserializable(logger, error, subscriptionId, message.CommitPosition);
-                            await parkedMessageSink.ParkAsync(subscriptionId, message, error, stoppingToken);
+                        if (message.IsProgress) {
+                            // Progress at or before the known position (KurrentDB reports 0 when it starts) is no progress.
+                            if (message.CommitPosition > (tracker.LastPosition ?? from ?? 0))
+                                await tracker.RecordProgressAsync(message.CommitPosition, stoppingToken);
                         } else {
-                            await process(message, stoppingToken);
-                        }
+                            if (message.DeserializationError is { } error) {
+                                LogParkingUndeserializable(logger, error, subscriptionId, message.CommitPosition);
+                                await parkedMessageSink.ParkAsync(subscriptionId, message, error, stoppingToken);
+                            } else {
+                                await process(message, stoppingToken);
+                            }
 
-                        await tracker.AdvanceAsync(message.CommitPosition, stoppingToken);
+                            await tracker.AdvanceAsync(message.CommitPosition, stoppingToken);
+                        }
 
                         if (failures > 0) {
                             LogResubscribed(logger, subscriptionId, from, failures);
@@ -137,7 +161,28 @@ public sealed partial class SubscriptionLoop(
         if (predecessors.Count > 0)
             LogNoPredecessorCheckpoint(logger, registration.SubscriptionId,
                 string.Join(", ", predecessors), registration.StartFromEnd ? "end" : "beginning");
+
+        if (registration.StartFromEnd && await subscriptionFactory.GetEndPositionAsync(stoppingToken) is { } end) {
+            await checkpointStore.StoreAsync(registration.SubscriptionId, end, stoppingToken);
+            LogStartingFromEnd(logger, registration.SubscriptionId, end);
+            return end;
+        }
         return null;
+    }
+
+    // The stored event types the subscription can receive, or null to receive every event type.
+    IReadOnlyList<string>? GetEventTypes(SubscriptionRegistration registration) {
+        if (eventTypeRegistry is null || registration.EventType == typeof(object))
+            return null;
+
+        var names = eventTypeRegistry.GetTypeNames(registration.EventType);
+        if (names.Count == 0) {
+            LogNoKnownEventTypes(logger, registration.SubscriptionId, registration.EventType.FullName);
+            return null;
+        }
+
+        LogEventTypes(logger, registration.SubscriptionId, string.Join(", ", names));
+        return names;
     }
 
     TimeSpan NextDelay(int failures) =>
@@ -162,8 +207,17 @@ public sealed partial class SubscriptionLoop(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Subscription '{SubscriptionId}' has no checkpoint and neither have its predecessors {Predecessors}; starting from the {Start}")]
     static partial void LogNoPredecessorCheckpoint(ILogger logger, string subscriptionId, string predecessors, string start);
 
-    [LoggerMessage(Message = "Subscription '{SubscriptionId}' subscribing after position {Position} (start from end: {StartFromEnd})")]
-    static partial void LogSubscribing(ILogger logger, LogLevel level, string subscriptionId, ulong? position, bool startFromEnd);
+    [LoggerMessage(Message = "Subscription '{SubscriptionId}' subscribing after position {Position} (start from end: {StartFromEnd}, event types: {EventTypes})")]
+    static partial void LogSubscribing(ILogger logger, LogLevel level, string subscriptionId, ulong? position, bool startFromEnd, string eventTypes);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Subscription '{SubscriptionId}' receives the event types {EventTypes}")]
+    static partial void LogEventTypes(ILogger logger, string subscriptionId, string eventTypes);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Subscription '{SubscriptionId}' handles {EventType}, but the EventTypeRegistry knows no event type it can receive; it receives every event type instead. Add the assembly with these events to the registry.")]
+    static partial void LogNoKnownEventTypes(ILogger logger, string subscriptionId, string? eventType);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Subscription '{SubscriptionId}' has no checkpoint; starting from the end of the store at position {Position}")]
+    static partial void LogStartingFromEnd(ILogger logger, string subscriptionId, ulong position);
 
     [LoggerMessage(Message = "Subscription '{SubscriptionId}' failed at position {Position}; subscribing again in {Delay} (attempt {Attempt})")]
     static partial void LogResubscribing(ILogger logger, LogLevel level, Exception exception, string subscriptionId, ulong? position, int attempt, TimeSpan delay);

@@ -6,26 +6,46 @@ namespace Aggregates.KurrentDB;
 
 /// <summary>
 /// Creates KurrentDB <c>$all</c> subscriptions. Deserialization is handled via
-/// <see cref="KurrentDbOptions.Deserialize"/>. System events are excluded via
-/// <see cref="EventTypeFilter.ExcludeSystemEvents"/>.
+/// <see cref="KurrentDbOptions.Deserialize"/>. Only the event types of the request are
+/// delivered, or every event type except system events.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Events whose type starts with <c>$</c> are never delivered; the library's own bookkeeping
 /// (checkpoints, parked messages) uses that prefix.
+/// </para>
+/// <para>
+/// The server reports progress via <c>checkpointReached</c> once per interval of events it
+/// has read (see <see cref="SubscriptionRequest.ProgressInterval"/>), which becomes a
+/// progress message. The end position is read from <c>$all</c> backwards.
+/// </para>
 /// </remarks>
 public sealed class KurrentDbSubscriptionFactory(KurrentDBClient client, KurrentDbOptions options) : ISubscriptionFactory {
     /// <inheritdoc/>
-    public ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default) {
-        var from = (fromPosition, startFromEnd) switch {
+    public ISubscription Subscribe(SubscriptionRequest request, CancellationToken cancellationToken = default) {
+        var from = (request.FromPosition, request.StartFromEnd) switch {
             ({ } pos, _) => FromAll.After(new Position(pos, pos)),
             (null, true) => FromAll.End,
             _ => FromAll.Start,
         };
 
-        var filterOptions = new SubscriptionFilterOptions(EventTypeFilter.ExcludeSystemEvents());
+        IEventFilter filter = request.EventTypePattern is { } pattern
+            ? EventTypeFilter.RegularExpression(pattern)
+            : EventTypeFilter.ExcludeSystemEvents();
+        var filterOptions = new SubscriptionFilterOptions(filter, CheckpointInterval(request.ProgressInterval));
         var subscription = client.SubscribeToAll(from, filterOptions: filterOptions, cancellationToken: cancellationToken);
         return new KurrentDbSubscription(() => subscription.DisposeAsync(), subscription.Messages, options);
     }
+
+    /// <inheritdoc/>
+    public async ValueTask<ulong?> GetEndPositionAsync(CancellationToken cancellationToken = default) {
+        await foreach (var resolved in client.ReadAllAsync(Direction.Backwards, Position.End, maxCount: 1, cancellationToken: cancellationToken))
+            return resolved.OriginalEvent.Position.CommitPosition;
+        return null;
+    }
+
+    // The server reports progress once per checkpointInterval x 32 events it reads (spike v1-05).
+    internal static uint CheckpointInterval(int progressInterval) => (uint)Math.Max(1, (progressInterval + 31) / 32);
 
     /// <inheritdoc/>
     /// <remarks>

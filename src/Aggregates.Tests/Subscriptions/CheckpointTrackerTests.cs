@@ -10,10 +10,11 @@ public class CheckpointTrackerTests {
     readonly ICheckpointStore _store = A.Fake<ICheckpointStore>();
     readonly FakeTimeProvider _time = new();
 
-    CheckpointTracker BuildTracker(int maxBatchSize = 3, int maxIntervalSeconds = 5) =>
+    CheckpointTracker BuildTracker(int maxBatchSize = 3, int maxIntervalSeconds = 5, int maxFilteredEvents = 4) =>
         new(_store, SubscriptionId, new SubscriptionCheckpointOptions {
             MaxBatchSize = maxBatchSize,
-            MaxInterval = TimeSpan.FromSeconds(maxIntervalSeconds)
+            MaxInterval = TimeSpan.FromSeconds(maxIntervalSeconds),
+            MaxFilteredEvents = maxFilteredEvents
         }, _time);
 
     static CancellationToken Token => TestContext.Current.CancellationToken;
@@ -90,6 +91,33 @@ public class CheckpointTrackerTests {
             await tracker.AdvanceAsync(2, Token);
 
             A.CallTo(() => _store.StoreAsync(SubscriptionId, 2UL, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        }
+    }
+
+    public class RecordProgressAsync : CheckpointTrackerTests {
+        [Fact]
+        public async Task GivenProgress_WritesItRightAwayAndSetsLastPosition() {
+            var tracker = BuildTracker();
+
+            await tracker.RecordProgressAsync(7, Token);
+
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 7UL, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+            tracker.LastPosition.Should().Be(7UL);
+
+            await tracker.FlushAsync(Token);
+            A.CallTo(() => _store.StoreAsync(A<string>._, A<ulong>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        }
+
+        [Fact]
+        public async Task GivenOpenBatch_WritesItAtTheProgressPosition() {
+            var tracker = BuildTracker(maxBatchSize: 3);
+            await tracker.AdvanceAsync(1, Token);
+            await tracker.AdvanceAsync(2, Token);
+
+            await tracker.RecordProgressAsync(9, Token);
+
+            A.CallTo(() => _store.StoreAsync(A<string>._, A<ulong>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 9UL, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
         }
     }
 
@@ -192,6 +220,13 @@ public class CheckpointTrackerTests {
         [Fact]
         public void GivenNegativeMaxInterval_Throws() {
             var act = () => BuildTracker(maxIntervalSeconds: -1);
+
+            act.Should().Throw<ArgumentOutOfRangeException>();
+        }
+
+        [Fact]
+        public void GivenMaxFilteredEventsBelowOne_Throws() {
+            var act = () => BuildTracker(maxFilteredEvents: 0);
 
             act.Should().Throw<ArgumentOutOfRangeException>();
         }

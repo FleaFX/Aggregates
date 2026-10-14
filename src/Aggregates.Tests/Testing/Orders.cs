@@ -29,13 +29,34 @@ interface IOrderEvent {
 /// An order was placed.
 /// </summary>
 [EventContract("OrderPlaced", @namespace: "IntegrationTests")]
-sealed record OrderPlaced(string OrderId, string Customer) : IOrderEvent;
+public sealed record OrderPlaced(string OrderId, string Customer) : IOrderEvent;
 
 /// <summary>
 /// An order was shipped.
 /// </summary>
 [EventContract("OrderShipped", @namespace: "IntegrationTests")]
 sealed record OrderShipped(string OrderId) : IOrderEvent;
+
+/// <summary>
+/// An event of another domain, which no order handler receives.
+/// </summary>
+[EventContract("CustomerRegistered", @namespace: "IntegrationTests")]
+sealed record CustomerRegistered(string CustomerId);
+
+/// <summary>
+/// The first version of <see cref="OrderPlaced"/>, stored under another name, which upgrades
+/// to it. Not an <see cref="IOrderEvent"/>, so only the filter passes it on.
+/// </summary>
+[EventContract("OrderCreated", @namespace: "IntegrationTests", eventUpgrader: typeof(OrderCreatedUpgrader))]
+public sealed record OrderCreated(string OrderId);
+
+/// <summary>
+/// Upgrades an <see cref="OrderCreated"/> to an <see cref="OrderPlaced"/>.
+/// </summary>
+public sealed class OrderCreatedUpgrader : IUpgradeEvent<OrderCreated, OrderPlaced> {
+    /// <inheritdoc/>
+    public OrderPlaced Upgrade(OrderCreated @event) => new(@event.OrderId, "unknown");
+}
 
 /// <summary>
 /// The state of an order.

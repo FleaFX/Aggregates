@@ -11,8 +11,9 @@ namespace Aggregates.Testing;
 sealed class ScriptedSubscriptionFactory(Func<Exception, bool>? isTransient = null) : ISubscriptionFactory {
     readonly Lock _lock = new();
     readonly Queue<Func<IAsyncEnumerable<SubscriptionMessage>>> _scripts = new();
-    readonly List<ulong?> _fromPositions = [];
+    readonly List<SubscriptionRequest> _requests = [];
     TaskCompletionSource _idle = NewSignal();
+    int _endPositionCalls;
 
     /// <summary>
     /// A message at <paramref name="position"/> whose event is the position itself.
@@ -26,11 +27,28 @@ sealed class ScriptedSubscriptionFactory(Func<Exception, bool>? isTransient = nu
         new(null, position, new EventReference("stream-1", position), EventMetadata.Empty) { DeserializationError = error };
 
     /// <summary>
-    /// The <c>fromPosition</c> of every call to <see cref="Subscribe"/>, in order.
+    /// The request of every call to <see cref="Subscribe"/>, in order.
+    /// </summary>
+    public IReadOnlyList<SubscriptionRequest> Requests {
+        get { lock (_lock) return [.. _requests]; }
+    }
+
+    /// <summary>
+    /// The <c>FromPosition</c> of every call to <see cref="Subscribe"/>, in order.
     /// </summary>
     public IReadOnlyList<ulong?> FromPositions {
-        get { lock (_lock) return [.. _fromPositions]; }
+        get { lock (_lock) return [.. _requests.Select(r => r.FromPosition)]; }
     }
+
+    /// <summary>
+    /// The end position that <see cref="ISubscriptionFactory.GetEndPositionAsync"/> returns.
+    /// </summary>
+    public ulong? EndPosition { get; set; }
+
+    /// <summary>
+    /// How often <see cref="ISubscriptionFactory.GetEndPositionAsync"/> was called.
+    /// </summary>
+    public int EndPositionCalls { get { lock (_lock) return _endPositionCalls; } }
 
     /// <summary>
     /// Completes when a subscription has played its script and waits for cancellation.
@@ -66,13 +84,19 @@ sealed class ScriptedSubscriptionFactory(Func<Exception, bool>? isTransient = nu
     }
 
     /// <inheritdoc/>
-    public ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default) {
+    public ISubscription Subscribe(SubscriptionRequest request, CancellationToken cancellationToken = default) {
         Func<IAsyncEnumerable<SubscriptionMessage>>? script;
         lock (_lock) {
-            _fromPositions.Add(fromPosition);
+            _requests.Add(request);
             _scripts.TryDequeue(out script);
         }
         return new Subscription(script?.Invoke() ?? WaitAsync([]));
+    }
+
+    /// <inheritdoc/>
+    public ValueTask<ulong?> GetEndPositionAsync(CancellationToken cancellationToken = default) {
+        lock (_lock) _endPositionCalls++;
+        return ValueTask.FromResult(EndPosition);
     }
 
     /// <inheritdoc/>

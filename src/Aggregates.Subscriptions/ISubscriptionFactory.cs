@@ -6,20 +6,23 @@ namespace Aggregates.Subscriptions;
 /// </summary>
 public interface ISubscriptionFactory {
     /// <summary>
-    /// Opens a subscription to the event stream.
+    /// Opens a subscription to the event stream, as described by <paramref name="request"/>.
     /// </summary>
-    /// <param name="fromPosition">
-    /// The exclusive starting position, or <see langword="null"/> to start from the beginning
-    /// (unless <paramref name="startFromEnd"/> overrides this).
-    /// </param>
-    /// <param name="startFromEnd">
-    /// When <see langword="true"/> and <paramref name="fromPosition"/> is <see langword="null"/>,
-    /// starts from the current end of the stream rather than the beginning.
-    /// </param>
+    /// <param name="request">What the subscription delivers, and from where.</param>
     /// <param name="cancellationToken">
     /// A cancellation token passed to the underlying transport to cancel the subscription.
     /// </param>
-    ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default);
+    ISubscription Subscribe(SubscriptionRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The commit position of the last event in the store, or <see langword="null"/> when the
+    /// transport can't tell (or the store is empty). Used to fix the start of a subscription
+    /// that starts from the end before it subscribes. Transports that can't tell return
+    /// <see langword="null"/>; the subscription then starts from the end as it subscribes.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    ValueTask<ulong?> GetEndPositionAsync(CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult<ulong?>(null);
 
     /// <summary>
     /// Whether opening the subscription again can be expected to succeed after

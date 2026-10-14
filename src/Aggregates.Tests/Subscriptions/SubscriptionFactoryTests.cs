@@ -91,7 +91,7 @@ public class SubscriptionFactoryTests(ITestOutputHelper output) {
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(Eventually.DefaultTimeout);
-        await using var subscription = host.Services.GetRequiredService<ISubscriptionFactory>().Subscribe(null, true, timeout.Token);
+        await using var subscription = host.Services.GetRequiredService<ISubscriptionFactory>().Subscribe(new SubscriptionRequest(null, true), timeout.Token);
         var first = FirstAsync(subscription, timeout.Token);
 
         // There is no signal for "subscription established", so keep appending until one arrives.
@@ -101,6 +101,80 @@ public class SubscriptionFactoryTests(ITestOutputHelper output) {
         }
 
         (await first).Event.Should().BeOfType<OrderPlaced>().Which.OrderId.Should().StartWith("order-new-");
+    }
+
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task Subscribe_WithEventTypes_DeliversOnlyThoseTypes(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        await using var host = await TestHost.StartAsync(store, output,
+            o => o.Events([.. Orders.EventTypes, typeof(CustomerRegistered)]).Projections());
+        var serialization = host.Serialization;
+        await store.AppendAsync(serialization, "customer-1", new CustomerRegistered("alice"));
+        await store.AppendAsync(serialization, "order-1", new OrderPlaced("order-1", "alice"));
+        await store.AppendRawAsync("other-1", "IntegrationTests.Unknown@v1", "{}"u8.ToArray());
+        await store.AppendAsync(serialization, "order-2", new OrderShipped("order-2"));
+        var factory = host.Services.GetRequiredService<ISubscriptionFactory>();
+
+        var request = new SubscriptionRequest(null, false,
+            [serialization.TypeName(typeof(OrderPlaced)), serialization.TypeName(typeof(OrderShipped))]);
+        var messages = await factory.TakeAsync(request, 2);
+
+        messages.Select(m => m.Event).Should().Equal(new OrderPlaced("order-1", "alice"), new OrderShipped("order-2"));
+        host.Probe.DeserializeCalls.Should().NotContainKeys(
+            serialization.TypeName(typeof(CustomerRegistered)), "IntegrationTests.Unknown@v1");
+    }
+
+    [Fact]
+    public async Task Subscribe_WithEventTypes_ReportsProgress() {
+        await using var store = await Stores.StartAsync(Transport.KurrentDB);
+        await using var host = await TestHost.StartAsync(store, output,
+            o => o.Events([.. Orders.EventTypes, typeof(CustomerRegistered)]).Projections());
+        var serialization = host.Serialization;
+        for (var i = 0; i < 100; i++)
+            await store.AppendAsync(serialization, $"customer-{i}", new CustomerRegistered("alice"));
+        await store.AppendAsync(serialization, "order-1", new OrderPlaced("order-1", "alice"));
+        var factory = host.Services.GetRequiredService<ISubscriptionFactory>();
+
+        var request = new SubscriptionRequest(null, false, [serialization.TypeName(typeof(OrderPlaced))], ProgressInterval: 32);
+        var messages = await factory.TakeUntilAsync(request, m => m.Event is OrderPlaced);
+
+        var progress = messages.Where(m => m.IsProgress).ToList();
+        progress.Should().NotBeEmpty();
+        progress.All(m => m.Event is null).Should().BeTrue();
+        var orderPlaced = messages.Single(m => m.Event is OrderPlaced);
+        progress.Should().OnlyContain(m => m.CommitPosition < orderPlaced.CommitPosition);
+        for (var i = 1; i < progress.Count; i++)
+            progress[i].CommitPosition.Should().BeGreaterThan(progress[i - 1].CommitPosition);
+    }
+
+    [Fact]
+    public async Task GetEndPosition_ReturnsPositionOfLastEvent() {
+        await using var store = await Stores.StartAsync(Transport.KurrentDB);
+        await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Projections());
+        var factory = host.Services.GetRequiredService<ISubscriptionFactory>();
+        await store.AppendAsync(host.Serialization, "order-1", new OrderPlaced("order-1", "alice"));
+
+        var end = await factory.GetEndPositionAsync(TestContext.Current.CancellationToken);
+
+        end.Should().NotBeNull();
+        await store.AppendAsync(host.Serialization, "order-2", new OrderShipped("order-2"));
+        var messages = await factory.TakeAsync(new SubscriptionRequest(end, false), 1);
+        messages.Single().Event.Should().Be(new OrderShipped("order-2"));
+    }
+
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task Subscribe_WithoutEventTypes_DeliversEveryType(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        await using var host = await TestHost.StartAsync(store, output,
+            o => o.Events([.. Orders.EventTypes, typeof(CustomerRegistered)]).Projections());
+        var serialization = host.Serialization;
+        await store.AppendAsync(serialization, "customer-1", new CustomerRegistered("alice"));
+        await store.AppendAsync(serialization, "order-1", new OrderPlaced("order-1", "alice"));
+        var factory = host.Services.GetRequiredService<ISubscriptionFactory>();
+
+        var messages = await factory.TakeAsync(new SubscriptionRequest(null, false), 2);
+
+        messages.Select(m => m.Event).Should().Equal(new CustomerRegistered("alice"), new OrderPlaced("order-1", "alice"));
     }
 
     static async Task<SubscriptionMessage> FirstAsync(ISubscription subscription, CancellationToken cancellationToken) {
