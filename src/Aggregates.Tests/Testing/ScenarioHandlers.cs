@@ -68,6 +68,11 @@ static class ScenarioHandlers {
     };
 
     /// <summary>
+    /// A probe projection on <see langword="object"/>, which receives every event type.
+    /// </summary>
+    public static Type ObjectProbe => typeof(ObjectProbeProjection);
+
+    /// <summary>
     /// A probe handler of <paramref name="kind"/> whose contract starts from the end of the store.
     /// </summary>
     public static Type FromEnd(HandlerKind kind) => kind switch {
@@ -186,6 +191,14 @@ static class ScenarioHandlers {
 
     [ProjectionContract("FromEndProbe", @namespace: "IntegrationTests.Projections", startFromEnd: true)]
     sealed class FromEndProjection(HandlerProbe probe) : ProjectionBase(probe);
+
+    [ProjectionContract("ObjectProbe", @namespace: "IntegrationTests.Projections")]
+    sealed class ObjectProbeProjection(HandlerProbe probe) : IProjection<object> {
+        public ValueTask<ICommit> ProjectAsync(object @event, EventMetadata metadata, CancellationToken cancellationToken = default) {
+            probe.Record(this, @event, metadata);
+            return ValueTask.FromResult(Commit.Create());
+        }
+    }
 
     [PolicyContract("Probe", @namespace: "IntegrationTests.Policies")]
     sealed class ProbePolicy(HandlerProbe probe) : PolicyBase(probe);

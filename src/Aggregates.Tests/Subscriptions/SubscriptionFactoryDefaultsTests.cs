@@ -5,7 +5,7 @@ namespace Aggregates.Subscriptions;
 
 public class SubscriptionFactoryDefaultsTests {
     sealed class CustomFactory : ISubscriptionFactory {
-        public ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default) =>
+        public ISubscription Subscribe(SubscriptionRequest request, CancellationToken cancellationToken = default) =>
             A.Fake<ISubscription>();
     }
 
@@ -14,5 +14,12 @@ public class SubscriptionFactoryDefaultsTests {
         ISubscriptionFactory factory = new CustomFactory();
 
         factory.IsTransient(new UnauthorizedAccessException()).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetEndPositionAsync_DefaultsToNull() {
+        ISubscriptionFactory factory = new CustomFactory();
+
+        (await factory.GetEndPositionAsync(TestContext.Current.CancellationToken)).Should().BeNull();
     }
 }

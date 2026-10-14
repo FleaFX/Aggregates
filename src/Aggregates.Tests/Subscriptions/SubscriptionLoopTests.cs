@@ -1,6 +1,8 @@
+using Aggregates.Projections;
 using Aggregates.Testing;
 using FakeItEasy;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
@@ -26,8 +28,8 @@ public class SubscriptionLoopTests {
 
     static CancellationToken Token => TestContext.Current.CancellationToken;
 
-    SubscriptionLoop BuildLoop(ScriptedSubscriptionFactory factory) =>
-        new(factory, _store, _sink, _checkpointOptions, _resubscribeOptions, _time, _logger);
+    SubscriptionLoop BuildLoop(ScriptedSubscriptionFactory factory, EventTypeRegistry? registry = null) =>
+        new(factory, _store, _sink, _checkpointOptions, _resubscribeOptions, _time, _logger, registry);
 
     static SubscriptionRegistration Registration(bool startFromEnd = false, params string[] predecessors) =>
         new(SubscriptionId, typeof(object), typeof(object), startFromEnd, predecessors);
@@ -38,10 +40,10 @@ public class SubscriptionLoopTests {
     }
 
     // Runs the loop until the factory has played every script and the subscription is idle, then stops it.
-    async Task RunUntilIdleAsync(ScriptedSubscriptionFactory factory, Func<SubscriptionMessage, CancellationToken, ValueTask>? process = null, SubscriptionRegistration? registration = null) {
+    async Task RunUntilIdleAsync(ScriptedSubscriptionFactory factory, Func<SubscriptionMessage, CancellationToken, ValueTask>? process = null, SubscriptionRegistration? registration = null, EventTypeRegistry? registry = null) {
         var idle = factory.Idle;
         using var stopping = CancellationTokenSource.CreateLinkedTokenSource(Token);
-        var run = BuildLoop(factory).RunAsync(registration ?? Registration(), process ?? Process, stopping.Token);
+        var run = BuildLoop(factory, registry).RunAsync(registration ?? Registration(), process ?? Process, stopping.Token);
 
         await idle.WaitAsync(Timeout, Token);
         await stopping.CancelAsync();
@@ -465,4 +467,254 @@ public class SubscriptionLoopTests {
             A.CallTo(() => _store.GetAsync("sub-1@v2", A<CancellationToken>._)).MustHaveHappenedOnceExactly();
         }
     }
+
+    public class EventTypes : SubscriptionLoopTests {
+        static readonly EventTypeRegistry Registry = EventTypeRegistry.FromTypes(
+            [typeof(FilterA), typeof(FilterB), typeof(FilterC)]);
+
+        static SubscriptionRegistration OnFilterEvent(bool startFromEnd = false) =>
+            new(SubscriptionId, typeof(object), typeof(IFilterEvent), startFromEnd);
+
+        [Fact]
+        public async Task WithoutRegistry_SubscribesWithoutEventTypes() {
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            await RunUntilIdleAsync(factory, registration: OnFilterEvent());
+
+            factory.Requests.Should().ContainSingle().Which.EventTypes.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task GivenAnObjectType_SubscribesWithoutEventTypes() {
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            await RunUntilIdleAsync(factory, registration: Registration(), registry: Registry);
+
+            factory.Requests.Should().ContainSingle().Which.EventTypes.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task GivenAnEventType_SubscribesWithItsNames() {
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            await RunUntilIdleAsync(factory, registration: OnFilterEvent(), registry: Registry);
+
+            factory.Requests.Should().ContainSingle().Which.EventTypes
+                .Should().Equal("Tests.Loop.A@v1", "Tests.Loop.B@v1");
+        }
+
+        [Fact]
+        public async Task GivenNoMatchingEventType_SubscribesWithoutEventTypes_AndWarns() {
+            var registry = EventTypeRegistry.FromTypes([typeof(FilterC)]);
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            await RunUntilIdleAsync(factory, registration: OnFilterEvent(), registry: registry);
+
+            factory.Requests.Should().ContainSingle().Which.EventTypes.Should().BeNull();
+            var warning = Logs(LogLevel.Warning).Single();
+            State(warning, "SubscriptionId").Should().Be(SubscriptionId);
+            State(warning, "EventType").Should().Be(typeof(IFilterEvent).FullName);
+        }
+
+        [Fact]
+        public async Task GivenEventTypes_LogsTheCount_AndAllWithoutThem() {
+            var filtered = new ScriptedSubscriptionFactory().Then();
+            await RunUntilIdleAsync(filtered, registration: OnFilterEvent(), registry: Registry);
+            var subscribing = Logs(LogLevel.Information).Single(record => record.Message.Contains("subscribing"));
+            State(subscribing, "EventTypes").Should().Be("2");
+
+            _logger.Collector.Clear();
+            var unfiltered = new ScriptedSubscriptionFactory().Then();
+            await RunUntilIdleAsync(unfiltered, registration: Registration(), registry: Registry);
+            subscribing = Logs(LogLevel.Information).Single(record => record.Message.Contains("subscribing"));
+            State(subscribing, "EventTypes").Should().Be("all");
+        }
+
+        [Fact]
+        public async Task GivenAResubscribe_ReusesTheSameNames() {
+            var factory = new ScriptedSubscriptionFactory()
+                .ThenFail(new IOException("lost"), Message(1))
+                .Then(Message(2));
+
+            await RunUntilIdleAsync(factory, registration: OnFilterEvent(), registry: Registry);
+
+            factory.Requests.Should().HaveCount(2);
+            factory.Requests[0].EventTypes.Should().Equal("Tests.Loop.A@v1", "Tests.Loop.B@v1");
+            factory.Requests[1].EventTypes.Should().Equal("Tests.Loop.A@v1", "Tests.Loop.B@v1");
+            Logs(LogLevel.Debug).Count(record => record.Message.Contains("receives the event types")).Should().Be(1);
+        }
+    }
+
+    public class Progress : SubscriptionLoopTests {
+        [Fact]
+        public async Task GivenProgress_DoesNotProcessIt_AndWritesTheCheckpointRightAway() {
+            var factory = new ScriptedSubscriptionFactory().Then(SubscriptionMessage.Progress(5), Message(6));
+
+            await RunUntilIdleAsync(factory);
+
+            _processed.Should().Equal(6UL);
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 5UL, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        }
+
+        [Fact]
+        public async Task GivenProgressAtZero_WithoutFromPosition_WritesNothing() {
+            var factory = new ScriptedSubscriptionFactory().Then(SubscriptionMessage.Progress(0));
+
+            await RunUntilIdleAsync(factory);
+
+            A.CallTo(() => _store.StoreAsync(A<string>._, A<ulong>._, A<CancellationToken>._)).MustNotHaveHappened();
+        }
+
+        [Fact]
+        public async Task GivenProgressBehindTheLastProcessedPosition_WritesOnlyThatPosition() {
+            var factory = new ScriptedSubscriptionFactory().Then(Message(5), SubscriptionMessage.Progress(4));
+
+            await RunUntilIdleAsync(factory);
+
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 4UL, A<CancellationToken>._)).MustNotHaveHappened();
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 5UL, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        }
+
+        [Fact]
+        public async Task GivenAFailure_SubscribesAgainAfterTheLastProgress() {
+            var factory = new ScriptedSubscriptionFactory()
+                .ThenFail(new IOException("lost"), SubscriptionMessage.Progress(5))
+                .Then();
+
+            await RunUntilIdleAsync(factory);
+
+            factory.FromPositions.Should().Equal(null, 5UL);
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 5UL, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        }
+
+        [Fact]
+        public async Task GivenProgressAfterAFailure_LogsThatItReceivesMessagesAgain() {
+            var factory = new ScriptedSubscriptionFactory()
+                .ThenFail(new IOException("lost"))
+                .Then(SubscriptionMessage.Progress(5));
+
+            await RunUntilIdleAsync(factory);
+
+            Logs(LogLevel.Information).Should().ContainSingle(record => record.Message.Contains("receives messages again"));
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 5UL, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        }
+    }
+
+    public class StartFromEnd : SubscriptionLoopTests {
+        [Fact]
+        public async Task WithoutACheckpoint_StoresTheEndPosition_BeforeSubscribingAfterIt() {
+            var factory = new ScriptedSubscriptionFactory().Then();
+            factory.EndPosition = 42;
+
+            await RunUntilIdleAsync(factory, registration: Registration(startFromEnd: true));
+
+            factory.FromPositions.Should().Equal(42UL);
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 42UL, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+            var information = Logs(LogLevel.Information).Single(record => record.Message.Contains("starting from the end"));
+            State(information, "Position").Should().Be("42");
+        }
+
+        [Fact]
+        public async Task GivenAFailingSubscribe_UsesTheStoredEndPositionAgain() {
+            ulong? checkpoint = null;
+            A.CallTo(() => _store.GetAsync(SubscriptionId, A<CancellationToken>._)).ReturnsLazily(() => checkpoint);
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 42UL, A<CancellationToken>._)).Invokes(() => checkpoint = 42);
+            var factory = new ScriptedSubscriptionFactory()
+                .ThenFailToSubscribe(new IOException("lost"))
+                .Then();
+            factory.EndPosition = 42;
+
+            await RunUntilIdleAsync(factory, registration: Registration(startFromEnd: true));
+
+            factory.FromPositions.Should().Equal(42UL, 42UL);
+            factory.EndPositionCalls.Should().Be(1);
+        }
+
+        [Fact]
+        public async Task GivenNoEndPosition_StartsFromTheEndWithoutWriting() {
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            await RunUntilIdleAsync(factory, registration: Registration(startFromEnd: true));
+
+            var request = factory.Requests.Should().ContainSingle().Which;
+            request.FromPosition.Should().BeNull();
+            request.StartFromEnd.Should().BeTrue();
+            request.EventTypes.Should().BeNull();
+            A.CallTo(() => _store.StoreAsync(A<string>._, A<ulong>._, A<CancellationToken>._)).MustNotHaveHappened();
+        }
+
+        [Fact]
+        public async Task GivenItsOwnCheckpoint_DoesNotAskForTheEndPosition() {
+            A.CallTo(() => _store.GetAsync(SubscriptionId, A<CancellationToken>._)).Returns(41UL);
+            var factory = new ScriptedSubscriptionFactory().Then();
+            factory.EndPosition = 42;
+
+            await RunUntilIdleAsync(factory, registration: Registration(startFromEnd: true));
+
+            factory.FromPositions.Should().Equal(41UL);
+            factory.EndPositionCalls.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task GivenAPredecessorCheckpoint_DoesNotAskForTheEndPosition() {
+            A.CallTo(() => _store.GetAsync("sub-1@v2", A<CancellationToken>._)).Returns(41UL);
+            var factory = new ScriptedSubscriptionFactory().Then();
+            factory.EndPosition = 42;
+
+            await RunUntilIdleAsync(factory, registration: Registration(true, "sub-1@v2"));
+
+            factory.FromPositions.Should().Equal(41UL);
+            factory.EndPositionCalls.Should().Be(0);
+        }
+
+        [Fact]
+        public async Task GivenStartFromEndFalse_DoesNotAskForTheEndPosition() {
+            var factory = new ScriptedSubscriptionFactory().Then();
+            factory.EndPosition = 42;
+
+            await RunUntilIdleAsync(factory, registration: Registration());
+
+            factory.EndPositionCalls.Should().Be(0);
+        }
+    }
+
+    public class DependencyInjection : SubscriptionLoopTests {
+        [Fact]
+        public void GivenNoEventTypeRegistry_ResolvesTheLoop() {
+            var services = new ServiceCollection();
+            services.AddProjections(o => o.ScanTypes());
+            services.AddSingleton(A.Fake<ISubscriptionFactory>());
+            services.AddSingleton(A.Fake<ICheckpointStore>());
+            services.AddLogging();
+
+            using var provider = services.BuildServiceProvider();
+
+            provider.GetRequiredService<SubscriptionLoop>().Should().NotBeNull();
+        }
+
+        [Fact]
+        public void GivenAnEventTypeRegistry_ResolvesTheLoop() {
+            var services = new ServiceCollection();
+            services.AddProjections(o => o.ScanTypes());
+            services.AddSingleton(A.Fake<ISubscriptionFactory>());
+            services.AddSingleton(A.Fake<ICheckpointStore>());
+            services.AddSingleton(EventTypeRegistry.FromTypes([typeof(FilterA)]));
+            services.AddLogging();
+
+            using var provider = services.BuildServiceProvider();
+
+            provider.GetRequiredService<SubscriptionLoop>().Should().NotBeNull();
+        }
+    }
 }
+
+interface IFilterEvent;
+
+[EventContract("A", @namespace: "Tests.Loop")]
+sealed record FilterA : IFilterEvent;
+
+[EventContract("B", @namespace: "Tests.Loop")]
+sealed record FilterB : IFilterEvent;
+
+[EventContract("C", @namespace: "Tests.Loop")]
+sealed record FilterC;

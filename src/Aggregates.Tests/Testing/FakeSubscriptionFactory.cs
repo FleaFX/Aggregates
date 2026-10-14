@@ -25,8 +25,10 @@ sealed class FakeSubscriptionFactory(IReadOnlyList<SubscriptionMessage> messages
         [.. Enumerable.Range(1, count).Select(i => new SubscriptionMessage(@event((ulong)i), (ulong)i, new EventReference("stream-1", (ulong)i), EventMetadata.Empty))];
 
     /// <inheritdoc/>
-    public ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default) =>
-        new Subscription([.. messages.Where(message => fromPosition is null || message.CommitPosition > fromPosition)], _drained);
+    public ISubscription Subscribe(SubscriptionRequest request, CancellationToken cancellationToken = default) =>
+        new Subscription(
+            [.. messages.Where(message => request.FromPosition is null || message.CommitPosition > request.FromPosition)],
+            _drained);
 
     sealed class Subscription(IReadOnlyList<SubscriptionMessage> messages, TaskCompletionSource drained) : ISubscription {
         public async IAsyncEnumerator<SubscriptionMessage> GetAsyncEnumerator(CancellationToken cancellationToken = default) {

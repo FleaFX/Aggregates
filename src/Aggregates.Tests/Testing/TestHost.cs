@@ -18,6 +18,7 @@ sealed class TestHostOptions {
     internal List<Type> ProjectionTypes { get; } = [];
     internal List<Type> PolicyTypes { get; } = [];
     internal List<Type> FailingEventTypes { get; } = [];
+    internal bool UseEventTypeRegistry { get; private set; } = true;
     internal bool UseProjections { get; private set; }
     internal bool UsePolicies { get; private set; }
     internal Action<SagasOptions>? ConfigureSagas { get; private set; }
@@ -36,6 +37,15 @@ sealed class TestHostOptions {
     /// </summary>
     public TestHostOptions FailDeserializing(params Type[] types) {
         FailingEventTypes.AddRange(types);
+        return this;
+    }
+
+    /// <summary>
+    /// Starts the host without an <see cref="EventTypeRegistry"/>, so every subscription
+    /// receives every event type.
+    /// </summary>
+    public TestHostOptions WithoutEventTypeRegistry() {
+        UseEventTypeRegistry = false;
         return this;
     }
 
@@ -86,7 +96,9 @@ sealed class TestHostOptions {
 
 /// <summary>
 /// A generic host with Aggregates wired against an <see cref="IStoreFixture"/>: logging to the
-/// test output, a short shutdown timeout, fast subscription retries, and a <see cref="HandlerProbe"/>.
+/// test output, a short shutdown timeout, fast subscription retries, a <see cref="HandlerProbe"/>,
+/// and an <see cref="EventTypeRegistry"/> of the scenario event types, so subscriptions filter on
+/// event type, unless <see cref="TestHostOptions.WithoutEventTypeRegistry"/> is used.
 /// </summary>
 /// <remarks>
 /// <see cref="BackgroundServiceExceptionBehavior"/> stays at its default (<c>StopHost</c>), so a
@@ -141,6 +153,10 @@ sealed class TestHost : IAsyncDisposable {
         builder.Logging.SetMinimumLevel(LogLevel.Debug);
         builder.Services.Configure<HostOptions>(o => o.ShutdownTimeout = TimeSpan.FromSeconds(5));
         builder.Services.AddSingleton(probe);
+
+        // Switches the subscriptions' server-side event-type filter on.
+        if (options.UseEventTypeRegistry)
+            builder.Services.AddSingleton(EventTypeRegistry.FromTypes([.. options.EventTypes]));
 
         // Registered before the Add* calls below, which only add their defaults when absent.
         builder.Services.AddSingleton(new SubscriptionErrorHandlingOptions {

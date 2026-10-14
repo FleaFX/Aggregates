@@ -1,4 +1,9 @@
+using Aggregates.Testing;
 using FluentAssertions;
+using KurrentDB.Client;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 
 namespace Aggregates.KurrentDB;
 
@@ -45,5 +50,81 @@ public class KurrentDbCommitHandlerTests {
         var id2 = KurrentDbCommitHandler.CreateEventId("orders-1", 0, Event(type: "OrderCancelled"));
 
         id1.Should().NotBe(id2);
+    }
+
+    // The commit handler serializes lazily while appending, so these tests need a reachable store.
+    [Trait("Category", "Integration")]
+    public class TypeNameCheck(ITestOutputHelper output) {
+        static KurrentDbOptions WrongNamingOptions { get; } = new() { Serialize = _ => new SerializedEvent("Wrong.Name@v1", new byte[] { 1 }) };
+
+        static async Task<UnitOfWork> ChangedUnitOfWork(string stream) {
+            var unitOfWork = new UnitOfWork();
+            var root = new EntityRoot<OrderState, IOrderEvent>(OrderState.Initial, AggregateVersion.None);
+            unitOfWork.Attach(new Aggregate(stream, root));
+            await root.AcceptAsync(new PlaceOrder(stream, "alice"), TestContext.Current.CancellationToken);
+            return unitOfWork;
+        }
+
+        static string? State(FakeLogRecord record, string key) =>
+            record.StructuredState!.Single(entry => entry.Key == key).Value;
+
+        [Fact]
+        public async Task GivenANameTheRegistryDoesNotKnow_WarnsOncePerType() {
+            await using var store = await Stores.StartAsync(Transport.KurrentDB);
+            await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Projections());
+            var logger = new FakeLogger<KurrentDbCommitHandler>();
+            var handler = new KurrentDbCommitHandler(
+                host.Services.GetRequiredService<KurrentDBClient>(), WrongNamingOptions, logger,
+                EventTypeRegistry.FromTypes([typeof(OrderPlaced)]));
+
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"));
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-2"));
+
+            var warning = logger.Collector.GetSnapshot().Single(record => record.Level == LogLevel.Warning);
+            State(warning, "Type").Should().Be(typeof(OrderPlaced).FullName);
+            State(warning, "StoredName").Should().Be("Wrong.Name@v1");
+            State(warning, "RegistryName").Should().Be("IntegrationTests.OrderPlaced@v1");
+        }
+
+        [Fact]
+        public async Task GivenTheRegistrysName_DoesNotWarn() {
+            await using var store = await Stores.StartAsync(Transport.KurrentDB);
+            await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Projections());
+            var logger = new FakeLogger<KurrentDbCommitHandler>();
+            var registry = EventTypeRegistry.FromTypes([typeof(OrderPlaced)]);
+            var options = new KurrentDbOptions { Serialize = @event => new SerializedEvent(registry.GetTypeName(@event.GetType()), new byte[] { 1 }) };
+            var handler = new KurrentDbCommitHandler(host.Services.GetRequiredService<KurrentDBClient>(), options, logger, registry);
+
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"));
+
+            logger.Collector.GetSnapshot().Should().NotContain(record => record.Level == LogLevel.Warning);
+        }
+
+        [Fact]
+        public async Task WithoutRegistry_DoesNotWarn() {
+            await using var store = await Stores.StartAsync(Transport.KurrentDB);
+            await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Projections());
+            var logger = new FakeLogger<KurrentDbCommitHandler>();
+            var handler = new KurrentDbCommitHandler(host.Services.GetRequiredService<KurrentDBClient>(), WrongNamingOptions, logger);
+
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"));
+
+            logger.Collector.GetSnapshot().Should().NotContain(record => record.Level == LogLevel.Warning);
+        }
+
+        [Fact]
+        public async Task GivenASagaCommit_DoesNotCheck() {
+            await using var store = await Stores.StartAsync(Transport.KurrentDB);
+            await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Projections());
+            var logger = new FakeLogger<KurrentDbCommitHandler>();
+            var options = new KurrentDbOptions { Serialize = _ => new SerializedEvent("IntegrationTests.OrderPlaced@v1", new byte[] { 1 }) };
+            var handler = new KurrentDbCommitHandler(
+                host.Services.GetRequiredService<KurrentDBClient>(), options, logger,
+                EventTypeRegistry.FromTypes([typeof(OrderPlaced)]));
+
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"), _ => new SerializedEvent("Wrong.Name@v1", new byte[] { 1 }));
+
+            logger.Collector.GetSnapshot().Should().NotContain(record => record.Level == LogLevel.Warning);
+        }
     }
 }

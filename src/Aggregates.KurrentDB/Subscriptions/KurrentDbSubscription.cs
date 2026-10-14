@@ -8,7 +8,8 @@ namespace Aggregates.KurrentDB;
 /// Adapts a KurrentDB <c>$all</c> subscription to the transport-agnostic
 /// <see cref="ISubscription"/> contract. Each incoming <see cref="StreamMessage.Event"/>
 /// is deserialized via <see cref="KurrentDbOptions.Deserialize"/> and wrapped in a
-/// <see cref="SubscriptionMessage"/>. Non-event stream messages are skipped. A deserialization
+/// <see cref="SubscriptionMessage"/>. A <c>checkpointReached</c> message is passed through as a
+/// progress message; other non-event stream messages are skipped. A deserialization
 /// failure is reported in <see cref="SubscriptionMessage.DeserializationError"/> instead of thrown.
 /// </summary>
 sealed class KurrentDbSubscription(Func<ValueTask> dispose, IAsyncEnumerable<StreamMessage> messages, KurrentDbOptions options) : ISubscription {
@@ -19,10 +20,14 @@ sealed class KurrentDbSubscription(Func<ValueTask> dispose, IAsyncEnumerable<Str
 
     async IAsyncEnumerable<SubscriptionMessage> EnumerateAsync([EnumeratorCancellation] CancellationToken cancellationToken = default) {
         await foreach (var message in messages.WithCancellation(cancellationToken)) {
-            if (message is not StreamMessage.Event eventMessage)
-                continue;
-
-            yield return ToMessage(eventMessage.ResolvedEvent.OriginalEvent);
+            switch (message) {
+                case StreamMessage.Event eventMessage:
+                    yield return ToMessage(eventMessage.ResolvedEvent.OriginalEvent);
+                    break;
+                case StreamMessage.AllStreamCheckpointReached checkpoint:
+                    yield return SubscriptionMessage.Progress(checkpoint.Position.CommitPosition);
+                    break;
+            }
         }
     }
 

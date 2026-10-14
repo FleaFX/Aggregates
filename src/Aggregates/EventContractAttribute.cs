@@ -39,7 +39,13 @@ public class EventContractAttribute : Attribute {
         _contractVersion = version;
         _ns = @namespace;
         _upgrader = upgrader.FirstOrDefault();
+        EventUpgrader = eventUpgrader;
     }
+
+    /// <summary>
+    /// The type passed as <c>eventUpgrader</c>, or null.
+    /// </summary>
+    public Type? EventUpgrader { get; }
 
     /// <summary>
     /// Attempts to upgrade the given <paramref name="event"/> using the configured

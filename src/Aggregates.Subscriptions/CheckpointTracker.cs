@@ -35,6 +35,7 @@ public sealed class CheckpointTracker {
     public CheckpointTracker(ICheckpointStore store, string subscriptionId, SubscriptionCheckpointOptions options, TimeProvider timeProvider) {
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaxBatchSize, 1, nameof(options.MaxBatchSize));
         ArgumentOutOfRangeException.ThrowIfLessThan(options.MaxInterval, TimeSpan.Zero, nameof(options.MaxInterval));
+        ArgumentOutOfRangeException.ThrowIfLessThan(options.MaxFilteredEvents, 1, nameof(options.MaxFilteredEvents));
 
         _store = store;
         _subscriptionId = subscriptionId;
@@ -61,6 +62,18 @@ public sealed class CheckpointTracker {
         return _pendingCount >= _maxBatchSize || _timeProvider.GetElapsedTime(_pendingSince) >= _maxInterval
             ? FlushAsync(cancellationToken)
             : ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Records <paramref name="position"/>, which the store passed without delivering a message
+    /// for it, and writes it right away.
+    /// </summary>
+    /// <param name="position">The commit position the store has read up to.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    public ValueTask RecordProgressAsync(ulong position, CancellationToken cancellationToken = default) {
+        _lastPosition = position;
+        _pendingPosition = position;
+        return FlushAsync(cancellationToken);
     }
 
     /// <summary>

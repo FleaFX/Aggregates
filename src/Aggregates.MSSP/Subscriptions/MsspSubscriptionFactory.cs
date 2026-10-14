@@ -9,8 +9,16 @@ namespace Aggregates.MSSP;
 /// Creates MSSP subscriptions.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Events whose type starts with <c>$</c> are never delivered; the library's own bookkeeping
 /// (checkpoints, parked messages) uses that prefix. The filter is evaluated by the store.
+/// </para>
+/// <para>
+/// Only the event types of the request are delivered. MSSP does not report progress and
+/// cannot tell its end position yet, so <see cref="SubscriptionRequest.ProgressInterval"/> is
+/// ignored and <see cref="ISubscriptionFactory.GetEndPositionAsync"/> returns
+/// <see langword="null"/>.
+/// </para>
 /// </remarks>
 /// <param name="client">The <see cref="IMsspClient"/> used to create subscriptions.</param>
 /// <param name="options">The <see cref="MsspOptions"/> containing deserialization configuration.</param>
@@ -19,8 +27,8 @@ public sealed class MsspSubscriptionFactory(IMsspClient client, MsspOptions opti
         SubscriptionFilter.ForEventTypePattern(new Regex("^[^$]", RegexOptions.Compiled));
 
     /// <inheritdoc />
-    public ISubscription Subscribe(ulong? fromPosition, bool startFromEnd, CancellationToken cancellationToken = default) {
-        var from = (fromPosition, startFromEnd) switch {
+    public ISubscription Subscribe(SubscriptionRequest request, CancellationToken cancellationToken = default) {
+        var from = (request.FromPosition, request.StartFromEnd) switch {
             // MSSP starts at the given position (inclusive) and positions are consecutive, so the
             // first event after the exclusive fromPosition is at pos + 1.
             ({} pos, _) => new GlobalPosition(pos + 1),
@@ -28,9 +36,13 @@ public sealed class MsspSubscriptionFactory(IMsspClient client, MsspOptions opti
             _ => GlobalPosition.Start
         };
 
+        var filter = request.EventTypePattern is { } pattern
+            ? SubscriptionFilter.ForEventTypePattern(new Regex(pattern, RegexOptions.Compiled | RegexOptions.CultureInvariant))
+            : ExcludeSystemEvents;
+
         return new MsspSubscription(
             () => ValueTask.CompletedTask,
-            client.SubscribeAsync(ExcludeSystemEvents, from, cancellationToken),
+            client.SubscribeAsync(filter, from, cancellationToken),
             options
         );
     }
