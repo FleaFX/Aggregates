@@ -2,7 +2,7 @@
 
 [![Build & test](https://github.com/FleaFX/aggregates/actions/workflows/build.yml/badge.svg)](https://github.com/FleaFX/aggregates/actions/workflows/build.yml)
 
-> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.7`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
+> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.8`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
 
 This library provides all the boilerplate code needed to do event sourcing, leaving you with just the core functionality of your domain to write.
 
@@ -26,6 +26,7 @@ Storage integration packages are provided separately and are required to wire ev
 | `Aggregates.Sagas.KurrentDB` | KurrentDB saga storage + subscriptions |
 | `Aggregates.Policies.KurrentDB` | KurrentDB policy subscriptions |
 | `Aggregates.Projections.KurrentDB` | KurrentDB projection subscriptions |
+| `Aggregates.KurrentDB.Migration` | Imports 0.x persistent subscription positions as 1.0 checkpoints (switch-over only) |
 | `Aggregates.MSSP` | MSSP aggregate persistence |
 | `Aggregates.Sagas.MSSP` | MSSP saga storage + subscriptions |
 | `Aggregates.Policies.MSSP` | MSSP policy subscriptions |

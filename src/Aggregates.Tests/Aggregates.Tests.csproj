@@ -35,6 +35,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aggregates.KurrentDB\Aggregates.KurrentDB.csproj" />
+    <ProjectReference Include="..\Aggregates.KurrentDB.Migration\Aggregates.KurrentDB.Migration.csproj" />
     <ProjectReference Include="..\Aggregates.MSSP\Aggregates.MSSP.csproj" />
     <ProjectReference Include="..\Aggregates.Policies\Aggregates.Policies.csproj" />
     <ProjectReference Include="..\Aggregates.Policies.KurrentDB\Aggregates.Policies.KurrentDB.csproj" />

@@ -48,6 +48,16 @@ sealed class KurrentDbStoreFixture : IStoreFixture {
     /// <inheritdoc/>
     public Transport Transport => Transport.KurrentDB;
 
+    /// <summary>
+    /// The client of the container, for tests that use KurrentDB directly.
+    /// </summary>
+    public KurrentDBClient Client => _client;
+
+    /// <summary>
+    /// The connection string of the container, for clients other than <see cref="Client"/>.
+    /// </summary>
+    public string ConnectionString => _container.GetConnectionString();
+
     /// <inheritdoc/>
     public void ConfigureAggregates(IAggregatesBuilder builder, SerializationSetup serialization) {
         builder.Services.AddSingleton(_client);

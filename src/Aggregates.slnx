@@ -12,6 +12,7 @@
   <Project Path="Aggregates.Projections/Aggregates.Projections.csproj" />
   <Folder Name="/Integrations/">
     <Project Path="Aggregates.KurrentDB/Aggregates.KurrentDB.csproj" />
+    <Project Path="Aggregates.KurrentDB.Migration/Aggregates.KurrentDB.Migration.csproj" />
     <Project Path="Aggregates.Sagas.KurrentDB/Aggregates.Sagas.KurrentDB.csproj" />
     <Project Path="Aggregates.MSSP/Aggregates.MSSP.csproj" Id="f1bbb6ca-e5f6-4a5f-9deb-6b085e276eeb" />
     <Project Path="Aggregates.Policies.KurrentDB/Aggregates.Policies.KurrentDB.csproj" />
