@@ -29,16 +29,16 @@ jobs:
 
         - name: Unit tests
           run: >
-            dotnet test --no-build src/Aggregates.slnx
+            dotnet test --no-build --solution src/Aggregates.slnx
             --filter "Category!=Integration"
-            --logger trx --results-directory TestResults
+            --results-directory TestResults -- --report-xunit-trx
 
         # Requires Docker: KurrentDB and SQL Server run in containers (Testcontainers).
         - name: Integration tests
           run: >
-            dotnet test --no-build src/Aggregates.slnx
+            dotnet test --no-build --solution src/Aggregates.slnx
             --filter "Category=Integration"
-            --logger trx --results-directory TestResults
+            --results-directory TestResults -- --report-xunit-trx
 
         - name: Upload test results
           if: failure()
