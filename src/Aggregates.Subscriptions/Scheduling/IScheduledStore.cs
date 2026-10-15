@@ -2,8 +2,8 @@ namespace Aggregates.Subscriptions;
 
 /// <summary>
 /// Reads the scheduled entries of every stream, appends the entries of the scheduler and the
-/// requests of policies, and deserializes deferred commands. Implemented by the storage
-/// integrations (<c>Aggregates.KurrentDB</c>, <c>Aggregates.MSSP</c>).
+/// requests of policies, and deserializes the commands and deadline payloads of requests.
+/// Implemented by the storage integrations (<c>Aggregates.KurrentDB</c>, <c>Aggregates.MSSP</c>).
 /// </summary>
 public interface IScheduledStore {
     /// <summary>
@@ -46,10 +46,10 @@ public interface IScheduledStore {
     ValueTask<bool> ExistsAsync(string stream, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Deserializes a deferred command with the storage integration's <c>Deserialize</c>;
-    /// <see langword="null"/> when the type is unknown. May throw.
+    /// Deserializes the command or deadline payload of a request with the storage integration's
+    /// <c>Deserialize</c>; <see langword="null"/> when the type is unknown. May throw.
     /// </summary>
-    /// <param name="commandType">The stored type name of the command.</param>
-    /// <param name="data">The serialized command.</param>
-    object? DeserializeCommand(string commandType, ReadOnlyMemory<byte> data);
+    /// <param name="type">The stored type name.</param>
+    /// <param name="data">The serialized command or deadline payload.</param>
+    object? Deserialize(string type, ReadOnlyMemory<byte> data);
 }

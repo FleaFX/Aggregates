@@ -36,4 +36,24 @@ sealed class RetrySagaHandler<TSaga, TSagaState, TEvent>(UnitOfWorkAwareSagaHand
             }
         }
     }
+
+    /// <summary>
+    /// Delivers the due <paramref name="deadline"/> to <paramref name="sagaId"/>, retrying on
+    /// <see cref="ConcurrencyException"/> up to the maximum number of attempts.
+    /// </summary>
+    /// <param name="sagaId">Identifies the saga instance.</param>
+    /// <param name="deadline">The payload of the deadline.</param>
+    /// <param name="request">The saga stream and revision of the deadline request.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns><see langword="false"/> when the saga doesn't exist.</returns>
+    public async ValueTask<bool> HandleDeadlineAsync(AggregateIdentifier sagaId, object deadline, EventReference request, CancellationToken cancellationToken = default) {
+        var attempt = 0;
+        while (true) {
+            try {
+                return await inner.HandleDeadlineAsync(sagaId, deadline, request, cancellationToken);
+            } catch (ConcurrencyException) when (++attempt < maxAttempts) {
+                // The next attempt reloads the saga, so the reaction sees the entries appended meanwhile.
+            }
+        }
+    }
 }

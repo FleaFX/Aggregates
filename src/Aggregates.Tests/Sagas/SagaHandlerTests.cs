@@ -121,6 +121,25 @@ public class SagaHandlerTests {
     }
 
     [Fact]
+    public async Task HandleAsync_WithARequestedDeadline_ActivatesTheSchedulerBeforeDispatching() {
+        var command = new TestCommand();
+        var repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
+        var dispatcher = A.Fake<ICommandDispatcher>();
+        var store = A.Fake<IScheduledStore>();
+        A.CallTo(() => repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
+        A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(new ICommand[] { Deadline.At(DateTimeOffset.UtcNow, new TestDeadline(1)), command }.ToAsyncEnumerable());
+
+        await BuildHandler(repository, saga, dispatcher, store).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
+
+        A.CallTo(() => store.AppendAsync("scheduled-Test.Saga@v1", ScheduledFormat.MarkerEventType, A<ReadOnlyMemory<byte>>._, A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly()
+            .Then(A.CallTo(() => dispatcher.DispatchAsync(command, A<CancellationToken>._)).MustHaveHappenedOnceExactly());
+    }
+
+    [Fact]
     public async Task HandleAsync_WithoutDeferredCommands_DoesNotTouchTheScheduledStore() {
         var repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
         var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
@@ -134,5 +153,59 @@ public class SagaHandlerTests {
         await BuildHandler(repository, saga, dispatcher, store).HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
 
         A.CallTo(store).MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task HandleDeadlineAsync_ReactsWithTheLoadedState_AndDispatchesItsCommands() {
+        var command = new TestCommand();
+        var repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
+        var dispatcher = A.Fake<ICommandDispatcher>();
+        TestSagaState? capturedState = null;
+        A.CallTo(() => repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(new SagaRoot<TestSagaState, TestEvent>(new TestSagaState(4), new AggregateVersion(1))));
+        A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
+            .Invokes(call => capturedState = call.GetArgument<TestSagaState>(0))
+            .Returns(new ICommand[] { command }.ToAsyncEnumerable());
+
+        var found = await BuildHandler(repository, saga, dispatcher).HandleDeadlineAsync("saga-1", new TestDeadline(1), new EventReference("saga-1", 2), TestContext.Current.CancellationToken);
+
+        capturedState.Should().Be(new TestSagaState(4));
+        A.CallTo(() => dispatcher.DispatchAsync(command, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        found.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task HandleDeadlineAsync_WhenTheSagaDoesNotExist_ReturnsFalse_WithoutCreatingIt() {
+        var repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
+        var dispatcher = A.Fake<ICommandDispatcher>();
+        A.CallTo(() => repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
+
+        var found = await BuildHandler(repository, saga, dispatcher).HandleDeadlineAsync("saga-1", new TestDeadline(1), new EventReference("saga-1", 2), TestContext.Current.CancellationToken);
+
+        found.Should().BeFalse();
+        A.CallTo(() => repository.Add(A<AggregateIdentifier>._, A<SagaRoot<TestSagaState, TestEvent>>._)).MustNotHaveHappened();
+        A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._)).MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task HandleDeadlineAsync_WithARequestedDeadline_ActivatesTheScheduler() {
+        var command = new TestCommand();
+        var repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
+        var dispatcher = A.Fake<ICommandDispatcher>();
+        var store = A.Fake<IScheduledStore>();
+        A.CallTo(() => repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(new SagaRoot<TestSagaState, TestEvent>(new TestSagaState(4), new AggregateVersion(1))));
+        A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
+            .Returns(new ICommand[] { Deadline.At(DateTimeOffset.UtcNow, new TestDeadline(1)), command }.ToAsyncEnumerable());
+
+        await BuildHandler(repository, saga, dispatcher, store).HandleDeadlineAsync("saga-1", new TestDeadline(1), new EventReference("saga-1", 2), TestContext.Current.CancellationToken);
+
+        A.CallTo(() => store.AppendAsync("scheduled-Test.Saga@v1", ScheduledFormat.MarkerEventType, A<ReadOnlyMemory<byte>>._, A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly()
+            .Then(A.CallTo(() => dispatcher.DispatchAsync(command, A<CancellationToken>._)).MustHaveHappenedOnceExactly());
     }
 }

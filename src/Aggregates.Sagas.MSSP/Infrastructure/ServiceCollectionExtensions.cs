@@ -25,7 +25,7 @@ public static class ServiceCollectionExtensions {
     ///   <item>
     ///     A <see cref="SagaCommitDelegate"/> backed by <see cref="MsspCommitHandler"/> that
     ///     serializes the saga's changes as <c>$&gt;</c> links to their source events and as
-    ///     deferred command requests, so a saga stream never holds copies of the events it reacts to.
+    ///     deferred command and deadline requests, so a saga stream never holds copies of the events it reacts to.
     ///   </item>
     ///   <item><see cref="MsspScheduledStore"/> as <see cref="IScheduledStore"/>.</item>
     /// </list>
@@ -41,8 +41,8 @@ public static class ServiceCollectionExtensions {
         builder.UseSagaRepository(typeof(MsspSagaRepository<,>));
 
         // Saga commit delegate — reuses the same MsspCommitHandler as regular aggregates, but
-        // serializes the saga's changes as links to their source events and as deferred commands,
-        // never as copies.
+        // serializes the saga's changes as links to their source events and as deferred commands and
+        // deadlines, never as copies.
         builder.Services.TryAddSingleton<SagaCommitDelegate>(sp => {
             var handler = sp.GetRequiredService<MsspCommitHandler>();
             var options = sp.GetRequiredService<MsspOptions>();
@@ -63,8 +63,8 @@ public static class ServiceCollectionExtensions {
     /// Serializes a saga change into the entry stored in the saga stream.
     /// </summary>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the change is neither an <see cref="EventReference"/> nor a
-    /// <see cref="DeferredCommandRequest"/>.
+    /// Thrown when the change is not an <see cref="EventReference"/>, a <see cref="DeferredCommandRequest"/>
+    /// or a <see cref="DeadlineRequest"/>.
     /// </exception>
     static EventData SerializeChange(object change, MsspOptions options) {
         switch (change) {
@@ -73,9 +73,13 @@ public static class ServiceCollectionExtensions {
             case DeferredCommandRequest request:
                 var command = options.Serialize!(request.Command);
                 return new EventData(ScheduledFormat.CommandRequestEventType,
-                    ScheduledFormat.WriteCommandRequest(request.Owner, request.Due, command.EventType, command.Data.Span));
+                    ScheduledFormat.WriteRequest(request.Owner, request.Due, command.EventType, command.Data.Span, request.Cause));
+            case DeadlineRequest deadline:
+                var payload = options.Serialize!(deadline.Payload);
+                return new EventData(ScheduledFormat.DeadlineRequestEventType,
+                    ScheduledFormat.WriteRequest(deadline.Owner, deadline.Due, payload.EventType, payload.Data.Span, deadline.Cause));
             default:
-                throw new InvalidOperationException($"A saga's changes are links and deferred commands, but got a {change.GetType().Name}.");
+                throw new InvalidOperationException($"A saga's changes are links, deferred commands and deadlines, but got a {change.GetType().Name}.");
         }
     }
 }

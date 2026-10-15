@@ -46,14 +46,14 @@ static partial class SchedulerLog {
     /// <summary>
     /// The scheduler read a request of its handler.
     /// </summary>
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Scheduler '{SubscriptionId}' read request {Request} in {Stream}, due at {Due}: {CommandType}")]
-    public static partial void LogRequested(this ILogger logger, string subscriptionId, EventReference request, string stream, DateTimeOffset due, string commandType);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Scheduler '{SubscriptionId}' read request {Request} in {Stream}, due at {Due}: {PayloadType}")]
+    public static partial void LogRequested(this ILogger logger, string subscriptionId, EventReference request, string stream, DateTimeOffset due, string payloadType);
 
     /// <summary>
-    /// The command of a request can't be deserialized.
+    /// The command or deadline payload of a request can't be deserialized.
     /// </summary>
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Scheduler '{SubscriptionId}' can't deserialize the command of request {Request} in {Stream}, due at {Due}; it is parked when it is due, unless a deploy fixes it before")]
-    public static partial void LogUndeserializable(this ILogger logger, Exception exception, string subscriptionId, EventReference request, string stream, DateTimeOffset due);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Scheduler '{SubscriptionId}' can't deserialize the {Kind} of request {Request} in {Stream}, due at {Due}; it is parked when it is due, unless a deploy fixes it before")]
+    public static partial void LogUndeserializable(this ILogger logger, Exception exception, string subscriptionId, string kind, EventReference request, string stream, DateTimeOffset due);
 
     /// <summary>
     /// A request whose data can't be read is skipped.

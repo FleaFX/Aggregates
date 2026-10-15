@@ -4,12 +4,13 @@ using Microsoft.Extensions.Logging;
 namespace Aggregates.Subscriptions;
 
 /// <summary>
-/// Executes the commands a saga or policy deferred, at their due time. It sleeps until the handler is
-/// activated (see <see cref="SchedulerActivation"/>), then reads the scheduled entries of every stream
-/// from the store, keeps the open requests of its handler in memory, and executes each one once it is
-/// due — starting only after it has read back a marker it appended, so that it knows every request
-/// stored and handled before it started. After each delivery it records the request as handled in
-/// its own stream (<c>scheduled-{id}</c>).
+/// Executes the commands a saga or policy deferred, and delivers the deadlines a saga requested, at
+/// their due time. It sleeps until the handler is activated (see <see cref="SchedulerActivation"/>),
+/// then reads the scheduled entries of every stream from the store, keeps the open requests of its
+/// handler in memory, and executes or delivers each one once it is due — starting only after it has
+/// read back a marker it appended, so that it knows every request stored and handled before it
+/// started. After each delivery it records the request as handled in its own stream
+/// (<c>scheduled-{id}</c>).
 /// </summary>
 /// <remarks>
 /// Its checkpoint (<c>checkpoint-scheduled-{id}</c>) stays before the oldest open request, so a
@@ -55,25 +56,54 @@ public sealed class Scheduler(
     readonly DeferredCommandDispatcher _dispatcher = new(scopeFactory, retryPolicy, parkedMessageSink, loggerFactory.CreateLogger<DeferredCommandDispatcher>());
 
     /// <summary>
-    /// Runs the scheduler of the saga or policy of <paramref name="registration"/> until
-    /// <paramref name="stoppingToken"/> is cancelled or a failure that is not transient occurs.
+    /// Runs the scheduler of the policy of <paramref name="registration"/> until
+    /// <paramref name="stoppingToken"/> is cancelled or a failure that is not transient occurs. It
+    /// executes deferred commands, and parks a saga deadline, which a policy can't request.
     /// </summary>
     /// <param name="registration">The subscription of the handler.</param>
     /// <param name="activation">Tells whether the handler ever deferred a command.</param>
     /// <param name="stoppingToken">Stops the scheduler.</param>
-    public Task RunAsync(SubscriptionRegistration registration, SchedulerActivation activation, CancellationToken stoppingToken) {
+    public Task RunAsync(SubscriptionRegistration registration, SchedulerActivation activation, CancellationToken stoppingToken) =>
+        RunWithDeliveryAsync(registration, activation, null, stoppingToken);
+
+    /// <summary>
+    /// Runs the scheduler of the saga of <paramref name="registration"/> until
+    /// <paramref name="stoppingToken"/> is cancelled or a failure that is not transient occurs. It
+    /// executes deferred commands, and hands each due saga deadline to <paramref name="deliverDeadline"/>.
+    /// </summary>
+    /// <param name="registration">The subscription of the saga.</param>
+    /// <param name="activation">Tells whether the saga ever deferred a command or requested a deadline.</param>
+    /// <param name="deliverDeadline">Delivers one due deadline to the saga; it retries and parks failures itself.</param>
+    /// <param name="stoppingToken">Stops the scheduler.</param>
+    public Task RunAsync(SubscriptionRegistration registration, SchedulerActivation activation,
+        Func<ScheduledDeadline, CancellationToken, ValueTask> deliverDeadline, CancellationToken stoppingToken) =>
+        RunWithDeliveryAsync(registration, activation, deliverDeadline, stoppingToken);
+
+    /// <summary>
+    /// Runs the scheduler with the command dispatch, and with <paramref name="deliverDeadline"/> for
+    /// saga deadlines; without it, a saga deadline is parked.
+    /// </summary>
+    Task RunWithDeliveryAsync(SubscriptionRegistration registration, SchedulerActivation activation,
+        Func<ScheduledDeadline, CancellationToken, ValueTask>? deliverDeadline, CancellationToken stoppingToken) {
         var subscriptionId = ScheduledFormat.SchedulerStream(registration.SubscriptionId);
-        return RunAsync(registration, activation, (request, ct) => _dispatcher.DeliverAsync(subscriptionId, request, ct), stoppingToken);
+        return RunCoreAsync(registration, activation, (request, ct) => request switch {
+            // A deferred command, or a request that could not be deserialized: the dispatcher executes or parks it.
+            { Kind: ScheduledKind.Command } or { Payload: null } => _dispatcher.DeliverAsync(subscriptionId, request, ct),
+            { Payload: { } payload } when deliverDeadline is not null =>
+                deliverDeadline(new ScheduledDeadline(request.Request, request.Due, payload, request.Metadata, request.CommitPosition), ct),
+            _ => _dispatcher.ParkAsync(subscriptionId, request,
+                new InvalidOperationException($"Request {request.Request} is a saga deadline, but scheduler '{subscriptionId}' doesn't deliver deadlines."), ct)
+        }, stoppingToken);
     }
 
     /// <summary>
-    /// Runs the scheduler with <paramref name="deliver"/> instead of the command dispatch.
+    /// Runs the scheduler with <paramref name="deliver"/> for every due request.
     /// </summary>
     /// <param name="registration">The subscription of the handler.</param>
     /// <param name="activation">Tells whether the handler ever deferred a command.</param>
-    /// <param name="deliver">Executes one due request; it retries and parks failures itself.</param>
+    /// <param name="deliver">Executes or delivers one due request; it retries and parks failures itself.</param>
     /// <param name="stoppingToken">Stops the scheduler.</param>
-    internal async Task RunAsync(SubscriptionRegistration registration, SchedulerActivation activation,
+    internal async Task RunCoreAsync(SubscriptionRegistration registration, SchedulerActivation activation,
         Func<ScheduledRequest, CancellationToken, ValueTask> deliver, CancellationToken stoppingToken) {
         var subscriptionId = ScheduledFormat.SchedulerStream(registration.SubscriptionId);
         var retry = new SchedulerRetry(subscriptionFactory, resubscribeOptions, timeProvider, _logger, subscriptionId);
@@ -101,7 +131,7 @@ public sealed class Scheduler(
         _logger.LogReading(subscriptionId, start);
 
         var owners = new HashSet<string>([registration.SubscriptionId, .. registration.Predecessors ?? []], StringComparer.Ordinal);
-        var index = new SchedulerIndex(owners, start, store.DeserializeCommand);
+        var index = new SchedulerIndex(owners, start, store.Deserialize);
         var tracker = new CheckpointTracker(checkpointStore, subscriptionId, checkpointOptions, timeProvider);
         try {
             await using var feed = SchedulerFeed.Start(store, retry, timeProvider, _logger, subscriptionId, start, stoppingToken);

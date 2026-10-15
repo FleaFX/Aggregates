@@ -21,8 +21,9 @@ namespace Aggregates.Sagas;
 /// A fresh DI scope is created per saga invocation so that scoped services are never captured
 /// as singletons by this long-lived hosted service.
 /// Next to the subscription it runs the saga's <see cref="Scheduler"/>, which executes the commands
-/// the saga deferred with <see cref="DeferredCommandExtensions.DeferUntil"/> when they are due, with
-/// retries and parking under <c>scheduled-{subscription id}</c>.
+/// the saga deferred with <see cref="DeferredCommandExtensions.DeferUntil"/> and delivers the deadlines
+/// it requested with <see cref="Deadline.At"/> when they are due, with retries and parking under
+/// <c>scheduled-{subscription id}</c>.
 /// </remarks>
 /// <typeparam name="TSaga">The saga class.</typeparam>
 /// <typeparam name="TSagaState">The saga state type.</typeparam>
@@ -42,7 +43,7 @@ sealed class SagaSubscriptionService<TSaga, TSagaState, TEvent>(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         var events = loop.RunAsync(registration, ProcessAsync, stop.Token);
-        var deferred = scheduler.RunAsync(registration, activation, stop.Token);
+        var deferred = scheduler.RunAsync(registration, activation, DeliverDeadlineAsync, stop.Token);
         // Each ends only when the host stops or after a failure that is not transient; the other stops with it.
         await Task.WhenAny(events, deferred);
         await stop.CancelAsync();
@@ -71,5 +72,23 @@ sealed class SagaSubscriptionService<TSaga, TSagaState, TEvent>(
                 await handler.HandleAsync(sagaId, typedEvent, message.Source, ct);
             }, registration.SubscriptionId, message, cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Delivers a due deadline to the saga instance whose stream holds its request, in a fresh scope and
+    /// a metadata scope seeded with the metadata of the request, with retries and parking under the
+    /// id of the scheduler.
+    /// </summary>
+    async ValueTask DeliverDeadlineAsync(ScheduledDeadline deadline, CancellationToken cancellationToken) {
+        // The saga stream holds the request, so its name is the saga id: no resolver is needed.
+        var sagaId = new AggregateIdentifier(deadline.Request.StreamId);
+        var message = new SubscriptionMessage(deadline.Payload, deadline.CommitPosition, deadline.Request, deadline.Metadata);
+        await retryPolicy.ExecuteAsync(async ct => {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var handler = scope.ServiceProvider.GetRequiredService<LoggingSagaHandler<TSaga, TSagaState, TEvent>>();
+            // The commands the saga dispatches, and the requests it stores, carry the correlation of the request.
+            await using var metadataScope = new MetadataScope(deadline.Metadata);
+            await handler.HandleDeadlineAsync(sagaId, deadline.Payload, deadline.Request, ct);
+        }, ScheduledFormat.SchedulerStream(registration.SubscriptionId), message, cancellationToken);
     }
 }

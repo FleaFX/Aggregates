@@ -7,12 +7,14 @@ namespace Aggregates.Sagas;
 public class RetrySagaHandlerTests {
     // The repository is the first thing the innermost handler calls, so it stands in for the inner handler.
     readonly ISagaRepository<TestSagaState, TestEvent> _repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
-    readonly ISaga<TestSagaState, TestEvent> _saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
+    readonly ISaga<TestSagaState, TestEvent, TestDeadline> _saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
 
     public RetrySagaHandlerTests() {
         A.CallTo(() => _repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
             .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
         A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(AsyncEnumerable.Empty<ICommand>());
+        A.CallTo(() => _saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
             .Returns(AsyncEnumerable.Empty<ICommand>());
     }
 
@@ -51,6 +53,17 @@ public class RetrySagaHandlerTests {
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         InnerCalls().MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    public async Task HandleDeadlineAsync_GivenConcurrencyExceptionThenSuccess_Retries() {
+        InnerCalls()
+            .Throws(new ConcurrencyException("id", AggregateVersion.None, AggregateVersion.None)).Twice()
+            .Then.Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(new SagaRoot<TestSagaState, TestEvent>(new TestSagaState(4), AggregateVersion.None)));
+
+        await BuildHandler(maxAttempts: 3).HandleDeadlineAsync("saga-1", new TestDeadline(1), new EventReference("saga-1", 2), TestContext.Current.CancellationToken);
+
+        InnerCalls().MustHaveHappened(3, Times.Exactly);
     }
 
     FakeItEasy.Configuration.IReturnValueArgumentValidationConfiguration<ValueTask<SagaRoot<TestSagaState, TestEvent>?>> InnerCalls() =>

@@ -8,13 +8,15 @@ namespace Aggregates.Sagas;
 
 public class LoggingSagaHandlerTests {
     readonly ISagaRepository<TestSagaState, TestEvent> _repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
-    readonly ISaga<TestSagaState, TestEvent> _saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
+    readonly ISaga<TestSagaState, TestEvent, TestDeadline> _saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
     readonly FakeLogger<LoggingSagaHandler<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent>> _logger = new();
 
     public LoggingSagaHandlerTests() {
         A.CallTo(() => _repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
             .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
         A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(AsyncEnumerable.Empty<ICommand>());
+        A.CallTo(() => _saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
             .Returns(AsyncEnumerable.Empty<ICommand>());
     }
 
@@ -45,6 +47,25 @@ public class LoggingSagaHandlerTests {
         await act.Should().ThrowAsync<InvalidOperationException>();
         _logger.Collector.GetSnapshot()
             .Should().Contain(r => r.Level == LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task HandleDeadlineAsync_LogsTheDeadlineTypeTheRequestTheSagaAndTheSagaId() {
+        A.CallTo(() => _repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(new SagaRoot<TestSagaState, TestEvent>(new TestSagaState(4), AggregateVersion.None)));
+
+        await BuildHandler().HandleDeadlineAsync("saga-1", new TestDeadline(2), new EventReference("saga-1", 2), TestContext.Current.CancellationToken);
+
+        _logger.Collector.GetSnapshot()
+            .Should().Contain(r => r.Message == "Handling deadline TestDeadline (2@saga-1) in ISaga`2 for saga saga-1");
+    }
+
+    [Fact]
+    public async Task HandleDeadlineAsync_WhenTheSagaDoesNotExist_LogsAWarning() {
+        await BuildHandler().HandleDeadlineAsync("saga-1", new TestDeadline(2), new EventReference("saga-1", 2), TestContext.Current.CancellationToken);
+
+        _logger.Collector.GetSnapshot()
+            .Should().Contain(r => r.Level == LogLevel.Warning && r.Message.Contains("doesn't exist anymore"));
     }
 
     // The interface itself as TSaga, so the saga can be faked behind the real chain.

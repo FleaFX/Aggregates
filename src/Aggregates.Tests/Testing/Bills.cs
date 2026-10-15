@@ -3,8 +3,8 @@ using System.Runtime.CompilerServices;
 
 namespace Aggregates.Testing;
 
-// The bill domain of the deferred command integration tests: a bill is planned with a due date,
-// can be paid, and gets reminders that it refuses when they no longer apply.
+// The bill domain of the deferred command and saga deadline integration tests: a bill is planned with a due date,
+// can be paid and closed, and gets reminders that it refuses when they no longer apply.
 
 interface IBillEvent {
     string BillId { get; }
@@ -19,12 +19,16 @@ sealed record BillPaid(string BillId) : IBillEvent;
 [EventContract("BillReminded", @namespace: "IntegrationTests")]
 sealed record BillReminded(string BillId, DateTimeOffset Due, string Kind) : IBillEvent;
 
-sealed record BillState(DateTimeOffset? Due, bool Paid, ImmutableHashSet<string> Reminded) : IState<BillState, IBillEvent> {
-    public static BillState Initial => new(null, false, []);
+[EventContract("BillClosed", @namespace: "IntegrationTests")]
+sealed record BillClosed(string BillId) : IBillEvent;
+
+sealed record BillState(DateTimeOffset? Due, bool Paid, ImmutableHashSet<string> Reminded, bool Closed) : IState<BillState, IBillEvent> {
+    public static BillState Initial => new(null, false, [], false);
     public BillState Apply(IBillEvent @event) => @event switch {
         BillPlanned planned => this with { Due = planned.Due },
         BillPaid => this with { Paid = true },
         BillReminded reminded => this with { Reminded = Reminded.Add($"{reminded.Due:O}/{reminded.Kind}") },
+        BillClosed => this with { Closed = true },
         _ => this
     };
 }
@@ -40,6 +44,15 @@ sealed record PayBill(AggregateIdentifier Id) : ICommand<BillState, IBillEvent> 
     public async IAsyncEnumerable<IBillEvent> ProgressAsync(BillState state, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
         if (!state.Paid)
             yield return new BillPaid(Id.Value);
+        await Task.CompletedTask;
+    }
+}
+
+// Closes a paid bill, once.
+sealed record CloseBill(AggregateIdentifier Id) : ICommand<BillState, IBillEvent> {
+    public async IAsyncEnumerable<IBillEvent> ProgressAsync(BillState state, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
+        if (state.Paid && !state.Closed)
+            yield return new BillClosed(Id.Value);
         await Task.CompletedTask;
     }
 }

@@ -24,7 +24,7 @@ public sealed class FakeScheduledStore : IScheduledStore {
     public Exception? FailNextSubscribe { get; set; }
 
     /// <summary>
-    /// Deserializes a planned command; returns null for an unknown type by default.
+    /// Deserializes a command or deadline payload; returns null for an unknown type by default.
     /// </summary>
     public Func<string, ReadOnlyMemory<byte>, object?> Deserializer { get; set; } = (_, _) => null;
 
@@ -58,7 +58,13 @@ public sealed class FakeScheduledStore : IScheduledStore {
     /// Appends a deferred command request of <paramref name="owner"/> to the stream <paramref name="sagaId"/>.
     /// </summary>
     public ScheduledEntry AppendRequest(string sagaId, string owner, DateTimeOffset due, string commandType = "Test.Command@v1", EventMetadata? metadata = null) =>
-        Append(sagaId, ScheduledFormat.CommandRequestEventType, ScheduledFormat.WriteCommandRequest(owner, due, commandType, "{}"u8), metadata);
+        Append(sagaId, ScheduledFormat.CommandRequestEventType, ScheduledFormat.WriteRequest(owner, due, commandType, "{}"u8), metadata);
+
+    /// <summary>
+    /// Appends a saga deadline request of <paramref name="owner"/> to the stream <paramref name="sagaId"/>.
+    /// </summary>
+    public ScheduledEntry AppendDeadline(string sagaId, string owner, DateTimeOffset due, string payloadType = "Test.Deadline@v1", EventReference? cause = null, EventMetadata? metadata = null) =>
+        Append(sagaId, ScheduledFormat.DeadlineRequestEventType, ScheduledFormat.WriteRequest(owner, due, payloadType, "{}"u8, cause), metadata);
 
     /// <summary>
     /// Appends the entry that records <paramref name="request"/> as delivered.
@@ -107,7 +113,7 @@ public sealed class FakeScheduledStore : IScheduledStore {
                 return ValueTask.FromResult(false);
             foreach (var request in requests)
                 Append(stream, ScheduledFormat.CommandRequestEventType,
-                    ScheduledFormat.WriteCommandRequest(request.Owner, request.Due, CommandType(request.Command), "{}"u8), metadata);
+                    ScheduledFormat.WriteRequest(request.Owner, request.Due, CommandType(request.Command), "{}"u8, request.Cause), metadata);
         }
         return ValueTask.FromResult(true);
     }
@@ -117,6 +123,6 @@ public sealed class FakeScheduledStore : IScheduledStore {
         ValueTask.FromResult(Entries.Any(entry => entry.Source.StreamId == stream));
 
     /// <inheritdoc/>
-    public object? DeserializeCommand(string commandType, ReadOnlyMemory<byte> data) =>
-        Deserializer(commandType, data);
+    public object? Deserialize(string type, ReadOnlyMemory<byte> data) =>
+        Deserializer(type, data);
 }

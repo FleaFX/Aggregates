@@ -7,7 +7,7 @@ namespace Aggregates.KurrentDB;
 /// <summary>
 /// An <see cref="IScheduledStore"/> on KurrentDB: reads the scheduled entries from <c>$all</c> with a
 /// server-side prefix filter, appends the scheduler's entries and the requests of policies, and
-/// (de)serializes deferred commands with <see cref="KurrentDbOptions.Serialize"/> and
+/// (de)serializes deferred commands and deadline payloads with <see cref="KurrentDbOptions.Serialize"/> and
 /// <see cref="KurrentDbOptions.Deserialize"/>.
 /// </summary>
 /// <param name="client">The KurrentDB client.</param>
@@ -45,7 +45,7 @@ public sealed class KurrentDbScheduledStore(KurrentDBClient client, KurrentDbOpt
         var events = requests.Select(request => {
             var command = options.Serialize!(request.Command);
             return new EventData(Uuid.NewUuid(), ScheduledFormat.CommandRequestEventType,
-                ScheduledFormat.WriteCommandRequest(request.Owner, request.Due, command.EventType, command.Data.Span), metadata);
+                ScheduledFormat.WriteRequest(request.Owner, request.Due, command.EventType, command.Data.Span, request.Cause), metadata);
         }).ToArray();
         try {
             await client.AppendToStreamAsync(stream, StreamState.NoStream, events, cancellationToken: cancellationToken);
@@ -62,7 +62,7 @@ public sealed class KurrentDbScheduledStore(KurrentDBClient client, KurrentDbOpt
     }
 
     /// <inheritdoc/>
-    public object? DeserializeCommand(string commandType, ReadOnlyMemory<byte> data) => options.Deserialize!(commandType, data);
+    public object? Deserialize(string type, ReadOnlyMemory<byte> data) => options.Deserialize!(type, data);
 
     /// <summary>
     /// Deserializes stored metadata, or returns empty metadata when that fails.

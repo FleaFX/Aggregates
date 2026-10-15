@@ -28,8 +28,10 @@ sealed class MsspSagaRepository<TSagaState, TEvent>(IMsspClient client, MsspOpti
         var links = new List<int>();
         for (var i = 0; i < recordedEvents.Length; i++) {
             var recorded = recordedEvents[i];
-            if (recorded.EventType == ScheduledFormat.CommandRequestEventType) {
-                entries[i] = SagaStreamEntry.ScheduledRequest(new EventReference(sagaId.ToString(), recorded.Revision));
+            if (recorded.EventType is ScheduledFormat.CommandRequestEventType or ScheduledFormat.DeadlineRequestEventType) {
+                // The cause marks a deadline whose reaction is stored; an unreadable request has none.
+                var cause = ScheduledFormat.TryReadRequest(recorded.Data, out var envelope) ? envelope.Cause : null;
+                entries[i] = SagaStreamEntry.ScheduledRequest(new EventReference(sagaId.ToString(), recorded.Revision), cause);
                 continue;
             }
             if (recorded.EventType != EventReference.LinkEventType)

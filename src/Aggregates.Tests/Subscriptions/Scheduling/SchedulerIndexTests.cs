@@ -12,13 +12,18 @@ public class SchedulerIndexTests {
 
     static object? Deserialize(string type, ReadOnlyMemory<byte> data) => type switch {
         "Test.Command@v1" => new TestCommand(),
+        "Test.Deadline@v1" => new TestDeadline(1),
         "Test.String@v1" => "text",
         "Test.Failing@v1" => throw new InvalidOperationException("deserializing failed"),
         _ => null
     };
 
     static ScheduledEntry Request(ulong position, string owner, DateTimeOffset due, string commandType = "Test.Command@v1", ulong revision = 0) =>
-        new(ScheduledFormat.CommandRequestEventType, ScheduledFormat.WriteCommandRequest(owner, due, commandType, "{}"u8),
+        new(ScheduledFormat.CommandRequestEventType, ScheduledFormat.WriteRequest(owner, due, commandType, "{}"u8),
+            EventMetadata.Empty, new EventReference("saga-1", revision), position);
+
+    static ScheduledEntry Deadline(ulong position, string owner, DateTimeOffset due, string payloadType = "Test.Deadline@v1", ulong revision = 0) =>
+        new(ScheduledFormat.DeadlineRequestEventType, ScheduledFormat.WriteRequest(owner, due, payloadType, "{}"u8),
             EventMetadata.Empty, new EventReference("saga-1", revision), position);
 
     [Fact]
@@ -31,7 +36,7 @@ public class SchedulerIndexTests {
         change.Should().Be(SchedulerChange.Requested);
         index.Count.Should().Be(1);
         index.NextDue.Should().Be(due);
-        requested.Command.Should().BeOfType<TestCommand>();
+        requested.Payload.Should().BeOfType<TestCommand>();
         requested.Error.Should().BeNull();
     }
 
@@ -167,7 +172,7 @@ public class SchedulerIndexTests {
         var change = index.Apply(Request(12, Owner, Start, commandType), out var requested);
 
         change.Should().Be(SchedulerChange.Requested);
-        requested.Command.Should().BeNull();
+        requested.Payload.Should().BeNull();
         requested.Error.Should().NotBeNull();
         if (commandType == "Test.Failing@v1")
             requested.Error.Should().BeOfType<InvalidOperationException>().Which.Message.Should().Be("deserializing failed");
@@ -175,5 +180,64 @@ public class SchedulerIndexTests {
             requested.Error!.Message.Should().Contain("does not know the command type");
         if (commandType == "Test.String@v1")
             requested.Error!.Message.Should().Contain("which is not a command");
+    }
+
+    [Fact]
+    public void DeadlineRequest_OfAnOwner_IsOpen_WithItsPayload() {
+        var index = Index();
+        var due = Start.AddDays(1);
+
+        var change = index.Apply(Deadline(12, Owner, due), out var requested);
+
+        change.Should().Be(SchedulerChange.Requested);
+        index.Count.Should().Be(1);
+        index.NextDue.Should().Be(due);
+        requested.Kind.Should().Be(ScheduledKind.Deadline);
+        requested.Payload.Should().Be(new TestDeadline(1));
+        requested.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public void DeadlineRequest_AcceptsAnyObjectAsPayload() {
+        var index = Index();
+
+        var change = index.Apply(Deadline(12, Owner, Start, payloadType: "Test.String@v1"), out var requested);
+
+        change.Should().Be(SchedulerChange.Requested);
+        requested.Payload.Should().Be("text");
+        requested.Error.Should().BeNull();
+    }
+
+    [Fact]
+    public void DeadlineRequest_OfAnUnknownType_IsOpen_WithAnError() {
+        var index = Index();
+
+        var change = index.Apply(Deadline(12, Owner, Start, payloadType: "Test.Unknown@v1"), out var requested);
+
+        change.Should().Be(SchedulerChange.Requested);
+        requested.Payload.Should().BeNull();
+        requested.Error!.Message.Should().Contain("does not know the deadline type");
+    }
+
+    [Fact]
+    public void CommandAndDeadlineRequests_ShareTheOrderOfDueTimes() {
+        var index = Index();
+        index.Apply(Request(12, Owner, Start.AddDays(2)), out _);
+        index.Apply(Deadline(13, Owner, Start.AddDays(1), revision: 1), out _);
+
+        index.TryPeekDue(Start.AddDays(3), out var due).Should().BeTrue();
+        due.Kind.Should().Be(ScheduledKind.Deadline);
+        due.CommitPosition.Should().Be(13);
+    }
+
+    [Fact]
+    public void DeadlineRequest_OfAnotherSaga_IsIgnored() {
+        var index = Index();
+
+        var change = index.Apply(Deadline(25, "Test.Other@v1", Start), out _);
+
+        change.Should().Be(SchedulerChange.None);
+        index.Count.Should().Be(0);
+        index.Checkpoint.Should().Be(25);
     }
 }

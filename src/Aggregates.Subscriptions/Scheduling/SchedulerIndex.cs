@@ -6,8 +6,8 @@ namespace Aggregates.Subscriptions;
 /// </summary>
 /// <param name="owners">The subscription ids whose requests are this handler's: its own and its predecessors'.</param>
 /// <param name="start">The position the entries are read after; null from the beginning.</param>
-/// <param name="deserializeCommand">Deserializes a deferred command (see <see cref="IScheduledStore.DeserializeCommand"/>).</param>
-sealed class SchedulerIndex(IReadOnlySet<string> owners, ulong? start, Func<string, ReadOnlyMemory<byte>, object?> deserializeCommand) {
+/// <param name="deserialize">Deserializes the command or deadline payload of a request (see <see cref="IScheduledStore.Deserialize"/>).</param>
+sealed class SchedulerIndex(IReadOnlySet<string> owners, ulong? start, Func<string, ReadOnlyMemory<byte>, object?> deserialize) {
     readonly Dictionary<EventReference, ScheduledRequest> _open = [];
     readonly SortedSet<ScheduledRequest> _byDue = new(Comparer<ScheduledRequest>.Create((x, y) =>
         x.Due != y.Due ? x.Due.CompareTo(y.Due) : x.CommitPosition.CompareTo(y.CommitPosition)));
@@ -48,12 +48,14 @@ sealed class SchedulerIndex(IReadOnlySet<string> owners, ulong? start, Func<stri
         _lastPosition = entry.CommitPosition;
         switch (entry.EventType) {
             case ScheduledFormat.CommandRequestEventType:
-                if (!ScheduledFormat.TryReadCommandRequest(entry.Data, out var envelope))
+            case ScheduledFormat.DeadlineRequestEventType:
+                if (!ScheduledFormat.TryReadRequest(entry.Data, out var envelope))
                     return SchedulerChange.Invalid;
                 if (!owners.Contains(envelope.Owner) || _open.ContainsKey(entry.Source))
                     return SchedulerChange.None;
-                var (command, error) = Deserialize(envelope);
-                requested = new ScheduledRequest(entry.Source, envelope.Due, command, error, entry.Metadata, entry.CommitPosition, resumeAfter);
+                var kind = entry.EventType == ScheduledFormat.DeadlineRequestEventType ? ScheduledKind.Deadline : ScheduledKind.Command;
+                var (payload, error) = Deserialize(envelope, kind);
+                requested = new ScheduledRequest(entry.Source, envelope.Due, payload, error, entry.Metadata, entry.CommitPosition, resumeAfter) { Kind = kind };
                 _open.Add(entry.Source, requested);
                 _byDue.Add(requested);
                 _byPosition.Add(entry.CommitPosition, requested);
@@ -93,13 +95,16 @@ sealed class SchedulerIndex(IReadOnlySet<string> owners, ulong? start, Func<stri
         return true;
     }
 
-    // Deserialized when read, so a command type that changed is reported at startup instead of when it is due.
-    (ICommand? Command, Exception? Error) Deserialize(ScheduledCommandEnvelope envelope) {
+    // Deserialized when read, so a type that changed is reported at startup instead of when it is due.
+    // A deferred command must be a command; a deadline payload can be any object.
+    (object? Payload, Exception? Error) Deserialize(ScheduledEnvelope envelope, ScheduledKind kind) {
+        var what = kind == ScheduledKind.Deadline ? "deadline" : "command";
         try {
-            return deserializeCommand(envelope.CommandType, envelope.CommandData) switch {
+            return deserialize(envelope.Type, envelope.Data) switch {
+                null => (null, new InvalidOperationException($"Deserialize does not know the {what} type '{envelope.Type}'.")),
                 ICommand command => (command, null),
-                null => (null, new InvalidOperationException($"Deserialize does not know the command type '{envelope.CommandType}'.")),
-                var other => (null, new InvalidOperationException($"'{envelope.CommandType}' deserializes to a {other.GetType().Name}, which is not a command.")),
+                var other when kind == ScheduledKind.Deadline => (other, null),
+                var other => (null, new InvalidOperationException($"'{envelope.Type}' deserializes to a {other.GetType().Name}, which is not a command.")),
             };
         } catch (Exception exception) when (exception is not OperationCanceledException) {
             return (null, exception);

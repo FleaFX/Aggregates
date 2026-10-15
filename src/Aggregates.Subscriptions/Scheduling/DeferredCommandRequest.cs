@@ -8,4 +8,10 @@ namespace Aggregates.Subscriptions;
 /// <param name="Owner">The subscription id of the saga or policy that deferred the command.</param>
 /// <param name="Due">When the command is due.</param>
 /// <param name="Command">The command to execute.</param>
-public readonly record struct DeferredCommandRequest(string Owner, DateTimeOffset Due, ICommand Command);
+public readonly record struct DeferredCommandRequest(string Owner, DateTimeOffset Due, ICommand Command) {
+    /// <summary>
+    /// The saga deadline whose reaction deferred the command; <see langword="null"/> when a saga or
+    /// policy deferred it in reaction to an event.
+    /// </summary>
+    public EventReference? Cause { get; init; }
+}

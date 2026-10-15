@@ -10,7 +10,7 @@ namespace Aggregates.Sagas.KurrentDB;
 /// <see cref="AggregateIdentifier.ToString"/> of the saga identifier. The stream is read with
 /// <c>resolveLinkTos</c>, so the <c>$&gt;</c> links a saga stream holds are resolved to the
 /// events they point to; unresolved links count for the version but leave the state untouched.
-/// Deferred command requests count for the version; the commands are executed by the scheduler.
+/// Deferred command and deadline requests count for the version; the scheduler executes or delivers them.
 /// </summary>
 sealed class KurrentDbSagaRepository<TSagaState, TEvent>(KurrentDBClient client, KurrentDbOptions options) : BaseSagaRepository<TSagaState, TEvent>
     where TSagaState : IState<TSagaState, TEvent> {
@@ -28,11 +28,13 @@ sealed class KurrentDbSagaRepository<TSagaState, TEvent>(KurrentDBClient client,
             throw new AggregateRootNotFoundException(sagaId);
 
         await foreach (var resolvedEvent in result.WithCancellation(cancellationToken)) {
-            // The entry in the saga stream: a link (resolved or not) or a deferred command request.
+            // The entry in the saga stream: a link (resolved or not), or a request (a deferred command or a deadline).
             var entry = resolvedEvent.OriginalEvent;
             var revision = entry.EventNumber.ToUInt64();
-            if (entry.EventType == ScheduledFormat.CommandRequestEventType) {
-                yield return SagaStreamEntry.ScheduledRequest(new EventReference(sagaId.ToString(), revision));
+            if (entry.EventType is ScheduledFormat.CommandRequestEventType or ScheduledFormat.DeadlineRequestEventType) {
+                // The cause marks a deadline whose reaction is stored; an unreadable request has none.
+                var cause = ScheduledFormat.TryReadRequest(entry.Data, out var envelope) ? envelope.Cause : null;
+                yield return SagaStreamEntry.ScheduledRequest(new EventReference(sagaId.ToString(), revision), cause);
                 continue;
             }
             if (entry.EventType != EventReference.LinkEventType)

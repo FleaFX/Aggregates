@@ -5,6 +5,7 @@ namespace Aggregates.Sagas;
 
 /// <summary>
 /// Decorates a <see cref="RetrySagaHandler{TSaga,TSagaState,TEvent}"/> with structured logging.
+/// It logs the delivery of deadlines the same way, and a saga that no longer exists as a warning.
 /// Logs at <see cref="LogLevel.Debug"/> when handling starts and succeeds, and at
 /// <see cref="LogLevel.Error"/> when the inner handler throws.
 /// </summary>
@@ -46,4 +47,39 @@ sealed partial class LoggingSagaHandler<TSaga, TSagaState, TEvent>(
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to handle {EventType} ({Source}) in {Saga} for saga {SagaId}")]
     static partial void LogFailed(ILogger logger, Exception exception, string eventType, EventReference source, string saga, AggregateIdentifier sagaId);
+
+    /// <summary>
+    /// Delivers the due <paramref name="deadline"/> to <paramref name="sagaId"/> through the inner handler,
+    /// logging the outcome; a saga that doesn't exist anymore is logged as a warning.
+    /// </summary>
+    /// <param name="sagaId">Identifies the saga instance: the stream of the deadline request.</param>
+    /// <param name="deadline">The payload of the deadline.</param>
+    /// <param name="request">The saga stream and revision of the deadline request.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    public async ValueTask HandleDeadlineAsync(AggregateIdentifier sagaId, object deadline, EventReference request, CancellationToken cancellationToken = default) {
+        var deadlineType = deadline.GetType().Name;
+        var saga = typeof(TSaga).Name;
+        LogHandlingDeadline(logger, deadlineType, request, saga, sagaId);
+        try {
+            if (await inner.HandleDeadlineAsync(sagaId, deadline, request, cancellationToken))
+                LogHandledDeadline(logger, deadlineType, request, saga, sagaId);
+            else
+                LogSagaGone(logger, deadlineType, request, saga, sagaId);
+        } catch (Exception ex) {
+            LogDeadlineFailed(logger, ex, deadlineType, request, saga, sagaId);
+            throw;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Handling deadline {DeadlineType} ({Request}) in {Saga} for saga {SagaId}")]
+    static partial void LogHandlingDeadline(ILogger logger, string deadlineType, EventReference request, string saga, AggregateIdentifier sagaId);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Handled deadline {DeadlineType} ({Request}) in {Saga} for saga {SagaId}")]
+    static partial void LogHandledDeadline(ILogger logger, string deadlineType, EventReference request, string saga, AggregateIdentifier sagaId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Skipped deadline {DeadlineType} ({Request}) in {Saga}: saga {SagaId} doesn't exist anymore")]
+    static partial void LogSagaGone(ILogger logger, string deadlineType, EventReference request, string saga, AggregateIdentifier sagaId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to handle deadline {DeadlineType} ({Request}) in {Saga} for saga {SagaId}")]
+    static partial void LogDeadlineFailed(ILogger logger, Exception exception, string deadlineType, EventReference request, string saga, AggregateIdentifier sagaId);
 }
