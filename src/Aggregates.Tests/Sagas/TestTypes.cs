@@ -30,10 +30,10 @@ class OtherTestSaga : ISaga<OtherTestSagaState, OtherTestEvent> {
         AsyncEnumerable.Empty<ICommand>();
 }
 
-[SagaContract("TimeoutTest", @namespace: "Tests")]
-class TimeoutTestSaga : ISaga<TestSagaState, TestEvent> {
+[SagaContract("DeferredCommandTest", @namespace: "Tests")]
+class DeferredCommandTestSaga : ISaga<TestSagaState, TestEvent> {
     public async IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
-        yield return SagaTimeout.At(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), new TestCommand());
+        yield return new TestCommand().DeferUntil(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
         await Task.CompletedTask;
     }
 }

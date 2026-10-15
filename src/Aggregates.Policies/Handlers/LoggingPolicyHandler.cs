@@ -1,3 +1,4 @@
+using Aggregates.Subscriptions;
 using Microsoft.Extensions.Logging;
 
 namespace Aggregates.Policies;
@@ -18,13 +19,14 @@ sealed partial class LoggingPolicyHandler<TPolicy, TEvent>(
     /// Handles <paramref name="event"/> through the inner handler, logging the outcome.
     /// </summary>
     /// <param name="event">The event to react to.</param>
+    /// <param name="source">Identifies the stored event the policy reacts to.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
-    public async ValueTask HandleAsync(TEvent @event, CancellationToken cancellationToken = default) {
+    public async ValueTask HandleAsync(TEvent @event, EventReference source, CancellationToken cancellationToken = default) {
         var eventType = @event?.GetType().Name ?? typeof(TEvent).Name;
         var policy = typeof(TPolicy).Name;
         LogHandling(logger, eventType, policy);
         try {
-            await inner.HandleAsync(@event, cancellationToken);
+            await inner.HandleAsync(@event, source, cancellationToken);
             LogHandled(logger, eventType, policy);
         } catch (Exception ex) {
             LogFailed(logger, ex, eventType, policy);

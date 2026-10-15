@@ -6,13 +6,13 @@ namespace Aggregates.Sagas;
 /// Default saga handler and innermost link of the saga handler chain. Loads or creates the
 /// <see cref="SagaRoot{TSagaState,TEvent}"/>, calls <see cref="SagaRoot{TSagaState,TEvent}.AcceptAsync"/>
 /// with <typeparamref name="TSaga"/> to collect the produced commands, then dispatches each command
-/// via <see cref="ICommandDispatcher"/>. It activates the saga's timeout scheduler when the saga
-/// plans its first command.
+/// via <see cref="ICommandDispatcher"/>. It activates the saga's scheduler when the saga defers its
+/// first command.
 /// </summary>
 /// <typeparam name="TSaga">The saga class.</typeparam>
 /// <typeparam name="TSagaState">The saga state type.</typeparam>
 /// <typeparam name="TEvent">The event type the saga reacts to.</typeparam>
-sealed class SagaHandler<TSaga, TSagaState, TEvent>(ISagaRepository<TSagaState, TEvent> repository, TSaga saga, ICommandDispatcher dispatcher, SagaTimeoutActivation<TSaga> activation)
+sealed class SagaHandler<TSaga, TSagaState, TEvent>(ISagaRepository<TSagaState, TEvent> repository, TSaga saga, ICommandDispatcher dispatcher, SchedulerActivation<TSaga> activation)
     where TSaga : ISaga<TSagaState, TEvent>
     where TSagaState : IState<TSagaState, TEvent> {
 
@@ -30,9 +30,9 @@ sealed class SagaHandler<TSaga, TSagaState, TEvent>(ISagaRepository<TSagaState, 
             repository.Add(sagaId, sagaRoot);
         }
         var commands = await sagaRoot.AcceptAsync(@event, source, saga, cancellationToken);
-        // A saga's first timeout request activates its scheduler before the request is committed (after
+        // A saga's first deferred command activates its scheduler before the request is committed (after
         // this handler returns), so the scheduler never misses it.
-        if (sagaRoot.GetChanges().Any(change => change is SagaTimeoutRequest))
+        if (sagaRoot.GetChanges().Any(change => change is DeferredCommandRequest))
             await activation.EnsureActivatedAsync(cancellationToken);
         foreach (var command in commands)
             await dispatcher.DispatchAsync(command, cancellationToken);

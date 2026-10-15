@@ -39,14 +39,13 @@ public class ServiceCollectionExtensionsTests {
         }
 
         [Fact]
-        public void RegistersTheTimeoutSchedulerDispatcherAndActivation() {
+        public void RegistersTheSchedulerAndActivation() {
             var services = new ServiceCollection();
 
             services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(TestSaga)).WithResolver<TestEvent>(_ => []));
 
-            services.Should().ContainSingle(d => d.ServiceType == typeof(SagaTimeoutScheduler));
-            services.Should().ContainSingle(d => d.ServiceType == typeof(SagaTimeoutDispatcher));
-            services.Should().ContainSingle(d => d.ServiceType == typeof(SagaTimeoutActivation<>));
+            services.Should().ContainSingle(d => d.ServiceType == typeof(Scheduler));
+            services.Should().ContainSingle(d => d.ServiceType == typeof(SchedulerActivation<>));
         }
 
         [Fact]
@@ -211,8 +210,8 @@ public class ServiceCollectionExtensionsTests {
                 .AddSingleton<ISubscriptionFactory>(factory)
                 .AddSingleton(A.Fake<ICheckpointStore>())
                 .AddSingleton<SagaCommitDelegate>(_ => ValueTask.CompletedTask)
-                .AddSingleton(A.Fake<ISagaTimeoutStore>())
-                .AddSingleton(typeof(SagaTimeoutActivation<>))
+                .AddSingleton(A.Fake<IScheduledStore>())
+                .AddSingleton(typeof(SchedulerActivation<>))
                 .AddSingleton(firstRepository)
                 .AddSingleton(secondRepository);
             services.AddAggregates().AddSagas(o => o

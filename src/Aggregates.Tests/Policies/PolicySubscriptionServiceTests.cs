@@ -12,6 +12,8 @@ public class PolicySubscriptionServiceTests {
 
     readonly ICheckpointStore _store = A.Fake<ICheckpointStore>();
     readonly IPolicy<PolicyTestEvent> _handler = A.Fake<IPolicy<PolicyTestEvent>>();
+    readonly ICommandDispatcher _commandDispatcher = A.Fake<ICommandDispatcher>();
+    readonly FakeScheduledStore _scheduled = new() { Deserializer = (type, _) => type == "Test.Command@v1" ? new PolicyTestCommand() : null };
 
     static CancellationToken Token => TestContext.Current.CancellationToken;
 
@@ -22,18 +24,28 @@ public class PolicySubscriptionServiceTests {
     // The interface itself as TPolicy, so the policy can be faked behind the real handler chain.
     PolicySubscriptionService<IPolicy<PolicyTestEvent>, PolicyTestEvent> BuildService(FakeSubscriptionFactory factory) {
         var parkedMessageSink = A.Fake<IParkedMessageSink>();
+        var registration = new SubscriptionRegistration(SubscriptionId, typeof(IPolicy<PolicyTestEvent>), typeof(PolicyTestEvent), StartFromEnd: false);
         var services = new ServiceCollection()
             .AddLogging()
             .AddSingleton(_handler)
-            .AddSingleton(A.Fake<ICommandDispatcher>())
+            .AddSingleton(_commandDispatcher)
+            .AddSingleton<IScheduledStore>(_scheduled)
+            .AddSingleton(registration)
+            .AddSingleton(typeof(SchedulerActivation<>))
             .AddScoped(typeof(LoggingPolicyHandler<,>))
             .AddScoped(typeof(PolicyHandler<,>));
+        var provider = services.BuildServiceProvider();
+        var retryPolicy = new SubscriptionRetryPolicy(parkedMessageSink, new SubscriptionErrorHandlingOptions());
         return new(
             new SubscriptionLoop(factory, _store, parkedMessageSink, new SubscriptionCheckpointOptions(),
                 new SubscriptionResubscribeOptions(), TimeProvider.System, NullLogger<SubscriptionLoop>.Instance),
-            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            new SubscriptionRetryPolicy(parkedMessageSink, new SubscriptionErrorHandlingOptions()),
-            new SubscriptionRegistration(SubscriptionId, typeof(TestPolicy), typeof(PolicyTestEvent), StartFromEnd: false));
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            retryPolicy,
+            new Scheduler(_scheduled, _store, factory, new SubscriptionCheckpointOptions(),
+                new SubscriptionResubscribeOptions(), provider.GetRequiredService<IServiceScopeFactory>(), retryPolicy,
+                parkedMessageSink, TimeProvider.System, NullLoggerFactory.Instance),
+            provider.GetRequiredService<SchedulerActivation<IPolicy<PolicyTestEvent>>>(),
+            registration);
     }
 
     IEnumerable<ulong> StoredPositions() =>
@@ -67,5 +79,39 @@ public class PolicySubscriptionServiceTests {
         await service.StopAsync(Token);
 
         StoredPositions().Should().Equal(3UL);
+    }
+
+    [Fact]
+    public async Task StoresADeferredCommand_InTheRequestStreamOfItsEvent() {
+        A.CallTo(() => _handler.ReactAsync(A<PolicyTestEvent>._, A<CancellationToken>._))
+            .Returns(new ICommand[] { new PolicyTestCommand().DeferUntil(DateTimeOffset.UtcNow.AddDays(1)) }.ToAsyncEnumerable());
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new PolicyTestEvent(1)));
+        using var service = BuildService(factory);
+
+        await service.StartAsync(Token);
+        await factory.Drained.WaitAsync(Token);
+        await service.StopAsync(Token);
+
+        _scheduled.Entries.Should().ContainSingle(entry =>
+            entry.Source.StreamId == "scheduled-requests-sub-1-1@stream-1" && entry.EventType == ScheduledFormat.CommandRequestEventType);
+    }
+
+    [Fact]
+    public async Task ExecutesAnOpenDeferredCommand_ByDispatchingItsCommand() {
+        _scheduled.Append("scheduled-sub-1", ScheduledFormat.MarkerEventType, "activated"u8.ToArray());
+        _scheduled.AppendRequest("scheduled-requests-sub-1-0@stream-0", SubscriptionId, DateTimeOffset.UtcNow.AddDays(-1));
+        var dispatched = false;
+        A.CallTo(() => _commandDispatcher.DispatchAsync(A<ICommand>.That.IsInstanceOf(typeof(PolicyTestCommand)), A<CancellationToken>._))
+            .Invokes(_ => dispatched = true);
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, position => new OtherPolicyTestEvent((int)position)));
+        using var service = BuildService(factory);
+
+        await service.StartAsync(Token);
+        await factory.Drained.WaitAsync(Token);
+        await Eventually.UntilAsync(() => dispatched, "the deferred command is dispatched");
+        await service.StopAsync(Token);
+
+        A.CallTo(() => _commandDispatcher.DispatchAsync(A<ICommand>.That.IsInstanceOf(typeof(PolicyTestCommand)), A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
     }
 }

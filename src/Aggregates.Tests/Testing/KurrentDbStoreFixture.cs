@@ -1,5 +1,6 @@
 using Aggregates.KurrentDB;
 using Docker.DotNet.Models;
+using Grpc.Core;
 using Aggregates.Policies;
 using Aggregates.Policies.KurrentDB;
 using Aggregates.Projections;
@@ -18,6 +19,8 @@ namespace Aggregates.Testing;
 /// A fresh single-node KurrentDB container, in memory and without TLS.
 /// </summary>
 sealed class KurrentDbStoreFixture : IStoreFixture {
+    static readonly TimeSpan ReadyTimeout = TimeSpan.FromSeconds(60);
+    static readonly TimeSpan ReadyPollInterval = TimeSpan.FromMilliseconds(250);
     readonly KurrentDbContainer _container;
     readonly KurrentDBClient _client;
 
@@ -27,7 +30,7 @@ sealed class KurrentDbStoreFixture : IStoreFixture {
     }
 
     /// <summary>
-    /// Starts a new container and waits until it is healthy.
+    /// Starts a new container and waits until it is healthy and its node serves requests.
     /// </summary>
     public static async Task<KurrentDbStoreFixture> StartAsync() {
         var container = new KurrentDbContainerBuilder(TestImages.KurrentDb)
@@ -42,8 +45,35 @@ sealed class KurrentDbStoreFixture : IStoreFixture {
         await container.StartAsync(TestContext.Current.CancellationToken);
 
         var client = new KurrentDBClient(KurrentDBClientSettings.Create(container.GetConnectionString()));
+        await WaitUntilReadyAsync(container.GetConnectionString(), client, TestContext.Current.CancellationToken);
         return new KurrentDbStoreFixture(container, client);
     }
+
+    /// <summary>
+    /// Waits until the node serves a read and a persistent subscriptions request. The image's
+    /// health check only tells that the process is alive: until the node is leader, requests fail
+    /// with "Server Is Not Ready".
+    /// </summary>
+    static async Task WaitUntilReadyAsync(string connectionString, KurrentDBClient client, CancellationToken cancellationToken) {
+        await using var persistentSubscriptions = new KurrentDBPersistentSubscriptionsClient(KurrentDBClientSettings.Create(connectionString));
+        var deadline = DateTime.UtcNow + ReadyTimeout;
+        while (true) {
+            try {
+                await client.ReadAllAsync(Direction.Forwards, Position.Start, maxCount: 1, cancellationToken: cancellationToken)
+                    .ToArrayAsync(cancellationToken);
+                await persistentSubscriptions.ListAllAsync(cancellationToken: cancellationToken);
+                return;
+            } catch (Exception exception) when (IsNotReady(exception) && DateTime.UtcNow < deadline) {
+                await Task.Delay(ReadyPollInterval, cancellationToken);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="exception"/> means that the node doesn't serve requests yet.
+    /// </summary>
+    static bool IsNotReady(Exception exception) =>
+        exception is NotLeaderException or RpcException { StatusCode: StatusCode.Unavailable or StatusCode.DeadlineExceeded };
 
     /// <inheritdoc/>
     public Transport Transport => Transport.KurrentDB;

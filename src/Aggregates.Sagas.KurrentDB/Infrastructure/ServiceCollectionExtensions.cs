@@ -24,9 +24,9 @@ public static class ServiceCollectionExtensions {
     ///   <item>
     ///     A <see cref="SagaCommitDelegate"/> backed by <see cref="KurrentDbCommitHandler"/> that
     ///     serializes the saga's changes as <c>$&gt;</c> links to their source events and as
-    ///     timeout requests, so a saga stream never holds copies of the events it reacts to.
+    ///     deferred command requests, so a saga stream never holds copies of the events it reacts to.
     ///   </item>
-    ///   <item><see cref="KurrentDbSagaTimeoutStore"/> as <see cref="ISagaTimeoutStore"/>.</item>
+    ///   <item><see cref="KurrentDbScheduledStore"/> as <see cref="IScheduledStore"/>.</item>
     /// </list>
     /// </remarks>
     public static ISagasKurrentDbBuilder AddKurrentDb(this ISagasBuilder builder) {
@@ -40,7 +40,7 @@ public static class ServiceCollectionExtensions {
         builder.UseSagaRepository(typeof(KurrentDbSagaRepository<,>));
 
         // Saga commit delegate — reuses the same KurrentDbCommitHandler as regular aggregates, but
-        // serializes the saga's changes as links to their source events and as timeout requests,
+        // serializes the saga's changes as links to their source events and as deferred commands,
         // never as copies.
         builder.Services.TryAddSingleton<SagaCommitDelegate>(sp => {
             var handler = sp.GetRequiredService<KurrentDbCommitHandler>();
@@ -52,8 +52,8 @@ public static class ServiceCollectionExtensions {
         // by AddSagas, regardless of the order in which AddKurrentDb was called.
         builder.Services.Replace(ServiceDescriptor.Singleton<IParkedMessageSink, KurrentDbParkedMessageSink>());
 
-        // Timeout store — read by the timeout scheduler of every saga
-        builder.Services.TryAddSingleton<ISagaTimeoutStore, KurrentDbSagaTimeoutStore>();
+        // Scheduled store — read by the scheduler of every saga and policy
+        builder.Services.TryAddSingleton<IScheduledStore, KurrentDbScheduledStore>();
 
         return new SagasKurrentDbBuilder(builder.Services);
     }
@@ -63,18 +63,18 @@ public static class ServiceCollectionExtensions {
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// Thrown when the change is neither an <see cref="EventReference"/> nor a
-    /// <see cref="SagaTimeoutRequest"/>.
+    /// <see cref="DeferredCommandRequest"/>.
     /// </exception>
     static SerializedEvent SerializeChange(object change, KurrentDbOptions options) {
         switch (change) {
             case EventReference reference:
                 return new SerializedEvent(EventReference.LinkEventType, reference.ToLinkData());
-            case SagaTimeoutRequest request:
+            case DeferredCommandRequest request:
                 var command = options.Serialize!(request.Command);
-                return new SerializedEvent(SagaTimeoutFormat.RequestEventType,
-                    SagaTimeoutFormat.WriteRequest(request.Owner, request.Due, command.EventType, command.Data.Span));
+                return new SerializedEvent(ScheduledFormat.CommandRequestEventType,
+                    ScheduledFormat.WriteCommandRequest(request.Owner, request.Due, command.EventType, command.Data.Span));
             default:
-                throw new InvalidOperationException($"A saga's changes are links and timeout requests, but got a {change.GetType().Name}.");
+                throw new InvalidOperationException($"A saga's changes are links and deferred commands, but got a {change.GetType().Name}.");
         }
     }
 }

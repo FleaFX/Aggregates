@@ -27,6 +27,16 @@ public class ServiceCollectionExtensionsTests {
         }
 
         [Fact]
+        public void RegistersTheSchedulerAndActivation() {
+            var services = new ServiceCollection();
+
+            services.AddAggregates().AddPolicies(o => o.ScanTypes(typeof(TestPolicy)));
+
+            services.Should().ContainSingle(d => d.ServiceType == typeof(Scheduler));
+            services.Should().ContainSingle(d => d.ServiceType == typeof(SchedulerActivation<>));
+        }
+
+        [Fact]
         public void RegistersThePolicyAsItself_NotAsItsInterface() {
             var services = new ServiceCollection();
 
@@ -139,7 +149,8 @@ public class ServiceCollectionExtensionsTests {
                 .AddLogging()
                 .AddSingleton<HandlerProbe>()
                 .AddSingleton<ISubscriptionFactory>(factory)
-                .AddSingleton(A.Fake<ICheckpointStore>());
+                .AddSingleton(A.Fake<ICheckpointStore>())
+                .AddSingleton<IScheduledStore>(new FakeScheduledStore());
             services.AddAggregates().AddPolicies(o => o.ScanTypes(typeof(PlainContractPolicy), typeof(FullContractPolicy)));
             await using var provider = services.BuildServiceProvider();
             var probe = provider.GetRequiredService<HandlerProbe>();
