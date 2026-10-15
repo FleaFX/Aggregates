@@ -122,6 +122,16 @@ static class ScenarioHandlers {
     };
 
     /// <summary>
+    /// The probe handler of <paramref name="kind"/> whose contract blocks on a failing event instead
+    /// of parking it (<see cref="Aggregates.Subscriptions.SubscriptionErrorMode.Block"/>).
+    /// </summary>
+    public static Type Blocking(HandlerKind kind) => kind switch {
+        HandlerKind.Projection => typeof(BlockingProjection),
+        HandlerKind.Policy => typeof(BlockingPolicy),
+        _ => typeof(BlockingSaga)
+    };
+
+    /// <summary>
     /// Registers <paramref name="handlerTypes"/> as handlers of <paramref name="kind"/>. Each probe
     /// saga gets its own resolver, so two probe sagas never share a saga stream: <see cref="Probe"/>
     /// maps each order to the saga <c>saga-{OrderId}</c>, the others use their own prefix.
@@ -142,11 +152,12 @@ static class ScenarioHandlers {
         // A saga reacts once per linked event, so a replay into ProbeSaga's streams would not react
         // to events v1 already linked: the replay saga gets streams of its own.
         [typeof(ReplayProbeV2Saga)] = s => s.WithResolver<ReplayProbeV2Saga, IOrderEvent>(e => [new AggregateIdentifier($"replay-saga-{e.OrderId}")]),
-        [typeof(FromEndBumpSaga)] = s => s.WithResolver<FromEndBumpSaga, IOrderEvent>(e => [new AggregateIdentifier($"from-end-bump-saga-{e.OrderId}")])
+        [typeof(FromEndBumpSaga)] = s => s.WithResolver<FromEndBumpSaga, IOrderEvent>(e => [new AggregateIdentifier($"from-end-bump-saga-{e.OrderId}")]),
+        [typeof(BlockingSaga)] = s => s.WithResolver<BlockingSaga, IOrderEvent>(e => [new AggregateIdentifier($"blocking-saga-{e.OrderId}")])
     };
 
     static void Handle(HandlerProbe probe, object handler, IOrderEvent @event, EventMetadata? metadata = null) {
-        if (@event.OrderId.StartsWith(PoisonPrefix, StringComparison.Ordinal))
+        if (@event.OrderId.StartsWith(PoisonPrefix, StringComparison.Ordinal) && !probe.PoisonFixed)
             throw new InvalidOperationException($"{handler.GetType().Name} fails on {@event.OrderId} on purpose.");
         probe.Record(handler, @event, metadata);
     }
@@ -253,4 +264,13 @@ static class ScenarioHandlers {
 
     [SagaContract("Probe", version: 2, @namespace: "IntegrationTests.Sagas", continueFrom: Aggregates.Subscriptions.ContinueFrom.None)]
     sealed class ReplayProbeV2Saga(HandlerProbe probe) : SagaBase(probe);
+
+    [ProjectionContract("Blocking", @namespace: "IntegrationTests.Projections", onError: Aggregates.Subscriptions.SubscriptionErrorMode.Block)]
+    sealed class BlockingProjection(HandlerProbe probe) : ProjectionBase(probe);
+
+    [PolicyContract("Blocking", @namespace: "IntegrationTests.Policies", onError: Aggregates.Subscriptions.SubscriptionErrorMode.Block)]
+    sealed class BlockingPolicy(HandlerProbe probe) : PolicyBase(probe);
+
+    [SagaContract("Blocking", @namespace: "IntegrationTests.Sagas", onError: Aggregates.Subscriptions.SubscriptionErrorMode.Block)]
+    sealed class BlockingSaga(HandlerProbe probe) : SagaBase(probe);
 }

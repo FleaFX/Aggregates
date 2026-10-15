@@ -338,6 +338,38 @@ public class SubscriptionLoopTests {
             factory.FromPositions.Should().Equal(null, 1UL);
             _processed.Should().Equal(1UL, 2UL);
         }
+
+        [Fact]
+        public async Task GivenBlockAndDeserializationError_NeitherParksNorProcesses_AndSubscribesAgainBeforeTheMessage() {
+            var error = new InvalidOperationException("poison");
+            var factory = new ScriptedSubscriptionFactory()
+                .Then(Message(1), Undeserializable(2, error), Message(3))
+                .Then(Message(2), Message(3));
+
+            await RunUntilIdleAsync(factory, registration: Registration() with { ErrorMode = SubscriptionErrorMode.Block });
+
+            A.CallTo(() => _sink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._))
+                .MustNotHaveHappened();
+            _processed.Should().Equal(1UL, 2UL, 3UL);
+            factory.FromPositions.Should().Equal(null, 1UL);
+            var blocked = Logs(LogLevel.Error).Should().ContainSingle().Which;
+            blocked.Message.Should().Contain("blocks instead of parking");
+            blocked.Exception.Should().BeSameAs(error);
+        }
+
+        [Fact]
+        public async Task GivenBlockAndDeserializationErrorOnTheFirstMessage_SubscribesAgainFromTheCheckpoint() {
+            var error = new InvalidOperationException("poison");
+            A.CallTo(() => _store.GetAsync(SubscriptionId, A<CancellationToken>._)).Returns(10UL);
+            var factory = new ScriptedSubscriptionFactory()
+                .Then(Undeserializable(11, error))
+                .Then(Message(11));
+
+            await RunUntilIdleAsync(factory, registration: Registration() with { ErrorMode = SubscriptionErrorMode.Block });
+
+            factory.FromPositions.Should().Equal(10UL, 10UL);
+            _processed.Should().Equal(11UL);
+        }
     }
     public class StartPosition : SubscriptionLoopTests {
         [Fact]

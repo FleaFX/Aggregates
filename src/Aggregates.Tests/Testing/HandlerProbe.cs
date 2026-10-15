@@ -10,6 +10,17 @@ sealed class HandlerProbe {
     readonly ConcurrentQueue<(Type Handler, object Event, EventMetadata Metadata)> _calls = new();
     readonly ConcurrentDictionary<string, int> _deserialized = new();
 
+    bool _poisonFixed;
+
+    /// <summary>
+    /// Whether the cause of the poison events is fixed: once set, the scenario handlers stop
+    /// throwing for orders whose id starts with <see cref="ScenarioHandlers.PoisonPrefix"/>.
+    /// </summary>
+    public bool PoisonFixed {
+        get => Volatile.Read(ref _poisonFixed);
+        set => Volatile.Write(ref _poisonFixed, value);
+    }
+
     /// <summary>
     /// Records that <paramref name="handler"/> handled <paramref name="event"/>.
     /// </summary>

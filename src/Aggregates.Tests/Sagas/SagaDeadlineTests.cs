@@ -300,6 +300,36 @@ public class SagaDeadlineTests(ITestOutputHelper output) {
     }
 
     [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task ParkedDeadline_IsReplayedToItsSaga_OnceItDeserializes(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        var time = new FakeTimeProvider(Now);
+        {
+            await using var first = await StartHostAsync(store, output, time);
+            await first.SendAsync(new PlanBill("bill-1", Now.AddDays(2)));
+            await WaitForDeadlineRequestsAsync(store, "bill-1", 1);
+        }
+
+        await using (var second = await StartHostAsync(store, output, time, typeof(BillDue))) {
+            await WaitForCaughtUpAsync(store);
+            time.Advance(TimeSpan.FromDays(3));
+            await Eventually.UntilAsync(async ValueTask<bool> () =>
+                (await store.ReadAllAsync()).Count(e => e.Stream == $"parked-{ScheduledFormat.SchedulerStream(Saga)}") == 1,
+                "the broken deadline is parked");
+        }
+
+        await using var third = await StartHostAsync(store, output, time);
+        await WaitForCaughtUpAsync(store);
+        var parked = third.Services.GetRequiredService<IParkedMessages>();
+
+        var replay = await parked.ReplayAsync($"scheduled-{Saga}", 0, TestContext.Current.CancellationToken);
+
+        replay.Succeeded.Should().BeTrue();
+        await Eventually.UntilAsync(async ValueTask<bool> () => (await RemindersAsync(store, third, "bill-1")).Count == 2,
+            "the saga reacts to the replayed deadline and to its overdue follow-up");
+        (await RemindersAsync(store, third, "bill-1")).Should().Equal("overdue-1", "overdue-2");
+    }
+
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
     public async Task DeadlineReaction_CarriesTheMetadataOfTheRequest(Transport transport) {
         await using var store = await Stores.StartAsync(transport);
         var time = new FakeTimeProvider(Now);

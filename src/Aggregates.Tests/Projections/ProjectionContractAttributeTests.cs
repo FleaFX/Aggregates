@@ -161,4 +161,20 @@ public class ProjectionContractAttributeTests {
             attr.StartFromEnd.Should().BeTrue();
         }
     }
+
+    public class OnError {
+        [Fact]
+        public void DefaultsToPark() {
+            var attr = new ProjectionContractAttribute("Orders");
+
+            attr.OnError.Should().Be(Aggregates.Subscriptions.SubscriptionErrorMode.Park);
+        }
+
+        [Fact]
+        public void WhenSetToBlock_ReturnsBlock() {
+            var attr = new ProjectionContractAttribute("Orders", onError: Aggregates.Subscriptions.SubscriptionErrorMode.Block);
+
+            attr.OnError.Should().Be(Aggregates.Subscriptions.SubscriptionErrorMode.Block);
+        }
+    }
 }

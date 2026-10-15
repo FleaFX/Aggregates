@@ -1,3 +1,5 @@
+using Aggregates.Subscriptions;
+
 namespace Aggregates.Projections;
 
 /// <summary>
@@ -18,13 +20,19 @@ namespace Aggregates.Projections;
 /// When <see langword="true"/>, the projection starts processing from the end of the stream
 /// rather than the beginning.
 /// </param>
+/// <param name="onError">
+/// What the subscription does with an event the projection still fails on after all retries:
+/// <see cref="SubscriptionErrorMode.Park"/> (the default) parks it and continues;
+/// <see cref="SubscriptionErrorMode.Block"/> retries it until it succeeds.
+/// </param>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
 public sealed class ProjectionContractAttribute(
     string name,
     int version = 1,
     string? @namespace = null,
     string? continueFrom = null,
-    bool startFromEnd = false) : Attribute {
+    bool startFromEnd = false,
+    SubscriptionErrorMode onError = SubscriptionErrorMode.Park) : Attribute {
 
     readonly string[] _predecessors = continueFrom switch {
         "" => [],
@@ -51,6 +59,11 @@ public sealed class ProjectionContractAttribute(
     /// Indicates whether the projection should start from the end of the stream on first run.
     /// </summary>
     public bool StartFromEnd => startFromEnd;
+
+    /// <summary>
+    /// What the subscription does with an event the projection still fails on after all retries.
+    /// </summary>
+    public SubscriptionErrorMode OnError => onError;
 
     /// <inheritdoc/>
     public override string ToString() =>

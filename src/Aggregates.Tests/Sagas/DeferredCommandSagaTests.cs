@@ -261,6 +261,44 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
     }
 
     [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task ParkedDeferredCommands_AreReplayed_OnceTheyDeserialize(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        var time = new FakeTimeProvider(Now);
+        {
+            await using var first = await StartHostAsync(store, output, time);
+            await first.SendAsync(new PlanBill("bill-1", Now.AddDays(2)));
+            await WaitForRequestsAsync(store, 2);
+        }
+
+        await using (var second = await TestHost.StartAsync(store, output, o => o
+            .Events(StoredTypes)
+            .Commands(typeof(PlanBill), typeof(PayBill), typeof(RemindBill), typeof(FailBill))
+            .FailDeserializing(typeof(RemindBill))
+            .Sagas(s => s
+                .ScanTypes(typeof(BillReminderSaga))
+                .WithResolver<IBillEvent>(e => [new AggregateIdentifier($"bill-reminders-{e.BillId}")]))
+            .Services(s => s.AddSingleton<TimeProvider>(time)))) {
+            await WaitForCaughtUpAsync(store);
+            time.Advance(TimeSpan.FromDays(3));
+            await Eventually.UntilAsync(
+                async ValueTask<bool> () => (await store.ReadAllAsync()).Count(e => e.Stream == "parked-scheduled-IntegrationTests.BillReminders@v1") == 2,
+                "both broken deferred commands are parked");
+        }
+
+        await using var third = await StartHostAsync(store, output, time);
+        await WaitForCaughtUpAsync(store);
+        var parked = third.Services.GetRequiredService<IParkedMessages>();
+
+        var replays = await parked.ReplayAllAsync("scheduled-IntegrationTests.BillReminders@v1", TestContext.Current.CancellationToken);
+
+        replays.Should().HaveCount(2);
+        replays.Should().OnlyContain(replay => replay.Succeeded);
+        await Eventually.UntilAsync(async ValueTask<bool> () => (await RemindersAsync(store, third)).Count == 2,
+            "the replayed reminders are sent");
+        (await RemindersAsync(store, third)).Should().Equal("before", "due");
+    }
+
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
     public async Task UndeserializableCommand_RunsWhenFixedBeforeItIsDue(Transport transport) {
         await using var store = await Stores.StartAsync(transport);
         var time = new FakeTimeProvider(Now);

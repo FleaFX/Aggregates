@@ -37,7 +37,10 @@ namespace Aggregates.Subscriptions;
 ///   after a delay as configured by <see cref="SubscriptionResubscribeOptions"/>. Any other
 ///   failure is logged and rethrown.</item>
 ///   <item>A message whose <see cref="SubscriptionMessage.DeserializationError"/> is set is parked
-///   right away, without retries, and not handed to the processing delegate.</item>
+///   right away, without retries, and not handed to the processing delegate. When the registration
+///   blocks instead (<see cref="SubscriptionErrorMode.Block"/>), the loop stops before the message
+///   and subscribes again after the resubscribe delay, so the store delivers and deserializes it
+///   once more; it continues once the message deserializes, typically after a fix is deployed.</item>
 ///   <item>When the loop ends, the last processed position is written once more. A failure to
 ///   write it is logged and never replaces the exception that ended the loop.</item>
 /// </list>
@@ -93,12 +96,19 @@ public sealed partial class SubscriptionLoop(
 
                     await using var subscription = subscriptionFactory.Subscribe(
                         new SubscriptionRequest(from, registration.StartFromEnd, eventTypes, checkpointOptions.MaxFilteredEvents), stoppingToken);
+                    SubscriptionMessage? blocked = null;
                     await foreach (var message in subscription.WithCancellation(stoppingToken)) {
                         if (message.IsProgress) {
                             // Progress at or before the known position (KurrentDB reports 0 when it starts) is no progress.
                             if (message.CommitPosition > (tracker.LastPosition ?? from ?? 0))
                                 await tracker.RecordProgressAsync(message.CommitPosition, stoppingToken);
                         } else {
+                            if (message.DeserializationError is not null && registration.ErrorMode == SubscriptionErrorMode.Block) {
+                                // Not parked and not processed: the next subscription delivers it again.
+                                blocked = message;
+                                break;
+                            }
+
                             if (message.DeserializationError is { } error) {
                                 LogParkingUndeserializable(logger, error, subscriptionId, message.CommitPosition);
                                 await parkedMessageSink.ParkAsync(subscriptionId, message, error, stoppingToken);
@@ -116,7 +126,10 @@ public sealed partial class SubscriptionLoop(
                     }
 
                     delay = NextDelay(++failures);
-                    LogSubscriptionEnded(logger, subscriptionId, tracker.LastPosition ?? from, failures, delay);
+                    if (blocked is { } undeserializable)
+                        LogBlockedUndeserializable(logger, undeserializable.DeserializationError!, subscriptionId, undeserializable.CommitPosition, failures, delay);
+                    else
+                        LogSubscriptionEnded(logger, subscriptionId, tracker.LastPosition ?? from, failures, delay);
                 } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                     return;
                 } catch (Exception exception) when (subscriptionFactory.IsTransient(exception)) {
@@ -224,6 +237,9 @@ public sealed partial class SubscriptionLoop(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Subscription '{SubscriptionId}' could not deserialize the message at position {Position}; parking it")]
     static partial void LogParkingUndeserializable(ILogger logger, Exception exception, string subscriptionId, ulong position);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Subscription '{SubscriptionId}' could not deserialize the message at position {Position} and blocks instead of parking it; subscribing again in {Delay} (attempt {Attempt})")]
+    static partial void LogBlockedUndeserializable(ILogger logger, Exception exception, string subscriptionId, ulong position, int attempt, TimeSpan delay);
 
     [LoggerMessage(Level = LogLevel.Critical, Message = "Subscription '{SubscriptionId}' stopped at position {Position} after a failure that is not transient")]
     static partial void LogSubscriptionFailed(ILogger logger, Exception exception, string subscriptionId, ulong? position);

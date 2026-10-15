@@ -25,5 +25,8 @@ public class ParkedMessageSinkTests(ITestOutputHelper output) {
         payload.RootElement.GetProperty("CommitPosition").GetUInt64().Should().Be(42);
         payload.RootElement.GetProperty("ExceptionType").GetString().Should().Be(typeof(InvalidOperationException).FullName);
         payload.RootElement.GetProperty("Message").GetString().Should().Be("boom");
+        payload.RootElement.GetProperty("Stream").GetString().Should().Be("order-1");
+        payload.RootElement.GetProperty("Revision").GetUInt64().Should().Be(0);
+        payload.RootElement.GetProperty("EventType").GetString().Should().Be(typeof(OrderPlaced).FullName);
     }
 }

@@ -306,6 +306,33 @@ public class ServiceCollectionExtensionsTests {
             provider.GetRequiredService<SubscriptionResubscribeOptions>().MaxDelay.Should().Be(TimeSpan.FromSeconds(30));
         }
 
+        [Fact]
+        public void ErrorMode_IsTheOnErrorOfTheContract() {
+            var services = new ServiceCollection();
+
+            services.AddAggregates().AddSagas(o => o
+                .ScanTypes(typeof(BlockingSaga), typeof(PlainContractSaga))
+                .WithResolver<TestEvent>(_ => []));
+
+            Registrations(services).Should().ContainSingle(r => r.SubscriptionId == "Outbox@v1")
+                .Which.ErrorMode.Should().Be(SubscriptionErrorMode.Block);
+            Registrations(services).Should().ContainSingle(r => r.SubscriptionId == "Fulfillment@v1")
+                .Which.ErrorMode.Should().Be(SubscriptionErrorMode.Park);
+        }
+
+        [Fact]
+        public void RegistersEachHandlerAsAReplayableSubscription() {
+            var services = new ServiceCollection();
+
+            services.AddAggregates().AddSagas(o => o
+                .ScanTypes(typeof(BlockingSaga), typeof(PlainContractSaga))
+                .WithResolver<TestEvent>(_ => []));
+
+            services.Count(d => d.ServiceType == typeof(IReplayableSubscription)).Should().Be(2);
+            services.Count(d => d.ServiceType == typeof(IHostedService)).Should().Be(2);
+            services.Should().ContainSingle(d => d.ServiceType == typeof(IParkedMessages));
+        }
+
         internal sealed record FirstState : IState<FirstState, TestEvent> {
             public static FirstState Initial => new();
             public FirstState Apply(TestEvent @event) => this;
@@ -344,6 +371,12 @@ public class ServiceCollectionExtensionsTests {
 
         [SagaContract("Fulfillment", version: 2, @namespace: "Orders", startFromEnd: true)]
         sealed class FullContractSaga : ISaga<TestSagaState, TestEvent> {
+            public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
+                AsyncEnumerable.Empty<ICommand>();
+        }
+
+        [SagaContract("Outbox", onError: SubscriptionErrorMode.Block)]
+        sealed class BlockingSaga : ISaga<TestSagaState, TestEvent> {
             public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
                 AsyncEnumerable.Empty<ICommand>();
         }

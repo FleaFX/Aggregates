@@ -53,6 +53,9 @@ public static class ServiceCollectionExtensions {
         // by AddSagas, regardless of the order in which AddMssp was called.
         builder.Services.Replace(ServiceDescriptor.Singleton<IParkedMessageSink, MsspParkedMessageSink>());
 
+        // Parked-message store — lists, replays and dismisses parked messages; shared with the other kinds
+        builder.Services.TryAddSingleton<IParkedMessageStore, MsspParkedMessageStore>();
+
         // Scheduled store — read by the scheduler of every saga and policy
         builder.Services.TryAddSingleton<IScheduledStore, MsspScheduledStore>();
 

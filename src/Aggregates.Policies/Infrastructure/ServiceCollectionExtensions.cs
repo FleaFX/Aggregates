@@ -46,6 +46,9 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton(new SubscriptionErrorHandlingOptions());
         builder.Services.TryAddSingleton<SubscriptionRetryPolicy>();
 
+        // Parked messages — listed, replayed and dismissed through the subscriptions of this host
+        builder.Services.TryAddSingleton<IParkedMessages, ParkedMessages>();
+
         // Subscription checkpointing — positions are written in batches
         builder.Services.TryAddSingleton(new SubscriptionCheckpointOptions());
         builder.Services.TryAddSingleton(TimeProvider.System);
@@ -68,16 +71,20 @@ public static class ServiceCollectionExtensions {
                 policyType,
                 eventType,
                 contract?.StartFromEnd ?? false,
-                contract?.Predecessors);
+                contract?.Predecessors) {
+                ErrorMode = contract?.OnError ?? SubscriptionErrorMode.Park
+            };
 
             if (!SubscriptionRegistrations.Add(builder.Services, registration))
                 continue;
 
             builder.Services.TryAddScoped(policyType);
 
-            // Subscription hosted service — one per policy class
+            // Subscription hosted service — one per policy class, which also replays its parked messages
             var serviceType = typeof(PolicySubscriptionService<,>).MakeGenericType(policyType, eventType);
-            builder.Services.AddSingleton(typeof(IHostedService), sp => ActivatorUtilities.CreateInstance(sp, serviceType, registration));
+            builder.Services.AddKeyedSingleton(serviceType, registration.SubscriptionId, (sp, _) => ActivatorUtilities.CreateInstance(sp, serviceType, registration));
+            builder.Services.AddSingleton(typeof(IHostedService), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
+            builder.Services.AddSingleton(typeof(IReplayableSubscription), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
 
             registeredPolicies.Add((eventType, policyType));
         }
