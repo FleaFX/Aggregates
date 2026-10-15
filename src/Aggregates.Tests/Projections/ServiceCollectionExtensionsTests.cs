@@ -189,6 +189,52 @@ public class ServiceCollectionExtensionsTests {
             provider.GetRequiredService<SubscriptionResubscribeOptions>().MaxDelay.Should().Be(TimeSpan.FromSeconds(30));
         }
 
+        [Fact]
+        public void ErrorMode_IsTheOnErrorOfTheContract() {
+            var services = new ServiceCollection();
+
+            services.AddProjections(o => o.ScanTypes(typeof(BlockingProjection)));
+            services.AddProjections(o => o.ScanTypes(typeof(PlainContractProjection)));
+
+            Registrations(services).Should().ContainSingle(r => r.SubscriptionId == "Outbox@v1")
+                .Which.ErrorMode.Should().Be(SubscriptionErrorMode.Block);
+            Registrations(services).Should().ContainSingle(r => r.SubscriptionId == "Orders@v1")
+                .Which.ErrorMode.Should().Be(SubscriptionErrorMode.Park);
+        }
+
+        [Fact]
+        public void RegistersEachHandlerAsAReplayableSubscription() {
+            var services = new ServiceCollection();
+
+            services.AddProjections(o => o.ScanTypes(typeof(BlockingProjection), typeof(PlainContractProjection)));
+
+            services.Count(d => d.ServiceType == typeof(IReplayableSubscription)).Should().Be(2);
+            services.Count(d => d.ServiceType == typeof(IHostedService)).Should().Be(2);
+            services.Should().ContainSingle(d => d.ServiceType == typeof(IParkedMessages));
+        }
+
+        [Fact]
+        public async Task TheHostedServiceIsTheReplayableSubscription() {
+            var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new ProjectionTestEvent(1)));
+            var services = new ServiceCollection()
+                .AddLogging()
+                .AddSingleton<HandlerProbe>()
+                .AddSingleton<ISubscriptionFactory>(factory)
+                .AddSingleton(A.Fake<ICheckpointStore>());
+            services.AddProjections(o => o.ScanTypes(typeof(PlainContractProjection), typeof(FullContractProjection)));
+            await using var provider = services.BuildServiceProvider();
+
+            var replayable = provider.GetServices<IReplayableSubscription>().ToArray();
+            var hostedServices = provider.GetServices<IHostedService>().ToArray();
+
+            replayable.Should().HaveCount(2);
+            hostedServices.Should().HaveCount(2);
+            replayable.Should().OnlyContain(subscription =>
+                hostedServices.Any(service => ReferenceEquals(service, subscription)));
+            replayable.Select(subscription => subscription.Registration.SubscriptionId)
+                .Should().BeEquivalentTo(["Orders@v1", "Fulfillment.Orders@v2"]);
+        }
+
         abstract class ProbeProjection<TEvent>(HandlerProbe probe) : IProjection<TEvent> {
             public ValueTask<ICommit> ProjectAsync(TEvent @event, EventMetadata metadata, CancellationToken cancellationToken = default) {
                 probe.Record(this, @event!, metadata);
@@ -204,6 +250,9 @@ public class ServiceCollectionExtensionsTests {
 
         [ProjectionContract("Orders", version: 2, @namespace: "Fulfillment", startFromEnd: true)]
         sealed class FullContractProjection(HandlerProbe probe) : ProbeProjection<ProjectionTestEvent>(probe);
+
+        [ProjectionContract("Outbox", onError: SubscriptionErrorMode.Block)]
+        sealed class BlockingProjection(HandlerProbe probe) : ProbeProjection<ProjectionTestEvent>(probe);
 
         sealed class NestedProjection(HandlerProbe probe) : ProbeProjection<ProjectionTestEvent>(probe);
 

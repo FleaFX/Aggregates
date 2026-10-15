@@ -205,6 +205,31 @@ public class ServiceCollectionExtensionsTests {
             provider.GetRequiredService<SubscriptionResubscribeOptions>().MaxDelay.Should().Be(TimeSpan.FromSeconds(30));
         }
 
+        [Fact]
+        public void ErrorMode_IsTheOnErrorOfTheContract() {
+            var services = new ServiceCollection();
+            var builder = services.AddAggregates();
+
+            builder.AddPolicies(o => o.ScanTypes(typeof(BlockingPolicy)));
+            builder.AddPolicies(o => o.ScanTypes(typeof(PlainContractPolicy)));
+
+            Registrations(services).Should().ContainSingle(r => r.SubscriptionId == "Outbox@v1")
+                .Which.ErrorMode.Should().Be(SubscriptionErrorMode.Block);
+            Registrations(services).Should().ContainSingle(r => r.SubscriptionId == "Shipping@v1")
+                .Which.ErrorMode.Should().Be(SubscriptionErrorMode.Park);
+        }
+
+        [Fact]
+        public void RegistersEachHandlerAsAReplayableSubscription() {
+            var services = new ServiceCollection();
+
+            services.AddAggregates().AddPolicies(o => o.ScanTypes(typeof(BlockingPolicy), typeof(PlainContractPolicy)));
+
+            services.Count(d => d.ServiceType == typeof(IReplayableSubscription)).Should().Be(2);
+            services.Count(d => d.ServiceType == typeof(IHostedService)).Should().Be(2);
+            services.Should().ContainSingle(d => d.ServiceType == typeof(IParkedMessages));
+        }
+
         abstract class ProbePolicy<TEvent>(HandlerProbe probe) : IPolicy<TEvent> {
             public async IAsyncEnumerable<ICommand> ReactAsync(TEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
                 probe.Record(this, @event!);
@@ -220,6 +245,9 @@ public class ServiceCollectionExtensionsTests {
 
         [PolicyContract("Shipping", version: 2, @namespace: "Fulfillment", startFromEnd: true)]
         sealed class FullContractPolicy(HandlerProbe probe) : ProbePolicy<PolicyTestEvent>(probe);
+
+        [PolicyContract("Outbox", onError: SubscriptionErrorMode.Block)]
+        sealed class BlockingPolicy(HandlerProbe probe) : ProbePolicy<PolicyTestEvent>(probe);
 
         [PolicyContract("Double")]
         sealed class DoublePolicy(HandlerProbe probe) : ProbePolicy<PolicyTestEvent>(probe), IPolicy<OtherPolicyTestEvent> {

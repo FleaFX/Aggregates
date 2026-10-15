@@ -35,8 +35,8 @@ public class SagaSubscriptionServiceTests {
     static CancellationToken Token => TestContext.Current.CancellationToken;
 
     // The interface itself as TSaga, so the saga can be faked behind the real handler chain.
-    SagaSubscriptionService<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent> BuildService(FakeSubscriptionFactory factory) {
-        var registration = new SubscriptionRegistration(SubscriptionId, typeof(TestSaga), typeof(TestEvent), StartFromEnd: false);
+    SagaSubscriptionService<ISaga<TestSagaState, TestEvent>, TestSagaState, TestEvent> BuildService(FakeSubscriptionFactory factory, SubscriptionErrorMode errorMode = SubscriptionErrorMode.Park) {
+        var registration = new SubscriptionRegistration(SubscriptionId, typeof(TestSaga), typeof(TestEvent), StartFromEnd: false) { ErrorMode = errorMode };
         var services = new ServiceCollection()
             .AddLogging()
             .AddSingleton<ISaga<TestSagaState, TestEvent>>(_saga)
@@ -217,5 +217,72 @@ public class SagaSubscriptionServiceTests {
 
         A.CallTo(() => _parkedMessageSink.ParkAsync(ScheduledFormat.SchedulerStream(SubscriptionId), A<SubscriptionMessage>._, failure, A<CancellationToken>._))
             .MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    public async Task HandleAsync_HandlesTheEventForEverySagaItResolvesTo() {
+        var secondSagaId = new AggregateIdentifier("saga-2");
+        A.CallTo(() => _resolver.Resolve(A<TestEvent>._, A<EventMetadata>._)).Returns([SagaId, secondSagaId]);
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new TestEvent(1)));
+        using var service = BuildService(factory);
+
+        await service.HandleAsync(new SubscriptionMessage(new TestEvent(1), 42, new EventReference("stream-1", 1), EventMetadata.Empty), Token);
+
+        HandledFor(SagaId).MustHaveHappenedOnceExactly();
+        HandledFor(secondSagaId).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, new TestEvent(1), A<CancellationToken>._)).MustHaveHappened(2, Times.Exactly);
+    }
+
+    [Fact]
+    public async Task HandleAsync_DoesNotRetryOrPark_WhenASagaFails() {
+        _errorOptions = new SubscriptionErrorHandlingOptions { MaxRetries = 3, InitialDelay = TimeSpan.Zero, MaxDelay = TimeSpan.Zero };
+        var failure = new InvalidOperationException("saga failed");
+        A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._)).Throws(failure);
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new TestEvent(1)));
+        using var service = BuildService(factory);
+
+        var act = () => service.HandleAsync(new SubscriptionMessage(new TestEvent(1), 42, new EventReference("stream-1", 1), EventMetadata.Empty), Token).AsTask();
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(failure);
+        A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _parkedMessageSink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._)).MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task HandleDeadlineAsync_DeliversTheDeadlineToTheSagaOfItsStream() {
+        var due = DateTimeOffset.UtcNow.AddDays(-1);
+        var command = new TestCommand();
+        TestSagaState? capturedState = null;
+        A.CallTo(() => _repository.TryGetAsync(new AggregateIdentifier("saga-7"), A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(new SagaRoot<TestSagaState, TestEvent>(new TestSagaState(4), new AggregateVersion(1))));
+        A.CallTo(() => _saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
+            .Invokes(call => capturedState = call.GetArgument<TestSagaState>(0))
+            .Returns(new ICommand[] { command }.ToAsyncEnumerable());
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, position => new OtherTestEvent((int)position)));
+        using var service = BuildService(factory);
+
+        await service.HandleDeadlineAsync(new ScheduledDeadline(new EventReference("saga-7", 2), due, new TestDeadline(1), EventMetadata.Empty, 5), Token);
+
+        HandledFor(new AggregateIdentifier("saga-7")).MustHaveHappenedOnceExactly();
+        capturedState.Should().Be(new TestSagaState(4));
+        A.CallTo(() => _saga.ReactToDeadlineAsync(A<TestSagaState>._, new TestDeadline(1), A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _commandDispatcher.DispatchAsync(command, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    public async Task GivenBlock_RetriesAFailingSaga_InsteadOfParkingIt() {
+        _errorOptions = new SubscriptionErrorHandlingOptions { MaxRetries = 1, InitialDelay = TimeSpan.Zero, MaxDelay = TimeSpan.Zero };
+        var failure = new InvalidOperationException("saga failed");
+        A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._)).Throws(failure).NumberOfTimes(3);
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new TestEvent(1)));
+        using var service = BuildService(factory, SubscriptionErrorMode.Block);
+
+        await service.StartAsync(Token);
+        await Eventually.UntilAsync(() => Fake.GetCalls(_saga).Count(call => call.Method.Name == nameof(ISaga<TestSagaState, TestEvent>.ReactAsync)) == 4,
+            "the saga is retried until it succeeds");
+        await service.StopAsync(Token);
+
+        Fake.GetCalls(_saga).Count(call => call.Method.Name == nameof(ISaga<TestSagaState, TestEvent>.ReactAsync)).Should().Be(4);
+        A.CallTo(() => _parkedMessageSink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._)).MustNotHaveHappened();
     }
 }

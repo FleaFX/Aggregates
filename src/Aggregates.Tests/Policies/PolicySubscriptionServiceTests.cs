@@ -14,6 +14,7 @@ public class PolicySubscriptionServiceTests {
     readonly IPolicy<PolicyTestEvent> _handler = A.Fake<IPolicy<PolicyTestEvent>>();
     readonly ICommandDispatcher _commandDispatcher = A.Fake<ICommandDispatcher>();
     readonly FakeScheduledStore _scheduled = new() { Deserializer = (type, _) => type == "Test.Command@v1" ? new PolicyTestCommand() : null };
+    readonly IParkedMessageSink _parkedMessageSink = A.Fake<IParkedMessageSink>();
 
     static CancellationToken Token => TestContext.Current.CancellationToken;
 
@@ -23,7 +24,6 @@ public class PolicySubscriptionServiceTests {
 
     // The interface itself as TPolicy, so the policy can be faked behind the real handler chain.
     PolicySubscriptionService<IPolicy<PolicyTestEvent>, PolicyTestEvent> BuildService(FakeSubscriptionFactory factory) {
-        var parkedMessageSink = A.Fake<IParkedMessageSink>();
         var registration = new SubscriptionRegistration(SubscriptionId, typeof(IPolicy<PolicyTestEvent>), typeof(PolicyTestEvent), StartFromEnd: false);
         var services = new ServiceCollection()
             .AddLogging()
@@ -35,15 +35,15 @@ public class PolicySubscriptionServiceTests {
             .AddScoped(typeof(LoggingPolicyHandler<,>))
             .AddScoped(typeof(PolicyHandler<,>));
         var provider = services.BuildServiceProvider();
-        var retryPolicy = new SubscriptionRetryPolicy(parkedMessageSink, new SubscriptionErrorHandlingOptions());
+        var retryPolicy = new SubscriptionRetryPolicy(_parkedMessageSink, new SubscriptionErrorHandlingOptions());
         return new(
-            new SubscriptionLoop(factory, _store, parkedMessageSink, new SubscriptionCheckpointOptions(),
+            new SubscriptionLoop(factory, _store, _parkedMessageSink, new SubscriptionCheckpointOptions(),
                 new SubscriptionResubscribeOptions(), TimeProvider.System, NullLogger<SubscriptionLoop>.Instance),
             provider.GetRequiredService<IServiceScopeFactory>(),
             retryPolicy,
             new Scheduler(_scheduled, _store, factory, new SubscriptionCheckpointOptions(),
                 new SubscriptionResubscribeOptions(), provider.GetRequiredService<IServiceScopeFactory>(), retryPolicy,
-                parkedMessageSink, TimeProvider.System, NullLoggerFactory.Instance),
+                _parkedMessageSink, TimeProvider.System, NullLoggerFactory.Instance),
             provider.GetRequiredService<SchedulerActivation<IPolicy<PolicyTestEvent>>>(),
             registration);
     }
@@ -113,5 +113,38 @@ public class PolicySubscriptionServiceTests {
 
         A.CallTo(() => _commandDispatcher.DispatchAsync(A<ICommand>.That.IsInstanceOf(typeof(PolicyTestCommand)), A<CancellationToken>._))
             .MustHaveHappenedOnceExactly();
+    }
+
+    [Fact]
+    public async Task HandleAsync_LetsThePolicyReactOnce_WithTheMetadataOfTheMessage() {
+        var command = new PolicyTestCommand();
+        A.CallTo(() => _handler.ReactAsync(new PolicyTestEvent(1), A<CancellationToken>._))
+            .Returns(new ICommand[] { command }.ToAsyncEnumerable());
+        string? correlation = null;
+        A.CallTo(() => _commandDispatcher.DispatchAsync(command, A<CancellationToken>._))
+            .Invokes(_ => correlation = (string?)MetadataScope.Current?.Snapshot()["correlation"]);
+        var metadata = new EventMetadata(new Dictionary<string, object?> { ["correlation"] = "c-1" });
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new PolicyTestEvent(1)));
+        using var service = BuildService(factory);
+
+        await service.HandleAsync(new SubscriptionMessage(new PolicyTestEvent(1), 42, new EventReference("stream-1", 1), metadata), Token);
+
+        A.CallTo(() => _handler.ReactAsync(new PolicyTestEvent(1), A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _commandDispatcher.DispatchAsync(command, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        correlation.Should().Be("c-1");
+    }
+
+    [Fact]
+    public async Task HandleAsync_DoesNotRetryOrPark_WhenThePolicyFails() {
+        var failure = new InvalidOperationException("policy failed");
+        A.CallTo(() => _handler.ReactAsync(A<PolicyTestEvent>._, A<CancellationToken>._)).Throws(failure);
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new PolicyTestEvent(1)));
+        using var service = BuildService(factory);
+
+        var act = () => service.HandleAsync(new SubscriptionMessage(new PolicyTestEvent(1), 42, new EventReference("stream-1", 1), EventMetadata.Empty), Token).AsTask();
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(failure);
+        A.CallTo(() => _handler.ReactAsync(A<PolicyTestEvent>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _parkedMessageSink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._)).MustNotHaveHappened();
     }
 }
