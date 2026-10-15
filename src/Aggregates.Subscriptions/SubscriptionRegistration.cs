@@ -23,4 +23,10 @@ public sealed record SubscriptionRegistration(
     Type HandlerType,
     Type EventType,
     bool StartFromEnd,
-    IReadOnlyList<string>? Predecessors = null);
+    IReadOnlyList<string>? Predecessors = null) {
+    /// <summary>
+    /// What the subscription does with a message that still fails after all retries:
+    /// <see cref="SubscriptionErrorMode.Park"/> (the default) or <see cref="SubscriptionErrorMode.Block"/>.
+    /// </summary>
+    public SubscriptionErrorMode ErrorMode { get; init; }
+}

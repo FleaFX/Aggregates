@@ -43,6 +43,9 @@ public static class ServiceCollectionExtensions {
         services.TryAddSingleton(new SubscriptionErrorHandlingOptions());
         services.TryAddSingleton<SubscriptionRetryPolicy>();
 
+        // Parked messages — listed, replayed and dismissed through the subscriptions of this host
+        services.TryAddSingleton<IParkedMessages, ParkedMessages>();
+
         // Subscription checkpointing — positions are written in batches
         services.TryAddSingleton(new SubscriptionCheckpointOptions());
         services.TryAddSingleton(TimeProvider.System);
@@ -61,16 +64,20 @@ public static class ServiceCollectionExtensions {
                 projectionType,
                 eventType,
                 contract?.StartFromEnd ?? false,
-                contract?.Predecessors);
+                contract?.Predecessors) {
+                ErrorMode = contract?.OnError ?? SubscriptionErrorMode.Park
+            };
 
             if (!SubscriptionRegistrations.Add(services, registration))
                 continue;
 
             services.TryAddScoped(projectionType);
 
-            // Subscription hosted service — one per projection class
+            // Subscription hosted service — one per projection class, which also replays its parked messages
             var serviceType = typeof(ProjectionSubscriptionService<,>).MakeGenericType(projectionType, eventType);
-            services.AddSingleton(typeof(IHostedService), sp => ActivatorUtilities.CreateInstance(sp, serviceType, registration));
+            services.AddKeyedSingleton(serviceType, registration.SubscriptionId, (sp, _) => ActivatorUtilities.CreateInstance(sp, serviceType, registration));
+            services.AddSingleton(typeof(IHostedService), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
+            services.AddSingleton(typeof(IReplayableSubscription), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
 
             registeredProjections.Add((eventType, projectionType));
         }

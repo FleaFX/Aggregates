@@ -52,6 +52,9 @@ public static class ServiceCollectionExtensions {
         // by AddSagas, regardless of the order in which AddKurrentDb was called.
         builder.Services.Replace(ServiceDescriptor.Singleton<IParkedMessageSink, KurrentDbParkedMessageSink>());
 
+        // Parked-message store — lists, replays and dismisses parked messages; shared with the other kinds
+        builder.Services.TryAddSingleton<IParkedMessageStore, KurrentDbParkedMessageStore>();
+
         // Scheduled store — read by the scheduler of every saga and policy
         builder.Services.TryAddSingleton<IScheduledStore, KurrentDbScheduledStore>();
 
