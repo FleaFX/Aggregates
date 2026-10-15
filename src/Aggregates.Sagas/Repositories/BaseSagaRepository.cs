@@ -22,33 +22,33 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
         Link,
 
         /// <summary>
-        /// A command the saga planned (<see cref="SagaTimeoutFormat.RequestEventType"/>): it counts for the
+        /// A command the saga deferred (<see cref="ScheduledFormat.CommandRequestEventType"/>): it counts for the
         /// version, but doesn't change the state.
         /// </summary>
-        TimeoutRequest
+        ScheduledRequest
     }
 
     /// <summary>
     /// One entry of a saga stream: the link it holds and, when the link could be resolved and
     /// deserialized to <typeparamref name="TEvent"/>, the event it points to.
     /// </summary>
-    /// <param name="Link">For a link: the source event it points to. For a timeout request: the entry itself.</param>
+    /// <param name="Link">For a link: the source event it points to. For a scheduled request: the entry itself.</param>
     /// <param name="Event">
     /// The linked event, or <see langword="null"/> when the link could not be resolved or does
-    /// not hold a <typeparamref name="TEvent"/>; <see langword="null"/> for a timeout request.
+    /// not hold a <typeparamref name="TEvent"/>; <see langword="null"/> for a scheduled request.
     /// </param>
     protected readonly record struct SagaStreamEntry(EventReference Link, TEvent? Event) {
         /// <summary>
-        /// The kind of the entry; <see cref="SagaStreamEntryKind.Link"/> unless created with <see cref="TimeoutRequest"/>.
+        /// The kind of the entry; <see cref="SagaStreamEntryKind.Link"/> unless created with <see cref="ScheduledRequest"/>.
         /// </summary>
         public SagaStreamEntryKind Kind { get; init; }
 
         /// <summary>
-        /// A timeout request.
+        /// A scheduled request: a command the saga deferred.
         /// </summary>
         /// <param name="request">The saga stream and revision of the request.</param>
-        public static SagaStreamEntry TimeoutRequest(EventReference request) =>
-            new(request, default) { Kind = SagaStreamEntryKind.TimeoutRequest };
+        public static SagaStreamEntry ScheduledRequest(EventReference request) =>
+            new(request, default) { Kind = SagaStreamEntryKind.ScheduledRequest };
     }
 
     /// <inheritdoc/>
@@ -61,7 +61,7 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
 
         try {
             var entries = await ReadStreamAsync(sagaId, cancellationToken).ToArrayAsync(cancellationToken);
-            // A timeout request counts for the version only: the command it plans runs outside the saga.
+            // A scheduled request counts for the version only: the command it defers runs outside the saga.
             var links = entries.Where(entry => entry.Kind == SagaStreamEntryKind.Link).ToArray();
             var root = new SagaRoot<TSagaState, TEvent>(
                 links.Aggregate(TSagaState.Initial, (state, entry) => entry.Event is { } @event ? state.Apply(@event) : state),
@@ -79,7 +79,7 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
         (UnitOfWorkScope.Current?.UnitOfWork ?? new UnitOfWork()).Attach(new Aggregate(sagaId, sagaRoot));
 
     /// <summary>
-    /// Reads the persisted entries for <paramref name="sagaId"/>: links and timeout requests,
+    /// Reads the persisted entries for <paramref name="sagaId"/>: links and scheduled requests,
     /// in stream order. The version of the saga counts every entry, also the ones whose link could
     /// not be resolved.
     /// </summary>

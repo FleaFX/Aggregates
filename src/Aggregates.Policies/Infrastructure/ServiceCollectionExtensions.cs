@@ -25,6 +25,8 @@ public static class ServiceCollectionExtensions {
     /// <remarks>
     /// Every policy class gets one subscription, with the string form of its
     /// <see cref="PolicyContractAttribute"/> as subscription id (or its full type name when it has none).
+    /// Each policy's hosted service also runs its <see cref="Scheduler"/>, which waits until the
+    /// policy defers its first command with <see cref="DeferredCommandExtensions.DeferUntil"/>.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// A class implements <see cref="IPolicy{TEvent}"/> more than once, or two classes share a
@@ -51,6 +53,10 @@ public static class ServiceCollectionExtensions {
         // Subscription loop — subscribes again after a transient failure
         builder.Services.TryAddSingleton(new SubscriptionResubscribeOptions());
         builder.Services.TryAddSingleton<SubscriptionLoop>();
+
+        // Deferred commands — one scheduler serves every saga and policy; the activation is per handler class
+        builder.Services.TryAddSingleton<Scheduler>();
+        builder.Services.TryAddSingleton(typeof(SchedulerActivation<>));
 
         var registeredPolicies = new List<(Type EventType, Type PolicyType)>();
 

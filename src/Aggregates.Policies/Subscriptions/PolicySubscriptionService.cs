@@ -16,6 +16,9 @@ namespace Aggregates.Policies;
 /// parked-message fallback via <see cref="SubscriptionRetryPolicy"/>.
 /// A fresh DI scope is created per event so that scoped services are never captured as
 /// singletons by this long-lived hosted service.
+/// Next to the subscription it runs the policy's <see cref="Scheduler"/>, which executes the
+/// commands the policy deferred with <see cref="DeferredCommandExtensions.DeferUntil"/> when they
+/// are due, with retries and parking under <c>scheduled-{subscription id}</c>.
 /// </remarks>
 /// <typeparam name="TPolicy">The policy class.</typeparam>
 /// <typeparam name="TEvent">The event type the policy reacts to.</typeparam>
@@ -23,12 +26,21 @@ sealed class PolicySubscriptionService<TPolicy, TEvent>(
     SubscriptionLoop loop,
     IServiceScopeFactory scopeFactory,
     SubscriptionRetryPolicy retryPolicy,
+    Scheduler scheduler,
+    SchedulerActivation<TPolicy> activation,
     SubscriptionRegistration registration) : BackgroundService
     where TPolicy : IPolicy<TEvent> {
 
     /// <inheritdoc/>
-    protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
-        loop.RunAsync(registration, ProcessAsync, stoppingToken);
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var events = loop.RunAsync(registration, ProcessAsync, stop.Token);
+        var deferred = scheduler.RunAsync(registration, activation, stop.Token);
+        // Each ends only when the host stops or after a failure that is not transient; the other stops with it.
+        await Task.WhenAny(events, deferred);
+        await stop.CancelAsync();
+        await Task.WhenAll(events, deferred);
+    }
 
     async ValueTask ProcessAsync(SubscriptionMessage message, CancellationToken cancellationToken) {
         if (message.Event is not TEvent typedEvent)
@@ -40,7 +52,7 @@ sealed class PolicySubscriptionService<TPolicy, TEvent>(
             // Seed the metadata scope with the incoming event's metadata so that commands
             // dispatched by the policy inherit correlation/causation identifiers.
             await using var metadataScope = new MetadataScope(message.Metadata);
-            await handler.HandleAsync(typedEvent, ct);
+            await handler.HandleAsync(typedEvent, message.Source, ct);
         }, registration.SubscriptionId, message, cancellationToken);
     }
 }

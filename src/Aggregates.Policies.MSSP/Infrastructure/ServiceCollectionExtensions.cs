@@ -26,6 +26,9 @@ public static class ServiceCollectionExtensions {
         // by AddPolicies, regardless of the order in which AddMssp was called.
         builder.Services.Replace(ServiceDescriptor.Singleton<IParkedMessageSink, MsspParkedMessageSink>());
 
+        // Scheduled store — shared with sagas if both are used
+        builder.Services.TryAddSingleton<IScheduledStore, MsspScheduledStore>();
+
         return new PoliciesMsspBuilder(builder.Services);
     }
 }

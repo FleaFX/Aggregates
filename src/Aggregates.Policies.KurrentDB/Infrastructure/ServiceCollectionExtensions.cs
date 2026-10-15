@@ -26,6 +26,9 @@ public static class ServiceCollectionExtensions {
         // by AddPolicies, regardless of the order in which AddKurrentDb was called.
         builder.Services.Replace(ServiceDescriptor.Singleton<IParkedMessageSink, KurrentDbParkedMessageSink>());
 
+        // Scheduled store — shared with sagas if both are used
+        builder.Services.TryAddSingleton<IScheduledStore, KurrentDbScheduledStore>();
+
         return new PoliciesKurrentDbBuilder(builder.Services);
     }
 }

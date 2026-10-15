@@ -5,7 +5,7 @@ namespace Aggregates.Sagas;
 /// <summary>
 /// The root of a saga aggregate. Maintains state by applying incoming events and
 /// delegates reaction logic to the saga class. Its changes are links to source events
-/// (<see cref="EventReference"/>) and planned commands (<see cref="SagaTimeoutRequest"/>).
+/// (<see cref="EventReference"/>) and deferred commands (<see cref="DeferredCommandRequest"/>).
 /// </summary>
 /// <typeparam name="TSagaState">The type of the state object.</typeparam>
 /// <typeparam name="TEvent">The type of the events applicable to this saga.</typeparam>
@@ -32,8 +32,8 @@ public sealed class SagaRoot<TSagaState, TEvent>(TSagaState? state, AggregateVer
     /// Applies <paramref name="event"/> to the current state, then eagerly materializes
     /// the commands produced by <see cref="ISaga{TSagaState,TEvent}.ReactAsync"/>. Records
     /// <paramref name="source"/> as a change, so the commit stores a link to the source event
-    /// instead of a copy of it. A <see cref="SagaTimeout"/> the saga yields is recorded as a
-    /// <see cref="SagaTimeoutRequest"/> change instead of returned.
+    /// instead of a copy of it. A <see cref="DeferredCommand"/> the saga yields is recorded as a
+    /// <see cref="DeferredCommandRequest"/> change instead of returned.
     /// </summary>
     /// <param name="event">The event to apply.</param>
     /// <param name="source">Identifies the stored event that triggered this saga.</param>
@@ -54,9 +54,9 @@ public sealed class SagaRoot<TSagaState, TEvent>(TSagaState? state, AggregateVer
         State = State.Apply(@event);
         var commands = new List<ICommand>();
         await foreach (var command in saga.ReactAsync(State, @event, cancellationToken)) {
-            // A planned command is stored with the saga's state and executed when it is due, not now.
-            if (command is SagaTimeout timeout)
-                _changes.Add(new SagaTimeoutRequest(SagaTimeouts.OwnerOf(saga.GetType()), timeout.Due, timeout.Command));
+            // A deferred command is stored with the saga's state and executed when it is due, not now.
+            if (command is DeferredCommand deferred)
+                _changes.Add(new DeferredCommandRequest(SagaOwners.Of(saga.GetType()), deferred.Due, deferred.Command));
             else
                 commands.Add(command);
         }

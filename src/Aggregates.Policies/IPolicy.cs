@@ -15,7 +15,9 @@ namespace Aggregates.Policies;
 /// </typeparam>
 public interface IPolicy<in TEvent> {
     /// <summary>
-    /// Reacts to <paramref name="event"/> by producing zero or more commands to dispatch.
+    /// Reacts to <paramref name="event"/> by producing zero or more commands to dispatch. A command
+    /// deferred with <see cref="DeferredCommandExtensions.DeferUntil"/> is stored once the reaction
+    /// succeeded, and executed when it is due.
     /// </summary>
     IAsyncEnumerable<ICommand> ReactAsync(TEvent @event, CancellationToken cancellationToken = default);
 }

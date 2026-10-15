@@ -1,6 +1,8 @@
+using Aggregates.Subscriptions;
 using FakeItEasy;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging.Testing;
 
 namespace Aggregates.Policies;
@@ -15,7 +17,7 @@ public class LoggingPolicyHandlerTests {
 
     [Fact]
     public async Task GivenSuccess_LogsHandlingAndHandled() {
-        await BuildHandler().HandleAsync(new PolicyTestEvent(1), TestContext.Current.CancellationToken);
+        await BuildHandler().HandleAsync(new PolicyTestEvent(1), new EventReference("src-1", 0), TestContext.Current.CancellationToken);
 
         _logger.Collector.GetSnapshot()
             .Should().Contain(r => r.Level == LogLevel.Debug && r.Message.Contains("Handling"))
@@ -24,7 +26,7 @@ public class LoggingPolicyHandlerTests {
 
     [Fact]
     public async Task LogsTheEventTypeAndThePolicy() {
-        await BuildHandler().HandleAsync(new PolicyTestEvent(1), TestContext.Current.CancellationToken);
+        await BuildHandler().HandleAsync(new PolicyTestEvent(1), new EventReference("src-1", 0), TestContext.Current.CancellationToken);
 
         _logger.Collector.GetSnapshot()
             .Should().Contain(r => r.Message == "Handling PolicyTestEvent in IPolicy`1");
@@ -35,7 +37,7 @@ public class LoggingPolicyHandlerTests {
         A.CallTo(() => _policy.ReactAsync(A<PolicyTestEvent>._, A<CancellationToken>._))
             .Throws<InvalidOperationException>();
 
-        var act = () => BuildHandler().HandleAsync(new PolicyTestEvent(1), TestContext.Current.CancellationToken).AsTask();
+        var act = () => BuildHandler().HandleAsync(new PolicyTestEvent(1), new EventReference("src-1", 0), TestContext.Current.CancellationToken).AsTask();
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         _logger.Collector.GetSnapshot()
@@ -43,6 +45,10 @@ public class LoggingPolicyHandlerTests {
     }
 
     // The interface itself as TPolicy, so the policy can be faked.
-    LoggingPolicyHandler<IPolicy<PolicyTestEvent>, PolicyTestEvent> BuildHandler() =>
-        new(new PolicyHandler<IPolicy<PolicyTestEvent>, PolicyTestEvent>(_policy, A.Fake<ICommandDispatcher>()), _logger);
+    LoggingPolicyHandler<IPolicy<PolicyTestEvent>, PolicyTestEvent> BuildHandler() {
+        var store = A.Fake<IScheduledStore>();
+        return new(new PolicyHandler<IPolicy<PolicyTestEvent>, PolicyTestEvent>(_policy, A.Fake<ICommandDispatcher>(),
+            new SchedulerActivation<IPolicy<PolicyTestEvent>>(store, []), store,
+            NullLogger<PolicyHandler<IPolicy<PolicyTestEvent>, PolicyTestEvent>>.Instance), _logger);
+    }
 }

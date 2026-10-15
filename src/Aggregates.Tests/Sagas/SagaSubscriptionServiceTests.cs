@@ -17,7 +17,7 @@ public class SagaSubscriptionServiceTests {
     readonly ISagaRepository<TestSagaState, TestEvent> _repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
     readonly ISaga<TestSagaState, TestEvent> _saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
     readonly ISagaIdResolver<TestEvent> _resolver = A.Fake<ISagaIdResolver<TestEvent>>();
-    readonly FakeSagaTimeoutStore _timeouts = new() { Deserializer = (type, _) => type == "Test.Command@v1" ? new TestCommand() : null };
+    readonly FakeScheduledStore _scheduled = new() { Deserializer = (type, _) => type == "Test.Command@v1" ? new TestCommand() : null };
 
     // Park on the first failure, so the tests don't wait for retries.
     SubscriptionErrorHandlingOptions _errorOptions = new() { MaxRetries = 1 };
@@ -41,8 +41,8 @@ public class SagaSubscriptionServiceTests {
             .AddSingleton(_repository)
             .AddSingleton(_commandDispatcher)
             .AddSingleton<SagaCommitDelegate>(_ => ValueTask.CompletedTask)
-            .AddSingleton<ISagaTimeoutStore>(_timeouts)
-            .AddSingleton(typeof(SagaTimeoutActivation<>))
+            .AddSingleton<IScheduledStore>(_scheduled)
+            .AddSingleton(typeof(SchedulerActivation<>))
             .AddScoped(typeof(LoggingSagaHandler<,,>))
             .AddScoped(typeof(RetrySagaHandler<,,>))
             .AddScoped(typeof(UnitOfWorkAwareSagaHandler<,,>))
@@ -53,11 +53,10 @@ public class SagaSubscriptionServiceTests {
                 new SubscriptionResubscribeOptions(), TimeProvider.System, NullLogger<SubscriptionLoop>.Instance),
             provider.GetRequiredService<IServiceScopeFactory>(),
             retryPolicy,
-            new SagaTimeoutScheduler(_timeouts, _store, factory, new SubscriptionCheckpointOptions(),
-                new SubscriptionResubscribeOptions(), TimeProvider.System, NullLogger<SagaTimeoutScheduler>.Instance),
-            new SagaTimeoutDispatcher(provider.GetRequiredService<IServiceScopeFactory>(), retryPolicy, _parkedMessageSink,
-                NullLogger<SagaTimeoutDispatcher>.Instance),
-            new SagaTimeoutActivation<ISaga<TestSagaState, TestEvent>>(_timeouts, [registration]),
+            new Scheduler(_scheduled, _store, factory, new SubscriptionCheckpointOptions(),
+                new SubscriptionResubscribeOptions(), provider.GetRequiredService<IServiceScopeFactory>(), retryPolicy,
+                _parkedMessageSink, TimeProvider.System, NullLoggerFactory.Instance),
+            new SchedulerActivation<ISaga<TestSagaState, TestEvent>>(_scheduled, [registration]),
             registration,
             _resolver);
     }
@@ -152,9 +151,9 @@ public class SagaSubscriptionServiceTests {
     }
 
     [Fact]
-    public async Task ExecutesAnOpenTimeout_ByDispatchingItsCommand() {
-        _timeouts.Append("timeouts-sub-1", SagaTimeoutFormat.MarkerEventType, "activated"u8.ToArray());
-        _timeouts.AppendRequest("saga-1", SubscriptionId, DateTimeOffset.UtcNow.AddDays(-1));
+    public async Task ExecutesAnOpenDeferredCommand_ByDispatchingItsCommand() {
+        _scheduled.Append("scheduled-sub-1", ScheduledFormat.MarkerEventType, "activated"u8.ToArray());
+        _scheduled.AppendRequest("saga-1", SubscriptionId, DateTimeOffset.UtcNow.AddDays(-1));
         var dispatched = false;
         A.CallTo(() => _commandDispatcher.DispatchAsync(A<ICommand>.That.IsInstanceOf(typeof(TestCommand)), A<CancellationToken>._))
             .Invokes(_ => dispatched = true);
@@ -163,7 +162,7 @@ public class SagaSubscriptionServiceTests {
 
         await service.StartAsync(Token);
         await factory.Drained.WaitAsync(Token);
-        await Eventually.UntilAsync(() => dispatched, "the planned command is dispatched");
+        await Eventually.UntilAsync(() => dispatched, "the deferred command is dispatched");
         await service.StopAsync(Token);
 
         A.CallTo(() => _commandDispatcher.DispatchAsync(A<ICommand>.That.IsInstanceOf(typeof(TestCommand)), A<CancellationToken>._))
