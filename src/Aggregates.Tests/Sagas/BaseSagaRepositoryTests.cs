@@ -36,13 +36,47 @@ public class BaseSagaRepositoryTests {
         root.GetChanges().Should().ContainSingle();
     }
 
+    [Fact]
+    public async Task ScheduledRequestWithACause_MarksItsDeadlineAsHandled() {
+        var repository = new ScriptedSagaRepository(
+            ("link", 0, 1),
+            ("caused", 1, 1));
+        var root = await ((ISagaRepository<TestSagaState, TestEvent>)repository).TryGetAsync("saga-1", TestContext.Current.CancellationToken);
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
+        A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
+            .Returns(AsyncEnumerable.Empty<ICommand>());
+
+        // The request caused by saga-1@1 marks that deadline as handled: a redelivery doesn't react again.
+        var commands = await root!.AcceptDeadlineAsync(new TestDeadline(1), new EventReference("saga-1", 1), saga, TestContext.Current.CancellationToken);
+
+        commands.Should().BeEmpty();
+        root.GetChanges().Should().BeEmpty();
+        A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._)).MustNotHaveHappened();
+    }
+
+    [Fact]
+    public async Task ScheduledRequestWithACause_CountsForTheVersion_ButNotForTheState() {
+        var repository = new ScriptedSagaRepository(
+            ("link", 0, 1),
+            ("caused", 1, 0),
+            ("link", 2, 2));
+
+        var root = await ((ISagaRepository<TestSagaState, TestEvent>)repository).TryGetAsync("saga-1", TestContext.Current.CancellationToken);
+
+        root.Should().NotBeNull();
+        root!.State.Total.Should().Be(3);
+        root.Version.Should().Be(new AggregateVersion(2));
+    }
+
     sealed class ScriptedSagaRepository(params (string Kind, ulong Revision, int? Value)[] entries) : BaseSagaRepository<TestSagaState, TestEvent> {
         protected override async IAsyncEnumerable<SagaStreamEntry> ReadStreamAsync(AggregateIdentifier sagaId, [EnumeratorCancellation] CancellationToken cancellationToken) {
             await Task.CompletedTask;
             foreach (var (kind, revision, value) in entries)
-                yield return kind == "request"
-                    ? SagaStreamEntry.ScheduledRequest(new EventReference("saga-1", revision))
-                    : new SagaStreamEntry(new EventReference("source", revision), new TestEvent(value!.Value));
+                yield return kind switch {
+                    "request" => SagaStreamEntry.ScheduledRequest(new EventReference("saga-1", revision)),
+                    "caused" => SagaStreamEntry.ScheduledRequest(new EventReference("saga-1", revision), new EventReference("saga-1", (ulong)value!.Value)),
+                    _ => new SagaStreamEntry(new EventReference("source", revision), new TestEvent(value!.Value))
+                };
         }
     }
 }

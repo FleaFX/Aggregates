@@ -75,4 +75,21 @@ public class DeferredCommandDispatcherTests {
         logger.Collector.GetSnapshot().Should().Contain(record =>
             record.Level == LogLevel.Warning && record.Message.Contains("Parking deferred command"));
     }
+
+    [Fact]
+    public async Task AnUndeserializableDeadline_IsParked_AsASagaDeadline() {
+        var commandDispatcher = A.Fake<ICommandDispatcher>();
+        var (dispatcher, _, parked, logger) = BuildDispatcher(commandDispatcher);
+        var error = new InvalidOperationException("Deserialize does not know the deadline type 'Test.Unknown@v1'.");
+        var request = Request(null, error) with { Kind = ScheduledKind.Deadline };
+
+        await dispatcher.DeliverAsync("scheduled-sub-1", request, TestContext.Current.CancellationToken);
+
+        A.CallTo(() => commandDispatcher.DispatchAsync(A<ICommand>._, A<CancellationToken>._)).MustNotHaveHappened();
+        A.CallTo(() => parked.ParkAsync("scheduled-sub-1",
+            A<SubscriptionMessage>.That.Matches(message => message.CommitPosition == 42 && message.Source == request.Request),
+            error, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        logger.Collector.GetSnapshot().Should().Contain(record =>
+            record.Level == LogLevel.Warning && record.Message.Contains("Parking saga deadline"));
+    }
 }

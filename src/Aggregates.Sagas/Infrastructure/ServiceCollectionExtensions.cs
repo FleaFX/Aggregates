@@ -29,9 +29,12 @@ public static class ServiceCollectionExtensions {
     /// takes precedence over the one registered for its event type.
     /// Each saga's hosted service also runs its <see cref="Scheduler"/>, which waits until the saga
     /// defers its first command with <see cref="DeferredCommandExtensions.DeferUntil"/>.
+    /// A saga that implements <see cref="ISaga{TSagaState,TEvent,TDeadline}"/> receives the deadlines it
+    /// requests with <see cref="Deadline.At"/> through the same scheduler.
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// A class implements <see cref="ISaga{TSagaState,TEvent}"/> more than once, two classes share a
+    /// A class implements <see cref="ISaga{TSagaState,TEvent}"/> more than once, implements
+    /// <see cref="ISaga{TSagaState,TEvent,TDeadline}"/> more than once, two classes share a
     /// subscription id, or a saga resolver doesn't match a scanned saga.
     /// </exception>
     public static ISagasBuilder AddSagas(this IAggregatesBuilder builder, Action<SagasOptions>? configure = null) {
@@ -73,6 +76,13 @@ public static class ServiceCollectionExtensions {
         foreach (var (sagaType, sagaInterface) in sagas) {
             var stateType = sagaInterface.GetGenericArguments()[0];
             var eventType = sagaInterface.GetGenericArguments()[1];
+
+            // ISaga<,,> inherits ISaga<,>, so FindHandlers sees a saga with two deadline types only once.
+            var deadlineInterfaces = SagaDeadlines.InterfacesOf(sagaType);
+            if (deadlineInterfaces.Length > 1)
+                throw new InvalidOperationException(
+                    $"{sagaType.FullName} implements ISaga<TSagaState, TEvent, TDeadline> {deadlineInterfaces.Length} times. " +
+                    "A saga implements it once: use a marker interface (or object) as the deadline type to receive several kinds of deadlines.");
 
             builder.Services.TryAddScoped(sagaType);
             registeredSagas.Add((stateType, eventType, sagaType));

@@ -22,8 +22,9 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
         Link,
 
         /// <summary>
-        /// A command the saga deferred (<see cref="ScheduledFormat.CommandRequestEventType"/>): it counts for the
-        /// version, but doesn't change the state.
+        /// A command the saga deferred (<see cref="ScheduledFormat.CommandRequestEventType"/>) or a deadline it
+        /// requested (<see cref="ScheduledFormat.DeadlineRequestEventType"/>): it counts for the version, but
+        /// doesn't change the state.
         /// </summary>
         ScheduledRequest
     }
@@ -44,11 +45,17 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
         public SagaStreamEntryKind Kind { get; init; }
 
         /// <summary>
-        /// A scheduled request: a command the saga deferred.
+        /// For a scheduled request made by the reaction to a deadline: that deadline. <see langword="null"/> otherwise.
+        /// </summary>
+        public EventReference? Cause { get; init; }
+
+        /// <summary>
+        /// A scheduled request: a command the saga deferred or a deadline it requested.
         /// </summary>
         /// <param name="request">The saga stream and revision of the request.</param>
-        public static SagaStreamEntry ScheduledRequest(EventReference request) =>
-            new(request, default) { Kind = SagaStreamEntryKind.ScheduledRequest };
+        /// <param name="cause">The deadline whose reaction made the request, if any (see <see cref="ScheduledEnvelope.Cause"/>).</param>
+        public static SagaStreamEntry ScheduledRequest(EventReference request, EventReference? cause = null) =>
+            new(request, default) { Kind = SagaStreamEntryKind.ScheduledRequest, Cause = cause };
     }
 
     /// <inheritdoc/>
@@ -61,12 +68,14 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
 
         try {
             var entries = await ReadStreamAsync(sagaId, cancellationToken).ToArrayAsync(cancellationToken);
-            // A scheduled request counts for the version only: the command it defers runs outside the saga.
+            // A scheduled request counts for the version only: the command or deadline it holds runs outside the saga.
             var links = entries.Where(entry => entry.Kind == SagaStreamEntryKind.Link).ToArray();
+            // A deadline whose reaction stored requests is handled, like a source the stream links to.
+            var causes = entries.Where(entry => entry.Cause is not null).Select(entry => entry.Cause!.Value);
             var root = new SagaRoot<TSagaState, TEvent>(
                 links.Aggregate(TSagaState.Initial, (state, entry) => entry.Event is { } @event ? state.Apply(@event) : state),
                 new AggregateVersion(entries.Length - 1L),
-                links.Select(entry => entry.Link).ToHashSet());
+                links.Select(entry => entry.Link).Concat(causes).ToHashSet());
             unitOfWork.Attach(new Aggregate(sagaId, root));
             return root;
         } catch (AggregateRootNotFoundException) {
@@ -79,7 +88,8 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
         (UnitOfWorkScope.Current?.UnitOfWork ?? new UnitOfWork()).Attach(new Aggregate(sagaId, sagaRoot));
 
     /// <summary>
-    /// Reads the persisted entries for <paramref name="sagaId"/>: links and scheduled requests,
+    /// Reads the persisted entries for <paramref name="sagaId"/>: links and scheduled requests
+    /// (deferred commands and deadlines),
     /// in stream order. The version of the saga counts every entry, also the ones whose link could
     /// not be resolved.
     /// </summary>

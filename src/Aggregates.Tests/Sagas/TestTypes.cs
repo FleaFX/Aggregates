@@ -11,6 +11,8 @@ record TestSagaState(int Total) : IState<TestSagaState, TestEvent> {
 
 record struct TestCommand : ICommand;
 
+record TestDeadline(int Value);
+
 // Minimal concrete ISaga implementation used only as a type parameter marker in
 // SagaHandler<TSaga, TSagaState, TEvent> — actual saga logic is always faked.
 class TestSaga : ISaga<TestSagaState, TestEvent> {
@@ -36,4 +38,15 @@ class DeferredCommandTestSaga : ISaga<TestSagaState, TestEvent> {
         yield return new TestCommand().DeferUntil(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
         await Task.CompletedTask;
     }
+}
+
+[SagaContract("DeadlineTest", @namespace: "Tests")]
+class DeadlineTestSaga : ISaga<TestSagaState, TestEvent, TestDeadline> {
+    public async IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
+        yield return Deadline.At(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), new TestDeadline(@event.Value));
+        await Task.CompletedTask;
+    }
+
+    public IAsyncEnumerable<ICommand> ReactToDeadlineAsync(TestSagaState state, TestDeadline deadline, CancellationToken cancellationToken = default) =>
+        AsyncEnumerable.Empty<ICommand>();
 }

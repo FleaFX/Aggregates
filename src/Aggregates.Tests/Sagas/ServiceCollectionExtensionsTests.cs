@@ -150,6 +150,26 @@ public class ServiceCollectionExtensionsTests {
         }
 
         [Fact]
+        public void GivenASagaWithDeadlines_StartsItsSubscription() {
+            var services = new ServiceCollection();
+
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(DeadlineTestSaga)).WithResolver<TestEvent>(_ => []));
+
+            services.Should().ContainSingle(d => d.ServiceType == typeof(DeadlineTestSaga));
+            services.Should().ContainSingle(d => d.ServiceType == typeof(IHostedService));
+            Registrations(services).Should().ContainSingle()
+                .Which.EventType.Should().Be(typeof(TestEvent));
+        }
+
+        [Fact]
+        public void GivenTwoDeadlineInterfaces_Throws_WithAHint() {
+            var add = () => new ServiceCollection().AddAggregates().AddSagas(o => o.ScanTypes(typeof(TwoDeadlinesSaga)));
+
+            add.Should().Throw<InvalidOperationException>()
+                .WithMessage($"*{typeof(TwoDeadlinesSaga).FullName}*2 times*marker interface*");
+        }
+
+        [Fact]
         public void GivenTwoClassesWithTheSameContract_Throws() {
             var add = () => new ServiceCollection().AddAggregates().AddSagas(o => o
                 .ScanTypes(typeof(PlainContractSaga), typeof(SameContractSaga))
@@ -334,6 +354,18 @@ public class ServiceCollectionExtensionsTests {
                 AsyncEnumerable.Empty<ICommand>();
 
             public IAsyncEnumerable<ICommand> ReactAsync(OtherTestSagaState state, OtherTestEvent @event, CancellationToken cancellationToken = default) =>
+                AsyncEnumerable.Empty<ICommand>();
+        }
+
+        [SagaContract("TwoDeadlines")]
+        sealed class TwoDeadlinesSaga : ISaga<TestSagaState, TestEvent, TestDeadline>, ISaga<TestSagaState, TestEvent, string> {
+            public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
+                AsyncEnumerable.Empty<ICommand>();
+
+            public IAsyncEnumerable<ICommand> ReactToDeadlineAsync(TestSagaState state, TestDeadline deadline, CancellationToken cancellationToken = default) =>
+                AsyncEnumerable.Empty<ICommand>();
+
+            public IAsyncEnumerable<ICommand> ReactToDeadlineAsync(TestSagaState state, string deadline, CancellationToken cancellationToken = default) =>
                 AsyncEnumerable.Empty<ICommand>();
         }
 

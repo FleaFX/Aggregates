@@ -9,18 +9,18 @@ public class ScheduledFormatTests {
     public void Request_RoundTrips() {
         var due = new DateTimeOffset(2026, 11, 1, 9, 30, 15, TimeSpan.FromHours(2));
 
-        var data = ScheduledFormat.WriteCommandRequest("Ns.Saga@v1", due, "Ns.Command@v1", [1, 2, 3]);
+        var data = ScheduledFormat.WriteRequest("Ns.Saga@v1", due, "Ns.Command@v1", [1, 2, 3]);
 
-        ScheduledFormat.TryReadCommandRequest(data, out var envelope).Should().BeTrue();
+        ScheduledFormat.TryReadRequest(data, out var envelope).Should().BeTrue();
         envelope.Owner.Should().Be("Ns.Saga@v1");
         envelope.Due.Should().Be(due);
-        envelope.CommandType.Should().Be("Ns.Command@v1");
-        envelope.CommandData.ToArray().Should().Equal(1, 2, 3);
+        envelope.Type.Should().Be("Ns.Command@v1");
+        envelope.Data.ToArray().Should().Equal(1, 2, 3);
     }
 
     [Fact]
     public void Request_IsReadableJson() {
-        var data = ScheduledFormat.WriteCommandRequest("Ns.Saga@v1", new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), "Ns.Command@v1", [1, 2, 3]);
+        var data = ScheduledFormat.WriteRequest("Ns.Saga@v1", new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), "Ns.Command@v1", [1, 2, 3]);
 
         using var document = JsonDocument.Parse(data);
         var root = document.RootElement;
@@ -40,13 +40,47 @@ public class ScheduledFormatTests {
     [InlineData("{\"owner\":\"Ns.Saga@v1\",\"due\":\"2026-10-14T00:00:00Z\",\"type\":\"Ns.Command@v1\",\"data\":\"!\"}")]
     [InlineData("[1,2]")]
     public void TryReadRequest_RejectsInvalidData(string invalid) {
-        ScheduledFormat.TryReadCommandRequest(Encoding.UTF8.GetBytes(invalid), out var envelope).Should().BeFalse();
-        envelope.Should().Be(default(ScheduledCommandEnvelope));
+        ScheduledFormat.TryReadRequest(Encoding.UTF8.GetBytes(invalid), out var envelope).Should().BeFalse();
+        envelope.Should().Be(default(ScheduledEnvelope));
+    }
+
+    [Fact]
+    public void Request_WithACause_RoundTrips() {
+        var cause = new EventReference("saga-1", 3);
+        var due = new DateTimeOffset(2026, 11, 1, 9, 30, 15, TimeSpan.FromHours(2));
+
+        var data = ScheduledFormat.WriteRequest("Ns.Saga@v1", due, "Ns.Command@v1", [1, 2, 3], cause);
+
+        ScheduledFormat.TryReadRequest(data, out var envelope).Should().BeTrue();
+        envelope.Cause.Should().Be(cause);
+        using (var document = JsonDocument.Parse(data))
+            document.RootElement.GetProperty("cause").GetString().Should().Be("3@saga-1");
+    }
+
+    [Fact]
+    public void Request_WithoutACause_HasNoCause() {
+        var due = new DateTimeOffset(2026, 11, 1, 9, 30, 15, TimeSpan.FromHours(2));
+
+        var data = ScheduledFormat.WriteRequest("Ns.Saga@v1", due, "Ns.Command@v1", [1, 2, 3]);
+
+        using (var document = JsonDocument.Parse(data))
+            document.RootElement.TryGetProperty("cause", out _).Should().BeFalse();
+        ScheduledFormat.TryReadRequest(data, out var envelope).Should().BeTrue();
+        envelope.Cause.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("{\"owner\":\"Ns.Saga@v1\",\"due\":\"2026-10-14T00:00:00Z\",\"type\":\"Ns.Command@v1\",\"data\":\"\",\"cause\":\"no-at-sign\"}")]
+    [InlineData("{\"owner\":\"Ns.Saga@v1\",\"due\":\"2026-10-14T00:00:00Z\",\"type\":\"Ns.Command@v1\",\"data\":\"\",\"cause\":5}")]
+    public void TryReadRequest_RejectsAnInvalidCause(string invalid) {
+        ScheduledFormat.TryReadRequest(Encoding.UTF8.GetBytes(invalid), out var envelope).Should().BeFalse();
+        envelope.Should().Be(default(ScheduledEnvelope));
     }
 
     [Fact]
     public void EventTypes_ShareThePrefix() {
         ScheduledFormat.CommandRequestEventType.Should().StartWith(ScheduledFormat.EventTypePrefix);
+        ScheduledFormat.DeadlineRequestEventType.Should().StartWith(ScheduledFormat.EventTypePrefix);
         ScheduledFormat.DeliveryEventType.Should().StartWith(ScheduledFormat.EventTypePrefix);
         ScheduledFormat.MarkerEventType.Should().StartWith(ScheduledFormat.EventTypePrefix);
         ScheduledFormat.EventTypePrefix.Should().StartWith("$");

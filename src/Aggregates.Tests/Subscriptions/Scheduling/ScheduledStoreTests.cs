@@ -24,9 +24,9 @@ public class ScheduledStoreTests(ITestOutputHelper output) {
         var stored = (await store.ReadAllAsync()).Where(e => e.Stream == stream).ToArray();
         stored.Should().HaveCount(2).And.OnlyContain(e => e.EventType == ScheduledFormat.CommandRequestEventType);
         var commands = stored.Select(e => {
-            ScheduledFormat.TryReadCommandRequest(e.Data, out var envelope).Should().BeTrue();
+            ScheduledFormat.TryReadRequest(e.Data, out var envelope).Should().BeTrue();
             envelope.Owner.Should().Be("Tests.Policy@v1");
-            return scheduled.DeserializeCommand(envelope.CommandType, envelope.CommandData);
+            return scheduled.Deserialize(envelope.Type, envelope.Data);
         });
         commands.Should().Equal(new Ping("a"), new Ping("b"));
     }

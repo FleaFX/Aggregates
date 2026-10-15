@@ -15,10 +15,11 @@ public class SchedulerTests {
     static readonly SubscriptionRegistration Registration = new(Owner, typeof(TestSaga), typeof(TestEvent), false);
 
     readonly FakeTimeProvider _time = new(Start);
-    readonly FakeScheduledStore _store = new() { Deserializer = (type, _) => type == "Test.Command@v1" ? new TestCommand() : null };
+    readonly FakeScheduledStore _store = new() { Deserializer = (type, _) => type switch { "Test.Command@v1" => new TestCommand(), "Test.Deadline@v1" => new TestDeadline(1), _ => null } };
     readonly FakeLogger<Scheduler> _logger = new();
     readonly InMemoryCheckpointStore _checkpointStore = new();
     readonly ISubscriptionFactory _factory = A.Fake<ISubscriptionFactory>();
+    readonly IParkedMessageSink _parked = A.Fake<IParkedMessageSink>();
 
     public SchedulerTests() {
         A.CallTo(() => _factory.IsTransient(A<Exception>._)).Returns(true);
@@ -36,8 +37,8 @@ public class SchedulerTests {
             new SubscriptionCheckpointOptions { MaxBatchSize = 1 },
             new SubscriptionResubscribeOptions { InitialDelay = TimeSpan.FromSeconds(1) },
             A.Fake<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
-            new SubscriptionRetryPolicy(A.Fake<IParkedMessageSink>(), new SubscriptionErrorHandlingOptions()),
-            A.Fake<IParkedMessageSink>(),
+            new SubscriptionRetryPolicy(_parked, new SubscriptionErrorHandlingOptions()),
+            _parked,
             _time, LoggerFactory(logger ?? _logger));
 
     // Every logger the scheduler creates writes to logger.
@@ -63,7 +64,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         await Eventually.QuietAsync();
 
@@ -71,7 +72,7 @@ public class SchedulerTests {
         _time.Advance(TimeSpan.FromDays(3));
         await Eventually.UntilAsync(() => delivered.Count == 1, "the request is delivered");
 
-        delivered.Should().ContainSingle().Which.Command.Should().BeOfType<TestCommand>();
+        delivered.Should().ContainSingle().Which.Payload.Should().BeOfType<TestCommand>();
         await cts.CancelAsync();
         await run;
     }
@@ -84,7 +85,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         _time.Advance(TimeSpan.FromDays(3));
         await Eventually.UntilAsync(() => delivered.Count == 2, "both requests are delivered");
@@ -101,7 +102,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
 
         await Eventually.UntilAsync(() => delivered.Count == 1, "the request is delivered right away");
         await cts.CancelAsync();
@@ -118,7 +119,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         await Eventually.QuietAsync();
 
@@ -134,7 +135,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await Eventually.UntilAsync(() => delivered.Count == 1, "the request is delivered");
 
         var delivery = _store.Entries.Should().ContainSingle(entry =>
@@ -151,7 +152,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         await Eventually.QuietAsync();
 
@@ -169,7 +170,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
 
         await Eventually.UntilAsync(() => delivered.Count == 1, "the predecessor's request is delivered");
         await cts.CancelAsync();
@@ -184,7 +185,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         _time.Advance(TimeSpan.FromDays(2));
         await Eventually.UntilAsync(() => delivered.Count == 1, "the first request is delivered");
@@ -200,7 +201,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         await cts.CancelAsync();
         await run;
@@ -217,7 +218,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await Eventually.UntilAsync(() => delivered.Count == 1, "the request after the checkpoint is delivered");
 
         delivered.Should().ContainSingle().Which.Request.Revision.Should().Be(1);
@@ -234,7 +235,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         await cts.CancelAsync();
         await run;
@@ -251,7 +252,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         await cts.CancelAsync();
         await run;
@@ -268,7 +269,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await Eventually.QuietAsync();
 
         _store.Subscriptions.Should().Be(0);
@@ -290,7 +291,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
 
         await Eventually.UntilAsync(() => _store.Subscriptions == 1, "the first subscription starts");
         _time.Advance(TimeSpan.FromSeconds(2));
@@ -310,7 +311,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler(factory).RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler(factory).RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
 
         var act = () => run;
         await act.Should().ThrowAsync<InvalidOperationException>();
@@ -325,7 +326,7 @@ public class SchedulerTests {
         var delivered = new ConcurrentQueue<ScheduledRequest>();
         var attempts = 0;
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => {
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => {
             if (Interlocked.Exchange(ref attempts, attempts + 1) == 0)
                 throw new InvalidOperationException("transient failure");
             delivered.Enqueue(timeout);
@@ -353,7 +354,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         _time.Advance(TimeSpan.FromDays(89));
         await Eventually.QuietAsync();
@@ -362,7 +363,7 @@ public class SchedulerTests {
         _time.Advance(TimeSpan.FromDays(2));
         await Eventually.UntilAsync(() => delivered.Count == 1, "the request is delivered");
 
-        delivered.Should().ContainSingle().Which.Command.Should().BeOfType<TestCommand>();
+        delivered.Should().ContainSingle().Which.Payload.Should().BeOfType<TestCommand>();
         await cts.CancelAsync();
         await run;
     }
@@ -374,7 +375,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         await Eventually.QuietAsync();
 
@@ -392,7 +393,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
 
         _logger.Collector.GetSnapshot().Should().Contain(record =>
@@ -416,7 +417,7 @@ public class SchedulerTests {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var delivered = new ConcurrentQueue<ScheduledRequest>();
 
-        var run = Scheduler().RunAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
         await CaughtUpAsync(_logger);
         await cts.CancelAsync();
         await run;
@@ -428,16 +429,80 @@ public class SchedulerTests {
         _store.Deserializer = (type, _) => type == "Test.Command@v1" ? new TestCommand() : null;
         var restartedLogger = new FakeLogger<Scheduler>();
         using var restart = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        var second = Scheduler(logger: restartedLogger).RunAsync(Registration,
+        var second = Scheduler(logger: restartedLogger).RunCoreAsync(Registration,
             new SchedulerActivation<TestSaga>(_store, [Registration]), (timeout, _) => DeliverAsync(delivered, timeout, _), restart.Token);
         await CaughtUpAsync(restartedLogger);
         _time.Advance(TimeSpan.FromDays(3));
         await Eventually.UntilAsync(() => delivered.Count == 1, "the repaired request is delivered");
 
-        delivered.Should().ContainSingle().Which.Command.Should().BeOfType<TestCommand>();
+        delivered.Should().ContainSingle().Which.Payload.Should().BeOfType<TestCommand>();
         delivered.Should().ContainSingle().Which.Request.Should().Be(request.Source);
         await restart.CancelAsync();
         await second;
+    }
+
+    [Fact]
+    public async Task DeliversADueDeadline_ToTheDeadlineDelivery() {
+        var activation = Activated();
+        var metadata = new EventMetadata(new Dictionary<string, object?> { ["correlation"] = "c-1" });
+        var request = _store.AppendDeadline("saga-1", Owner, Start.AddDays(1), metadata: metadata);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var delivered = new ConcurrentQueue<ScheduledDeadline>();
+
+        var run = Scheduler().RunAsync(Registration, activation, (deadline, _) => {
+            delivered.Enqueue(deadline);
+            return ValueTask.CompletedTask;
+        }, cts.Token);
+        await CaughtUpAsync(_logger);
+        _time.Advance(TimeSpan.FromDays(1));
+        await Eventually.UntilAsync(() => delivered.Count == 1, "the deadline is delivered");
+        await Eventually.UntilAsync(() => _store.Entries.Any(entry => entry.EventType == ScheduledFormat.DeliveryEventType),
+            "the delivery is recorded");
+
+        var deadline = delivered.Single();
+        deadline.Request.Should().Be(request.Source);
+        deadline.Payload.Should().Be(new TestDeadline(1));
+        deadline.Metadata["correlation"].Should().Be("c-1");
+        await cts.CancelAsync();
+        await run;
+    }
+
+    [Fact]
+    public async Task ParksAnUndeserializableDeadline_WithoutDeliveringIt() {
+        var activation = Activated();
+        _store.AppendDeadline("saga-1", Owner, Start, payloadType: "Test.Unknown@v1");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var delivered = new ConcurrentQueue<ScheduledDeadline>();
+
+        var run = Scheduler().RunAsync(Registration, activation, (deadline, _) => {
+            delivered.Enqueue(deadline);
+            return ValueTask.CompletedTask;
+        }, cts.Token);
+        await Eventually.UntilAsync(() => _store.Entries.Any(entry => entry.EventType == ScheduledFormat.DeliveryEventType),
+            "the delivery is recorded");
+
+        delivered.Should().BeEmpty();
+        A.CallTo(() => _parked.ParkAsync(ScheduledFormat.SchedulerStream(Owner), A<SubscriptionMessage>._,
+            A<InvalidOperationException>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        await cts.CancelAsync();
+        await run;
+    }
+
+    [Fact]
+    public async Task ParksADeadline_WhenItDeliversNoDeadlines() {
+        var activation = Activated();
+        _store.AppendDeadline("saga-1", Owner, Start);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var run = Scheduler().RunAsync(Registration, activation, cts.Token);
+        await Eventually.UntilAsync(() => _store.Entries.Any(entry => entry.EventType == ScheduledFormat.DeliveryEventType),
+            "the delivery is recorded");
+
+        A.CallTo(() => _parked.ParkAsync(ScheduledFormat.SchedulerStream(Owner), A<SubscriptionMessage>._,
+            A<InvalidOperationException>.That.Matches(error => error.Message.Contains("doesn't deliver deadlines")),
+            A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        await cts.CancelAsync();
+        await run;
     }
 
     sealed class InMemoryCheckpointStore : ICheckpointStore {

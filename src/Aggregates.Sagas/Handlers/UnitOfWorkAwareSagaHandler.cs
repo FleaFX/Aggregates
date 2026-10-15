@@ -29,4 +29,20 @@ sealed class UnitOfWorkAwareSagaHandler<TSaga, TSagaState, TEvent>(SagaHandler<T
         await inner.HandleAsync(sagaId, @event, source, cancellationToken);
         scope.Complete();
     }
+
+    /// <summary>
+    /// Delivers the due <paramref name="deadline"/> to <paramref name="sagaId"/> within a new unit of work,
+    /// and commits it when the inner handler succeeds: only the requests of the reaction are stored.
+    /// </summary>
+    /// <param name="sagaId">Identifies the saga instance.</param>
+    /// <param name="deadline">The payload of the deadline.</param>
+    /// <param name="request">The saga stream and revision of the deadline request.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns><see langword="false"/> when the saga doesn't exist.</returns>
+    public async ValueTask<bool> HandleDeadlineAsync(AggregateIdentifier sagaId, object deadline, EventReference request, CancellationToken cancellationToken = default) {
+        await using var scope = new UnitOfWorkScope(new UnitOfWork(), uow => commitDelegate(uow));
+        var found = await inner.HandleDeadlineAsync(sagaId, deadline, request, cancellationToken);
+        scope.Complete();
+        return found;
+    }
 }

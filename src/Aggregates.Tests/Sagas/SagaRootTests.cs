@@ -145,4 +145,120 @@ public class SagaRootTests {
         commands.Should().BeEmpty();
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._)).MustNotHaveHappened();
     }
+
+    // A saga that also receives deadlines; its reaction to events and to deadlines are set per test.
+    static ISaga<TestSagaState, TestEvent, TestDeadline> DeadlineSaga(IAsyncEnumerable<ICommand> reaction) {
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
+        A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(reaction);
+        A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
+            .Returns(AsyncEnumerable.Empty<ICommand>());
+        return saga;
+    }
+
+    [Fact]
+    public async Task AcceptAsync_RecordsARequestedDeadline_AndDoesNotReturnIt() {
+        var due = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero);
+        var saga = DeadlineSaga(new ICommand[] { Deadline.At(due, new TestDeadline(1)), new TestCommand() }.ToAsyncEnumerable());
+        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var source = new EventReference("stream-1", 3);
+
+        var commands = await root.AcceptAsync(new TestEvent(1), source, saga, TestContext.Current.CancellationToken);
+
+        var owner = SubscriptionRegistrations.GetSubscriptionId(saga.GetType(), null);
+        root.GetChanges().Should().Equal(source, new DeadlineRequest(owner, due, new TestDeadline(1)));
+        commands.Should().ContainSingle().Which.Should().BeOfType<TestCommand>();
+    }
+
+    [Fact]
+    public async Task AcceptAsync_ADeadlineWithAPayloadOfAnotherType_Throws() {
+        var saga = DeadlineSaga(new ICommand[] { Deadline.At(DateTimeOffset.UtcNow, "text") }.ToAsyncEnumerable());
+        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+
+        var act = () => root.AcceptAsync(new TestEvent(1), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*receives deadlines of type TestDeadline*");
+    }
+
+    [Fact]
+    public async Task AcceptAsync_ADeadlineFromASagaWithoutDeadlines_Throws() {
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
+        A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(new ICommand[] { Deadline.At(DateTimeOffset.UtcNow, new TestDeadline(1)) }.ToAsyncEnumerable());
+        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+
+        var act = () => root.AcceptAsync(new TestEvent(1), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*doesn't implement ISaga<TSagaState, TEvent, TDeadline>*");
+    }
+
+    [Fact]
+    public async Task AcceptAsync_ADeferredDeadline_Throws() {
+        var saga = DeadlineSaga(new ICommand[] { Deadline.At(DateTimeOffset.UtcNow, new TestDeadline(1)).DeferUntil(DateTimeOffset.UtcNow) }.ToAsyncEnumerable());
+        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+
+        var act = () => root.AcceptAsync(new TestEvent(1), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*defers a deadline*");
+    }
+
+    [Fact]
+    public async Task AcceptDeadlineAsync_ReactsWithTheCurrentState_AndChangesNothing() {
+        var command = new TestCommand();
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
+        TestSagaState? capturedState = null;
+        TestDeadline? capturedDeadline = null;
+        A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
+            .Invokes(call => {
+                capturedState = call.GetArgument<TestSagaState>(0);
+                capturedDeadline = call.GetArgument<TestDeadline>(1);
+            })
+            .Returns(new ICommand[] { command }.ToAsyncEnumerable());
+        var root = new SagaRoot<TestSagaState, TestEvent>(new TestSagaState(5), AggregateVersion.None);
+        var request = new EventReference("saga-1", 2);
+
+        var commands = await root.AcceptDeadlineAsync(new TestDeadline(3), request, saga, TestContext.Current.CancellationToken);
+
+        capturedState.Should().Be(new TestSagaState(5));
+        capturedDeadline.Should().Be(new TestDeadline(3));
+        root.State.Should().Be(new TestSagaState(5));
+        root.GetChanges().Should().BeEmpty();
+        commands.Should().ContainSingle().Which.Should().Be(command);
+    }
+
+    [Fact]
+    public async Task AcceptDeadlineAsync_RecordsItsRequests_WithTheDeadlineAsCause() {
+        var due = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero);
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
+        A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
+            .Returns(new ICommand[] { new TestCommand().DeferUntil(due), Deadline.At(due, new TestDeadline(1)) }.ToAsyncEnumerable());
+        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var request = new EventReference("saga-1", 2);
+
+        await root.AcceptDeadlineAsync(new TestDeadline(3), request, saga, TestContext.Current.CancellationToken);
+
+        var owner = SubscriptionRegistrations.GetSubscriptionId(saga.GetType(), null);
+        root.GetChanges().Should().Equal(
+            new DeferredCommandRequest(owner, due, new TestCommand()) { Cause = request },
+            new DeadlineRequest(owner, due, new TestDeadline(1)) { Cause = request });
+    }
+
+    [Fact]
+    public async Task AcceptDeadlineAsync_ForADeadlineWhoseRequestsAreStored_DoesNotReact() {
+        // A deadline delivered again after its reaction stored requests must not store them twice.
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
+        A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
+            .Returns(new ICommand[] { new TestCommand() }.ToAsyncEnumerable());
+        var request = new EventReference("saga-1", 2);
+        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None, new HashSet<EventReference> { request });
+
+        var commands = await root.AcceptDeadlineAsync(new TestDeadline(3), request, saga, TestContext.Current.CancellationToken);
+
+        commands.Should().BeEmpty();
+        root.GetChanges().Should().BeEmpty();
+        A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._)).MustNotHaveHappened();
+    }
 }

@@ -67,10 +67,11 @@ sealed class SchedulerRun(
         while (feed.TryRead(out var entry)) {
             switch (index.Apply(entry, out var requested)) {
                 case SchedulerChange.Requested when requested.Error is { } error:
-                    logger.LogUndeserializable(error, subscriptionId, requested.Request, requested.Request.StreamId, requested.Due);
+                    logger.LogUndeserializable(error, subscriptionId, requested.Kind == ScheduledKind.Deadline ? "deadline payload" : "command",
+                        requested.Request, requested.Request.StreamId, requested.Due);
                     break;
                 case SchedulerChange.Requested:
-                    logger.LogRequested(subscriptionId, requested.Request, requested.Request.StreamId, requested.Due, requested.Command!.GetType().Name);
+                    logger.LogRequested(subscriptionId, requested.Request, requested.Request.StreamId, requested.Due, requested.Payload!.GetType().Name);
                     break;
                 case SchedulerChange.Invalid:
                     logger.LogInvalidRequest(subscriptionId, entry.Source);

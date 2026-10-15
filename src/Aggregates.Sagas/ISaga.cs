@@ -7,7 +7,8 @@ namespace Aggregates.Sagas;
 /// <remarks>
 /// A class implements this interface once, and gets one subscription with its own checkpoint.
 /// Registration fails when a class implements it for several event types: the saga state is
-/// rebuilt from the events of <typeparamref name="TEvent"/> only.
+/// rebuilt from the events of <typeparamref name="TEvent"/> only. To receive deadlines as well,
+/// implement <see cref="ISaga{TSagaState,TEvent,TDeadline}"/> instead.
 /// </remarks>
 /// <typeparam name="TSagaState">The type of the state object maintained by the saga.</typeparam>
 /// <typeparam name="TEvent">
@@ -18,10 +19,43 @@ public interface ISaga<in TSagaState, in TEvent>
     where TSagaState : IState<TSagaState, TEvent> {
     /// <summary>
     /// Reacts to <paramref name="event"/> by producing zero or more commands to execute.
-    /// The caller is responsible for dispatching the produced commands.
+    /// The caller is responsible for dispatching the produced commands. Besides commands, the saga can
+    /// yield commands deferred with <see cref="DeferredCommandExtensions.DeferUntil"/>, and, when it
+    /// implements <see cref="ISaga{TSagaState,TEvent,TDeadline}"/>, deadlines requested with
+    /// <see cref="Deadline.At"/>.
     /// </summary>
     /// <param name="state">The saga state after applying <paramref name="event"/>.</param>
     /// <param name="event">The triggering event.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     IAsyncEnumerable<ICommand> ReactAsync(TSagaState state, TEvent @event, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// A saga that also receives the deadlines it requests with <see cref="Deadline.At"/>. It is a
+/// <see cref="ISaga{TSagaState,TEvent}"/> in every other respect: implement this interface instead of
+/// that one, once.
+/// </summary>
+/// <remarks>
+/// A deadline doesn't change the saga's state: <see cref="IState{TState,TEvent}.Apply"/> is not called,
+/// and nothing is stored for the deadline itself. The saga decides from its current state and the
+/// payload, and learns what happened from the events of the commands it produces. Delivery is at least
+/// once and can be late, and the state can lag behind the aggregates, so the saga recognises a
+/// deadline that no longer applies from its payload and its state, and ignores it.
+/// </remarks>
+/// <typeparam name="TSagaState">The type of the state object maintained by the saga.</typeparam>
+/// <typeparam name="TEvent">The type of events this saga reacts to.</typeparam>
+/// <typeparam name="TDeadline">
+/// The type of the deadline payloads this saga receives. Use a marker interface (or object) to receive
+/// several kinds of deadlines, and pattern matching in <see cref="ReactToDeadlineAsync"/>.
+/// </typeparam>
+public interface ISaga<in TSagaState, in TEvent, in TDeadline> : ISaga<TSagaState, TEvent>
+    where TSagaState : IState<TSagaState, TEvent> {
+    /// <summary>
+    /// Reacts to a deadline that is due by producing zero or more commands to execute: commands,
+    /// commands deferred with <see cref="DeferredCommandExtensions.DeferUntil"/>, and new deadlines.
+    /// </summary>
+    /// <param name="state">The current state of the saga.</param>
+    /// <param name="deadline">The payload the saga requested the deadline with.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    IAsyncEnumerable<ICommand> ReactToDeadlineAsync(TSagaState state, TDeadline deadline, CancellationToken cancellationToken = default);
 }
