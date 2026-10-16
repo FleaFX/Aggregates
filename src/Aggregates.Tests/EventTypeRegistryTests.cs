@@ -17,6 +17,16 @@ public sealed class ShippedV1ToShipped : IUpgradeEvent<ShippedV1, Shipped> {
     public Shipped Upgrade(ShippedV1 @event) => new(@event.OrderId);
 }
 
+/// An event type whose upgrader upgrades two types, so the first upgrade it offers may not be its own.
+[EventContract("Twice", @namespace: "Tests.Registry", eventUpgrader: typeof(TwiceUpgrader))]
+public sealed record TwiceV1(string OrderId);
+
+/// Upgrades a <see cref="TwiceV1"/> and a <see cref="ShippedV1"/> to a <see cref="Shipped"/>.
+public sealed class TwiceUpgrader : IUpgradeEvent<TwiceV1, Shipped>, IUpgradeEvent<ShippedV1, Shipped> {
+    public Shipped Upgrade(TwiceV1 @event) => new(@event.OrderId);
+    public Shipped Upgrade(ShippedV1 @event) => new(@event.OrderId);
+}
+
 /// An event type that no shipment handler receives.
 [EventContract("Other", @namespace: "Tests.Registry")]
 public sealed record OtherEvent;
@@ -24,7 +34,7 @@ public sealed record OtherEvent;
 /// A shipment event without an <see cref="EventContractAttribute"/>, stored under its short CLR name.
 public sealed record Packed(string OrderId) : IShipmentEvent;
 
-/// The first version of Delivered, whose upgrader sits on the current version.
+/// The first version of Delivered, whose upgrader wrongly sits on the current version.
 [EventContract("Delivered", 1, @namespace: "Tests.Registry")]
 public sealed record DeliveredV1(string OrderId);
 
@@ -38,15 +48,15 @@ public sealed class DeliveredV1ToV2 : IUpgradeEvent<DeliveredV1, DeliveredV2> {
 }
 
 /// The first version of Cancelled.
-[EventContract("Cancelled", 1, @namespace: "Tests.Registry")]
+[EventContract("Cancelled", 1, @namespace: "Tests.Registry", eventUpgrader: typeof(CancelledV1ToV2))]
 public sealed record CancelledV1(string OrderId);
 
 /// The second version of Cancelled.
-[EventContract("Cancelled", 2, @namespace: "Tests.Registry", eventUpgrader: typeof(CancelledV1ToV2))]
+[EventContract("Cancelled", 2, @namespace: "Tests.Registry", eventUpgrader: typeof(CancelledV2ToV3))]
 public sealed record CancelledV2(string OrderId);
 
 /// The current version of Cancelled, the only one a handler can receive directly.
-[EventContract("Cancelled", 3, @namespace: "Tests.Registry", eventUpgrader: typeof(CancelledV2ToV3))]
+[EventContract("Cancelled", 3, @namespace: "Tests.Registry")]
 public sealed record CancelledV3(string OrderId) : IShipmentEvent;
 
 /// Upgrades a <see cref="CancelledV1"/> to a <see cref="CancelledV2"/>.
@@ -98,6 +108,28 @@ public class EventTypeRegistryTests {
 
             attribute.EventUpgrader.Should().BeNull();
         }
+
+        [Fact]
+        public void Upgrade_OfNull_ReturnsNull() {
+            EventContractAttribute.Upgrade(null).Should().BeNull();
+        }
+
+        [Fact]
+        public void Upgrade_WithoutUpgrader_ReturnsTheSameInstance() {
+            var @event = new Shipped("o");
+
+            EventContractAttribute.Upgrade(@event).Should().BeSameAs(@event);
+        }
+
+        [Fact]
+        public void Upgrade_FollowsTheChainToTheLastVersion() {
+            EventContractAttribute.Upgrade(new CancelledV1("o")).Should().Be(new CancelledV3("o"));
+        }
+
+        [Fact]
+        public void Upgrade_StartsAtTheVersionOfTheEvent() {
+            EventContractAttribute.Upgrade(new CancelledV2("o")).Should().Be(new CancelledV3("o"));
+        }
     }
 
     public class GetTypeNames {
@@ -122,14 +154,6 @@ public class EventTypeRegistryTests {
 
             registry.GetTypeNames(typeof(IShipmentEvent))
                 .Should().Equal("Tests.Registry.Shipped@v2", "Tests.Registry.ShippedV1@v1");
-        }
-
-        [Fact]
-        public void GivenAnUpgraderOnTheNewType_IncludesTheOldVersion() {
-            var registry = EventTypeRegistry.FromTypes([typeof(DeliveredV1), typeof(DeliveredV2)]);
-
-            registry.GetTypeNames(typeof(IShipmentEvent))
-                .Should().Equal("Tests.Registry.Delivered@v1", "Tests.Registry.Delivered@v2");
         }
 
         [Fact]
@@ -164,23 +188,6 @@ public class EventTypeRegistryTests {
         }
 
         [Fact]
-        public void FromTypes_BehavesLikeFromAssemblies() {
-            var fromTypes = EventTypeRegistry.FromTypes([typeof(Shipped), typeof(ShippedV1)]);
-            var fromAssemblies = EventTypeRegistry.FromAssemblies(typeof(Shipped).Assembly);
-
-            fromTypes.GetTypeName(typeof(Shipped)).Should().Be("Tests.Registry.Shipped@v2");
-            fromAssemblies.GetTypeName(typeof(Shipped)).Should().Be("Tests.Registry.Shipped@v2");
-            fromTypes.GetTypeName(typeof(Packed)).Should().Be("Packed");
-            fromAssemblies.GetTypeName(typeof(Packed)).Should().Be("Packed");
-
-            fromTypes.TryGetType("Tests.Registry.Shipped@v2", out var fromTypesType).Should().BeTrue();
-            fromTypesType.Should().Be<Shipped>();
-            fromAssemblies.TryGetType("Tests.Registry.Shipped@v2", out var fromAssembliesType).Should().BeTrue();
-            fromAssembliesType.Should().Be<Shipped>();
-            fromAssemblies.TryGetType("Packed", out _).Should().BeFalse();
-        }
-
-        [Fact]
         public void GivenNoMatchingType_ReturnsNoNames() {
             var registry = EventTypeRegistry.FromTypes([typeof(OtherEvent)]);
 
@@ -189,5 +196,59 @@ public class EventTypeRegistryTests {
 
         static class One { public sealed record Duplicate(string OrderId) : IShipmentEvent; }
         static class Two { public sealed record Duplicate(string OrderId) : IShipmentEvent; }
+    }
+
+    public class Validation {
+        [Fact]
+        public void GivenAnUpgraderOnTheNewType_Throws() {
+            var act = () => EventTypeRegistry.FromTypes([typeof(DeliveredV1), typeof(DeliveredV2)]);
+
+            act.Should().Throw<InvalidOperationException>().Which.Message.Should()
+                .Contain("Aggregates.DeliveredV2: eventUpgrader DeliveredV1ToV2 implements IUpgradeEvent<DeliveredV1, DeliveredV2>");
+        }
+
+        [Fact]
+        public void GivenUpgradersOnTheOldTypes_DoesNotThrow() {
+            var act = () => EventTypeRegistry.FromTypes(
+                [typeof(Shipped), typeof(ShippedV1), typeof(CancelledV1), typeof(CancelledV2), typeof(CancelledV3)]);
+
+            act.Should().NotThrow();
+        }
+
+        [Fact]
+        public void GivenAnUpgraderWithTwoUpgrades_Throws() {
+            var act = () => EventTypeRegistry.FromTypes([typeof(TwiceV1)]);
+
+            var message = act.Should().Throw<InvalidOperationException>().Which.Message;
+            message.Should().Contain("Aggregates.TwiceV1: eventUpgrader TwiceUpgrader implements IUpgradeEvent<");
+            message.Should().Contain("IUpgradeEvent<TwiceV1, Shipped>");
+            message.Should().Contain("IUpgradeEvent<ShippedV1, Shipped>");
+        }
+
+        [Fact]
+        public void GivenSeveralMisconfiguredTypes_ReportsEveryOne() {
+            var act = () => EventTypeRegistry.FromTypes([typeof(DeliveredV1), typeof(DeliveredV2), typeof(TwiceV1)]);
+
+            var message = act.Should().Throw<InvalidOperationException>().Which.Message;
+            message.Should().Contain("Aggregates.DeliveredV2: eventUpgrader DeliveredV1ToV2 implements IUpgradeEvent<DeliveredV1, DeliveredV2>");
+            message.Should().Contain("Aggregates.TwiceV1: eventUpgrader TwiceUpgrader");
+            message.Should().NotContain("DeliveredV1: eventUpgrader");
+        }
+
+        [Fact]
+        public void GivenAnUpgradeCycle_DoesNotThrow() {
+            var act = () => EventTypeRegistry.FromTypes([typeof(CycleA), typeof(CycleB)]);
+
+            act.Should().NotThrow();
+        }
+
+        [Fact]
+        public void FromAssemblies_ChecksTheScannedTypes() {
+            var act = () => EventTypeRegistry.FromAssemblies(typeof(Shipped).Assembly);
+
+            var message = act.Should().Throw<InvalidOperationException>().Which.Message;
+            message.Should().Contain("Aggregates.DeliveredV2: eventUpgrader DeliveredV1ToV2 implements IUpgradeEvent<DeliveredV1, DeliveredV2>");
+            message.Should().Contain("Aggregates.TwiceV1: eventUpgrader TwiceUpgrader");
+        }
     }
 }

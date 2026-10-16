@@ -16,7 +16,9 @@ namespace Aggregates;
 /// </para>
 /// <para>
 /// Register all event type versions — current and historical — in the same registry so that
-/// old events stored under an earlier type name can still be looked up and deserialized.
+/// old events stored under an earlier type name can still be looked up and deserialized. The
+/// storage integrations upgrade them after <c>Deserialize</c> (see
+/// <see cref="EventContractAttribute.Upgrade"/>); building the registry checks every upgrader.
 /// </para>
 /// <para>
 /// Register the registry in the service collection to let subscriptions filter on event
@@ -46,11 +48,11 @@ public sealed class EventTypeRegistry {
     readonly IReadOnlyDictionary<string, Type> _byName;
     readonly IReadOnlyDictionary<Type, string> _byType;
     readonly IReadOnlyList<Type> _candidates;
-    readonly IReadOnlyDictionary<Type, Type[]> _upgradesTo;
+    readonly IReadOnlyDictionary<Type, Type> _upgradesTo;
 
     EventTypeRegistry(
         Dictionary<string, Type> byName, Dictionary<Type, string> byType,
-        IReadOnlyList<Type> candidates, IReadOnlyDictionary<Type, Type[]> upgradesTo) {
+        IReadOnlyList<Type> candidates, IReadOnlyDictionary<Type, Type> upgradesTo) {
         _byName = byName;
         _byType = byType;
         _candidates = candidates;
@@ -62,6 +64,7 @@ public sealed class EventTypeRegistry {
     /// <see cref="EventContractAttribute"/> and builds a registry from the results.
     /// </summary>
     /// <param name="assemblies">The assemblies to scan.</param>
+    /// <exception cref="InvalidOperationException">An upgrader does not implement IUpgradeEvent&lt;TOld, TNew&gt; once, with TOld the type it is attached to.</exception>
     public static EventTypeRegistry FromAssemblies(params Assembly[] assemblies) =>
         FromTypes([.. assemblies.SelectMany(a => a.GetTypes())]);
 
@@ -71,6 +74,7 @@ public sealed class EventTypeRegistry {
     /// <see cref="GetTypeNames"/> uses to decide which stored events a subscription can receive.
     /// </summary>
     /// <param name="types">The event types, current and historical.</param>
+    /// <exception cref="InvalidOperationException">An upgrader does not implement IUpgradeEvent&lt;TOld, TNew&gt; once, with TOld the type it is attached to.</exception>
     public static EventTypeRegistry FromTypes(params Type[] types) {
         var byName = new Dictionary<string, Type>();
         var byType = new Dictionary<Type, string>();
@@ -89,20 +93,27 @@ public sealed class EventTypeRegistry {
             .Distinct()
             .ToArray();
 
-        // Upgrade edges: the type carrying the attribute, and the upgrader's TOld, both lead to TNew.
-        var upgradesTo = new Dictionary<Type, HashSet<Type>>();
+        // Upgrade edges: an upgrader sits on the type it upgrades from. TryUpgrade takes the upgrader's
+        // first IUpgradeEvent, so anything but exactly one that accepts the type fails here, at startup,
+        // instead of on the first read of an old event.
+        var upgradesTo = new Dictionary<Type, Type>();
+        var errors = new List<string>();
         foreach (var type in candidates) {
             if (type.GetCustomAttribute<EventContractAttribute>()?.EventUpgrader is not { } upgrader)
                 continue;
-            foreach (var @interface in upgrader.GetInterfaces().Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IUpgradeEvent<,>))) {
-                var (oldType, newType) = (@interface.GetGenericArguments()[0], @interface.GetGenericArguments()[1]);
-                Add(type, newType);
-                Add(oldType, newType);
-            }
-        }
-        void Add(Type from, Type to) { if (!upgradesTo.TryGetValue(from, out var set)) upgradesTo[from] = set = []; set.Add(to); }
 
-        return new EventTypeRegistry(byName, byType, candidates, upgradesTo.ToDictionary(e => e.Key, e => e.Value.ToArray()));
+            var interfaces = upgrader.GetInterfaces().Where(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IUpgradeEvent<,>)).ToArray();
+            if (interfaces is [var single] && single.GetGenericArguments()[0].IsAssignableFrom(type))
+                upgradesTo[type] = single.GetGenericArguments()[1];
+            else
+                errors.Add($"- {type.FullName}: eventUpgrader {upgrader.Name} implements {string.Join(", ", interfaces.Select(i => $"IUpgradeEvent<{i.GetGenericArguments()[0].Name}, {i.GetGenericArguments()[1].Name}>"))}.");
+
+        }
+
+        if (errors.Count > 0)
+            throw new InvalidOperationException($"Misconfigured event upgraders; each must implement IUpgradeEvent<TOld, TNew> once, with TOld the type it is attached to:{Environment.NewLine}{string.Join(Environment.NewLine, errors)}");
+
+        return new EventTypeRegistry(byName, byType, candidates, upgradesTo);
     }
 
     /// <summary>
@@ -135,8 +146,7 @@ public sealed class EventTypeRegistry {
             if (target.IsAssignableFrom(current))
                 return true;
             if (_upgradesTo.TryGetValue(current, out var next))
-                foreach (var upgraded in next)
-                    pending.Push(upgraded);
+                pending.Push(next);
         }
         return false;
     }

@@ -24,6 +24,9 @@ public static class ServiceCollectionExtensions {
         if (options.Deserialize is null)
             throw new InvalidOperationException($"{nameof(MsspOptions)}.{nameof(MsspOptions.Deserialize)} must be configured.");
 
+        var deserialize = options.Deserialize;
+        options.Deserialize = (type, data) => EventContractAttribute.Upgrade(deserialize(type, data));
+
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton<MsspCommitHandler>();
         builder.Services.AddSingleton<CommitDelegate>(sp => sp.GetRequiredService<MsspCommitHandler>().CommitAsync);
