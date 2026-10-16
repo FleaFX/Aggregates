@@ -88,5 +88,5 @@ public sealed class SchedulerActivation<THandler>(IScheduledStore store, IEnumer
 
     SubscriptionRegistration Registration => _registration.Value
         ?? throw new InvalidOperationException(
-            $"{typeof(THandler).Name} defers a command, but it has no subscription, so its deferred commands would never run. A saga needs a resolver.");
+            $"{typeof(THandler).Name} defers a command, but it has no subscription, so its deferred commands would never run. Register it with AddSagas or AddPolicies.");
 }

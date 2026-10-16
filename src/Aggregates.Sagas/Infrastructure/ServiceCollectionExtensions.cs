@@ -23,10 +23,9 @@ public static class ServiceCollectionExtensions {
     /// Use <see cref="SagasOptions.ScanTypes"/> instead to register an explicit set of types.
     /// </param>
     /// <remarks>
-    /// Every saga class with a resolver gets one subscription, with the string form of its
+    /// Every saga class gets one subscription, with the string form of its
     /// <see cref="SagaContractAttribute"/> as subscription id (or its full type name when it has none).
-    /// The resolver registered for the saga with <see cref="SagasOptions.WithResolver{TSaga,TEvent}(ISagaIdResolver{TEvent})"/>
-    /// takes precedence over the one registered for its event type.
+    /// The subscription routes each event with the saga's own <see cref="ISaga{TSagaState,TEvent}.Correlate"/>.
     /// Each saga's hosted service also runs its <see cref="Scheduler"/>, which waits until the saga
     /// defers its first command with <see cref="DeferredCommandExtensions.DeferUntil"/>.
     /// A saga that implements <see cref="ISaga{TSagaState,TEvent,TDeadline}"/> receives the deadlines it
@@ -34,8 +33,8 @@ public static class ServiceCollectionExtensions {
     /// </remarks>
     /// <exception cref="InvalidOperationException">
     /// A class implements <see cref="ISaga{TSagaState,TEvent}"/> more than once, implements
-    /// <see cref="ISaga{TSagaState,TEvent,TDeadline}"/> more than once, two classes share a
-    /// subscription id, or a saga resolver doesn't match a scanned saga.
+    /// <see cref="ISaga{TSagaState,TEvent,TDeadline}"/> more than once, or two classes share a
+    /// subscription id.
     /// </exception>
     public static ISagasBuilder AddSagas(this IAggregatesBuilder builder, Action<SagasOptions>? configure = null) {
         var options = new SagasOptions();
@@ -68,12 +67,7 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton<Scheduler>();
         builder.Services.TryAddSingleton(typeof(SchedulerActivation<>));
 
-        // ISagaIdResolver<TEvent> registrations, shared by every saga on TEvent
-        foreach (var (eventType, resolver) in options.Resolvers)
-            builder.Services.TryAdd(ServiceDescriptor.Singleton(typeof(ISagaIdResolver<>).MakeGenericType(eventType), resolver));
-
         var sagas = SubscriptionRegistrations.FindHandlers(options.Types, typeof(ISaga<,>));
-        var sagaResolvers = SagaResolvers(options, sagas);
         var registeredSagas = new List<(Type StateType, Type EventType, Type SagaType)>();
 
         foreach (var (sagaType, sagaInterface) in sagas) {
@@ -90,12 +84,7 @@ public static class ServiceCollectionExtensions {
             builder.Services.TryAddScoped(sagaType);
             registeredSagas.Add((stateType, eventType, sagaType));
 
-            // Subscription hosted service — one per saga class that has a resolver
-            var resolverType = typeof(ISagaIdResolver<>).MakeGenericType(eventType);
-            var sagaResolver = sagaResolvers.GetValueOrDefault(sagaType);
-            if (sagaResolver is null && !builder.Services.Any(sd => sd.ServiceType == resolverType))
-                continue;
-
+            // Subscription hosted service — one per saga class
             var contract = sagaType.GetCustomAttribute<SagaContractAttribute>();
             var registration = new SubscriptionRegistration(
                 SubscriptionRegistrations.GetSubscriptionId(sagaType, contract),
@@ -112,7 +101,7 @@ public static class ServiceCollectionExtensions {
             // One instance per saga class: the hosted service, which also replays its parked messages
             var serviceType = typeof(SagaSubscriptionService<,,>).MakeGenericType(sagaType, stateType, eventType);
             builder.Services.AddKeyedSingleton(serviceType, registration.SubscriptionId, (sp, _) =>
-                ActivatorUtilities.CreateInstance(sp, serviceType, registration, sagaResolver ?? sp.GetRequiredService(resolverType)));
+                ActivatorUtilities.CreateInstance(sp, serviceType, registration));
             builder.Services.AddSingleton(typeof(IHostedService), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
             builder.Services.AddSingleton(typeof(IReplayableSubscription), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
         }
@@ -128,27 +117,6 @@ public static class ServiceCollectionExtensions {
     public static ISagasBuilder UseSagaRepository(this ISagasBuilder builder, Type openGenericRepositoryType) {
         builder.Services.TryAddScoped(typeof(ISagaRepository<,>), openGenericRepositoryType);
         return builder;
-    }
-
-    // The resolvers registered per saga class, checked against the scanned sagas.
-    static Dictionary<Type, object> SagaResolvers(SagasOptions options, IReadOnlyList<(Type HandlerType, Type HandlerInterface)> sagas) {
-        var resolvers = new Dictionary<Type, object>();
-        foreach (var (sagaType, eventType, resolver) in options.SagaResolvers) {
-            var saga = sagas.FirstOrDefault(s => s.HandlerType == sagaType);
-            if (saga.HandlerType is null)
-                throw new InvalidOperationException(
-                    $"A resolver is registered for {sagaType.FullName}, which is not one of the scanned sagas.");
-
-            var sagaEventType = saga.HandlerInterface.GetGenericArguments()[1];
-            if (!typeof(ISagaIdResolver<>).MakeGenericType(sagaEventType).IsInstanceOfType(resolver))
-                throw new InvalidOperationException(
-                    $"The resolver registered for {sagaType.FullName} resolves {eventType.Name}, " +
-                    $"but the saga reacts to {sagaEventType.Name}.");
-
-            if (!resolvers.TryAdd(sagaType, resolver))
-                throw new InvalidOperationException($"More than one resolver is registered for {sagaType.FullName}.");
-        }
-        return resolvers;
     }
 }
 

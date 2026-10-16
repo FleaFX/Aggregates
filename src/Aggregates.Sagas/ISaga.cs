@@ -13,10 +13,28 @@ namespace Aggregates.Sagas;
 /// <typeparam name="TSagaState">The type of the state object maintained by the saga.</typeparam>
 /// <typeparam name="TEvent">
 /// The type of events this saga reacts to. Use a marker interface to react to multiple event types,
-/// and pattern matching in <see cref="IState{TState,TEvent}.Apply"/> and <see cref="ReactAsync"/>.
+/// and pattern matching in <see cref="Correlate"/>, <see cref="IState{TState,TEvent}.Apply"/> and <see cref="ReactAsync"/>.
 /// </typeparam>
 public interface ISaga<in TSagaState, in TEvent>
     where TSagaState : IState<TSagaState, TEvent> {
+    /// <summary>
+    /// Returns the identifier of each saga instance that reacts to <paramref name="event"/>: the names of
+    /// their saga streams. Returns an empty sequence when no instance reacts to it.
+    /// </summary>
+    /// <remarks>
+    /// Called once per event, on an instance resolved from a fresh DI scope, before any saga instance
+    /// handles it. A failure is retried, and the event parked like a failing reaction. Derive the
+    /// identifiers from the event and its metadata only, so that a redelivered or replayed event reaches
+    /// the same instances. The identifiers belong to this saga: two sagas that return the same identifier
+    /// share a saga stream, and an aggregate's stream is not a saga stream.
+    /// </remarks>
+    /// <param name="event">The incoming event.</param>
+    /// <param name="metadata">
+    /// The metadata stored with <paramref name="event"/>, for identifiers that are carried in metadata
+    /// rather than in the event itself.
+    /// </param>
+    IEnumerable<AggregateIdentifier> Correlate(TEvent @event, EventMetadata metadata);
+
     /// <summary>
     /// Reacts to <paramref name="event"/> by producing zero or more commands to execute.
     /// The caller is responsible for dispatching the produced commands. Besides commands, the saga can

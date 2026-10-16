@@ -2,7 +2,7 @@
 
 [![Build & test](https://github.com/FleaFX/aggregates/actions/workflows/build.yml/badge.svg)](https://github.com/FleaFX/aggregates/actions/workflows/build.yml)
 
-> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.14`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
+> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.15`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
 
 This library provides all the boilerplate code needed to do event sourcing, leaving you with just the core functionality of your domain to write.
 
@@ -137,11 +137,14 @@ A saga is a stateful process manager that reacts to a stream of domain events by
 
 ### ISaga
 
-Implement `ISaga<TSagaState, TEvent>` to define the reaction logic. The saga class is pure — it receives the current state and the triggering event, and yields zero or more commands:
+Implement `ISaga<TSagaState, TEvent>` to define the routing and the reaction logic. `Correlate` returns the saga instance(s) an event belongs to (their ids are the names of their saga streams); `ReactAsync` receives the state of such an instance before the triggering event, and the event, and yields zero or more commands:
 
 ```csharp
 [SagaContract("OrderFulfillment")]
 class OrderFulfillmentSaga : ISaga<OrderFulfillmentState, IOrderEvent> {
+
+    public IEnumerable<AggregateIdentifier> Correlate(IOrderEvent @event, EventMetadata metadata) =>
+        [new AggregateIdentifier($"order-fulfillment-{@event.OrderId}")];
 
     public async IAsyncEnumerable<ICommand> ReactAsync(
         OrderFulfillmentState state,
@@ -172,7 +175,7 @@ record OrderFulfillmentState(bool IsShipped) : IState<OrderFulfillmentState, IOr
 Decorate your saga class with `[SagaContract]` to assign it a stable identity for checkpointing and versioning:
 
 ```csharp
-[SagaContract("OrderFulfillment", version: 1, namespace: "Orders", startFromEnd: false)]
+[SagaContract("OrderFulfillment", version: 1, @namespace: "Orders", startFromEnd: false)]
 class OrderFulfillmentSaga : ISaga<OrderFulfillmentState, IOrderEvent> { ... }
 ```
 
@@ -188,11 +191,7 @@ services
 
 services
     .AddAggregates()
-    .AddSagas(o => o
-        .ScanAssemblies(typeof(OrderFulfillmentSaga).Assembly)
-        .WithResolver<IOrderEvent>(e => e is OrderPlaced p
-            ? [new AggregateIdentifier(p.OrderId)]
-            : []))
+    .AddSagas(o => o.ScanAssemblies(typeof(OrderFulfillmentSaga).Assembly))
     .AddKurrentDb();
 ```
 
@@ -204,15 +203,11 @@ services
 
 services
     .AddAggregates()
-    .AddSagas(o => o
-        .ScanAssemblies(typeof(OrderFulfillmentSaga).Assembly)
-        .WithResolver<IOrderEvent>(e => e is OrderPlaced p
-            ? [new AggregateIdentifier(p.OrderId)]
-            : []))
+    .AddSagas(o => o.ScanAssemblies(typeof(OrderFulfillmentSaga).Assembly))
     .AddMssp();
 ```
 
-`WithResolver` determines which saga instance(s) should handle a given event. The subscription hosted service is registered automatically for every saga that has a resolver. When several sagas react to the same event type, give each its own resolver with `WithResolver<TSaga, TEvent>(...)`.
+Every saga in the scanned assemblies gets a subscription hosted service, which routes each event with the saga's `Correlate`. Give each saga its own id prefix: two sagas that return the same id share a saga stream.
 
 ---
 

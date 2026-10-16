@@ -19,10 +19,7 @@ public class ServiceCollectionExtensionsTests {
         public void ScanTypes_RegistersOnlyTheGivenSagas() {
             var services = new ServiceCollection();
 
-            services.AddAggregates().AddSagas(o => o
-                .ScanTypes(typeof(TestSaga))
-                .WithResolver<TestEvent>(_ => [])
-                .WithResolver<OtherTestEvent>(_ => []));
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(TestSaga)));
 
             services.Should().ContainSingle(d => d.ServiceType == typeof(TestSaga));
             services.Should().NotContain(d => d.ServiceType == typeof(OtherTestSaga));
@@ -33,7 +30,7 @@ public class ServiceCollectionExtensionsTests {
         public void RegistersTheSagaAsItself_NotAsItsInterface() {
             var services = new ServiceCollection();
 
-            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(TestSaga)).WithResolver<TestEvent>(_ => []));
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(TestSaga)));
 
             services.Should().NotContain(d => d.ServiceType == typeof(ISaga<TestSagaState, TestEvent>));
         }
@@ -42,7 +39,7 @@ public class ServiceCollectionExtensionsTests {
         public void RegistersTheSchedulerAndActivation() {
             var services = new ServiceCollection();
 
-            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(TestSaga)).WithResolver<TestEvent>(_ => []));
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(TestSaga)));
 
             services.Should().ContainSingle(d => d.ServiceType == typeof(Scheduler));
             services.Should().ContainSingle(d => d.ServiceType == typeof(SchedulerActivation<>));
@@ -52,9 +49,7 @@ public class ServiceCollectionExtensionsTests {
         public void ScanTypes_SameTypeTwice_StartsOneSubscription() {
             var services = new ServiceCollection();
 
-            services.AddAggregates().AddSagas(o => o
-                .ScanTypes(typeof(TestSaga), typeof(TestSaga))
-                .WithResolver<TestEvent>(_ => []));
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(TestSaga), typeof(TestSaga)));
 
             services.Should().ContainSingle(d => d.ServiceType == typeof(IHostedService));
         }
@@ -64,7 +59,7 @@ public class ServiceCollectionExtensionsTests {
             var services = new ServiceCollection();
             var builder = services.AddAggregates();
 
-            builder.AddSagas(o => o.ScanTypes(typeof(TestSaga)).WithResolver<TestEvent>(_ => []));
+            builder.AddSagas(o => o.ScanTypes(typeof(TestSaga)));
             builder.AddSagas(o => o.ScanTypes(typeof(TestSaga)));
 
             services.Should().ContainSingle(d => d.ServiceType == typeof(IHostedService));
@@ -75,9 +70,7 @@ public class ServiceCollectionExtensionsTests {
         public void ScanTypes_IgnoresTypesThatAreNotSagas() {
             var services = new ServiceCollection();
 
-            services.AddAggregates().AddSagas(o => o
-                .ScanTypes(typeof(string))
-                .WithResolver<TestEvent>(_ => []));
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(string)));
 
             services.Should().NotContain(d => d.ServiceType == typeof(IHostedService));
         }
@@ -91,23 +84,14 @@ public class ServiceCollectionExtensionsTests {
         }
 
         [Fact]
-        public void GivenNoResolver_RegistersTheSaga_WithoutSubscription() {
+        public void RegistersTheSaga_AndStartsItsSubscription() {
             var services = new ServiceCollection();
 
             services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(TestSaga)));
 
             services.Should().ContainSingle(d => d.ServiceType == typeof(TestSaga));
-            services.Should().NotContain(d => d.ServiceType == typeof(IHostedService));
-            Registrations(services).Should().BeEmpty();
-        }
-
-        [Fact]
-        public void GivenOnlyASagaResolver_StartsASubscription() {
-            var services = new ServiceCollection();
-
-            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(TestSaga)).WithResolver<TestSaga, TestEvent>(_ => []));
-
             services.Should().ContainSingle(d => d.ServiceType == typeof(IHostedService));
+            Registrations(services).Should().ContainSingle();
         }
 
         [Theory]
@@ -117,7 +101,7 @@ public class ServiceCollectionExtensionsTests {
         public void SubscriptionId_IsTheContract_OrTheFullTypeName(Type sagaType, string expectedId) {
             var services = new ServiceCollection();
 
-            services.AddAggregates().AddSagas(o => o.ScanTypes(sagaType).WithResolver<TestEvent>(_ => []));
+            services.AddAggregates().AddSagas(o => o.ScanTypes(sagaType));
 
             Registrations(services).Should().ContainSingle().Which.SubscriptionId.Should().Be(expectedId);
         }
@@ -126,7 +110,7 @@ public class ServiceCollectionExtensionsTests {
         public void Registration_HasTheSagaEventTypeAndStartFromEnd() {
             var services = new ServiceCollection();
 
-            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(FullContractSaga)).WithResolver<TestEvent>(_ => []));
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(FullContractSaga)));
 
             Registrations(services).Should().ContainSingle().Which.Should().BeEquivalentTo(
                 new SubscriptionRegistration("Orders.Fulfillment@v2", typeof(FullContractSaga), typeof(TestEvent), StartFromEnd: true,
@@ -137,7 +121,7 @@ public class ServiceCollectionExtensionsTests {
         public void GivenAVersion1Contract_RegistersNoPredecessors() {
             var services = new ServiceCollection();
 
-            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(PlainContractSaga)).WithResolver<TestEvent>(_ => []));
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(PlainContractSaga)));
 
             Registrations(services).Should().ContainSingle().Which.Predecessors.Should().BeEmpty();
         }
@@ -153,7 +137,7 @@ public class ServiceCollectionExtensionsTests {
         public void GivenASagaWithDeadlines_StartsItsSubscription() {
             var services = new ServiceCollection();
 
-            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(DeadlineTestSaga)).WithResolver<TestEvent>(_ => []));
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(DeadlineTestSaga)));
 
             services.Should().ContainSingle(d => d.ServiceType == typeof(DeadlineTestSaga));
             services.Should().ContainSingle(d => d.ServiceType == typeof(IHostedService));
@@ -172,8 +156,7 @@ public class ServiceCollectionExtensionsTests {
         [Fact]
         public void GivenTwoClassesWithTheSameContract_Throws() {
             var add = () => new ServiceCollection().AddAggregates().AddSagas(o => o
-                .ScanTypes(typeof(PlainContractSaga), typeof(SameContractSaga))
-                .WithResolver<TestEvent>(_ => []));
+                .ScanTypes(typeof(PlainContractSaga), typeof(SameContractSaga)));
 
             add.Should().Throw<InvalidOperationException>().WithMessage("*'Fulfillment@v1'*");
         }
@@ -184,42 +167,14 @@ public class ServiceCollectionExtensionsTests {
             var builder = services.AddAggregates();
             builder.AddPolicies(o => o.ScanTypes(typeof(FulfillmentPolicy)));
 
-            var add = () => builder.AddSagas(o => o.ScanTypes(typeof(PlainContractSaga)).WithResolver<TestEvent>(_ => []));
+            var add = () => builder.AddSagas(o => o.ScanTypes(typeof(PlainContractSaga)));
 
             add.Should().Throw<InvalidOperationException>()
                 .WithMessage($"*'Fulfillment@v1'*{typeof(FulfillmentPolicy).FullName}*{typeof(PlainContractSaga).FullName}*");
         }
 
         [Fact]
-        public void GivenAResolverForASagaThatIsNotScanned_Throws() {
-            var add = () => new ServiceCollection().AddAggregates().AddSagas(o => o
-                .ScanTypes(typeof(TestSaga))
-                .WithResolver<PlainContractSaga, TestEvent>(_ => []));
-
-            add.Should().Throw<InvalidOperationException>().WithMessage($"*{typeof(PlainContractSaga).FullName}*not one of the scanned sagas*");
-        }
-
-        [Fact]
-        public void GivenASagaResolverForAnotherEventType_Throws() {
-            var add = () => new ServiceCollection().AddAggregates().AddSagas(o => o
-                .ScanTypes(typeof(TestSaga))
-                .WithResolver<TestSaga, OtherTestEvent>(_ => []));
-
-            add.Should().Throw<InvalidOperationException>().WithMessage("*resolves OtherTestEvent*reacts to TestEvent*");
-        }
-
-        [Fact]
-        public void GivenTwoResolversForOneSaga_Throws() {
-            var add = () => new ServiceCollection().AddAggregates().AddSagas(o => o
-                .ScanTypes(typeof(TestSaga))
-                .WithResolver<TestSaga, TestEvent>(_ => [])
-                .WithResolver<TestSaga, TestEvent>(_ => []));
-
-            add.Should().Throw<InvalidOperationException>().WithMessage($"*More than one resolver*{typeof(TestSaga).FullName}*");
-        }
-
-        [Fact]
-        public async Task GivenTwoSagasOnTheSameEvent_EachRoutesItWithItsOwnResolver() {
+        public async Task GivenTwoSagasOnTheSameEvent_EachCorrelatesItToItsOwnIds() {
             var token = TestContext.Current.CancellationToken;
             var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new TestEvent(1)));
             var firstRepository = EmptyRepository<FirstState>();
@@ -234,11 +189,7 @@ public class ServiceCollectionExtensionsTests {
                 .AddSingleton(typeof(SchedulerActivation<>))
                 .AddSingleton(firstRepository)
                 .AddSingleton(secondRepository);
-            services.AddAggregates().AddSagas(o => o
-                .ScanTypes(typeof(FirstSaga), typeof(SecondSaga))
-                .WithResolver<TestEvent>(_ => [new AggregateIdentifier("shared-1")])
-                .WithResolver<FirstSaga, TestEvent>(e => [new AggregateIdentifier($"first-{e.Value}")])
-                .WithResolver<SecondSaga, TestEvent>(e => [new AggregateIdentifier($"second-{e.Value}")]));
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(FirstSaga), typeof(SecondSaga)));
             await using var provider = services.BuildServiceProvider();
             var probe = provider.GetRequiredService<HandlerProbe>();
             var hostedServices = provider.GetServices<IHostedService>().ToArray();
@@ -255,6 +206,33 @@ public class ServiceCollectionExtensionsTests {
             probe.Count<SecondSaga>().Should().Be(1);
             LoadedSagaIds(firstRepository).Should().Equal(new AggregateIdentifier("first-1"));
             LoadedSagaIds(secondRepository).Should().Equal(new AggregateIdentifier("second-1"));
+        }
+
+        [Fact]
+        public async Task Correlate_RunsOnASagaFromAFreshScope_SoItCanUseScopedDependencies() {
+            var token = TestContext.Current.CancellationToken;
+            var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new TestEvent(1)));
+            var repository = EmptyRepository<TestSagaState>();
+            var services = new ServiceCollection()
+                .AddLogging()
+                .AddScoped<ScopedPrefix>()
+                .AddSingleton<ISubscriptionFactory>(factory)
+                .AddSingleton(A.Fake<ICheckpointStore>())
+                .AddSingleton<SagaCommitDelegate>(_ => ValueTask.CompletedTask)
+                .AddSingleton(A.Fake<IScheduledStore>())
+                .AddSingleton(typeof(SchedulerActivation<>))
+                .AddSingleton(repository);
+            services.AddAggregates().AddSagas(o => o.ScanTypes(typeof(ScopedSaga)));
+            await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+            var hostedServices = provider.GetServices<IHostedService>().ToArray();
+
+            foreach (var hostedService in hostedServices)
+                await hostedService.StartAsync(token);
+            await Eventually.UntilAsync(() => LoadedSagaIds(repository).Any(), "the saga's repository is loaded");
+            foreach (var hostedService in hostedServices)
+                await hostedService.StopAsync(token);
+
+            LoadedSagaIds(repository).Should().Equal(new AggregateIdentifier("scoped-1"));
         }
 
         static ISagaRepository<TState, TestEvent> EmptyRepository<TState>() where TState : IState<TState, TestEvent> {
@@ -311,8 +289,7 @@ public class ServiceCollectionExtensionsTests {
             var services = new ServiceCollection();
 
             services.AddAggregates().AddSagas(o => o
-                .ScanTypes(typeof(BlockingSaga), typeof(PlainContractSaga))
-                .WithResolver<TestEvent>(_ => []));
+                .ScanTypes(typeof(BlockingSaga), typeof(PlainContractSaga)));
 
             Registrations(services).Should().ContainSingle(r => r.SubscriptionId == "Outbox@v1")
                 .Which.ErrorMode.Should().Be(SubscriptionErrorMode.Block);
@@ -325,8 +302,7 @@ public class ServiceCollectionExtensionsTests {
             var services = new ServiceCollection();
 
             services.AddAggregates().AddSagas(o => o
-                .ScanTypes(typeof(BlockingSaga), typeof(PlainContractSaga))
-                .WithResolver<TestEvent>(_ => []));
+                .ScanTypes(typeof(BlockingSaga), typeof(PlainContractSaga)));
 
             services.Count(d => d.ServiceType == typeof(IReplayableSubscription)).Should().Be(2);
             services.Count(d => d.ServiceType == typeof(IHostedService)).Should().Be(2);
@@ -343,8 +319,11 @@ public class ServiceCollectionExtensionsTests {
             public SecondState Apply(TestEvent @event) => this;
         }
 
-        abstract class ProbeSaga<TState>(HandlerProbe probe) : ISaga<TState, TestEvent>
+        abstract class ProbeSaga<TState>(HandlerProbe probe, string prefix) : ISaga<TState, TestEvent>
             where TState : IState<TState, TestEvent> {
+            public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) =>
+                [new AggregateIdentifier($"{prefix}-{@event.Value}")];
+
             public async IAsyncEnumerable<ICommand> ReactAsync(TState state, TestEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
                 probe.Record(this, @event);
                 yield break;
@@ -352,37 +331,62 @@ public class ServiceCollectionExtensionsTests {
         }
 
         [SagaContract("First")]
-        sealed class FirstSaga(HandlerProbe probe) : ProbeSaga<FirstState>(probe);
+        sealed class FirstSaga(HandlerProbe probe) : ProbeSaga<FirstState>(probe, "first");
 
         [SagaContract("Second")]
-        sealed class SecondSaga(HandlerProbe probe) : ProbeSaga<SecondState>(probe);
+        sealed class SecondSaga(HandlerProbe probe) : ProbeSaga<SecondState>(probe, "second");
+
+        class ScopedPrefix {
+            public string Value => "scoped";
+        }
+
+        [SagaContract("Scoped")]
+        sealed class ScopedSaga(ScopedPrefix prefix) : ISaga<TestSagaState, TestEvent> {
+            public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) =>
+                [new AggregateIdentifier($"{prefix.Value}-{@event.Value}")];
+
+            public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
+                AsyncEnumerable.Empty<ICommand>();
+        }
 
         [SagaContract("Fulfillment")]
         sealed class PlainContractSaga : ISaga<TestSagaState, TestEvent> {
+            public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) => [];
+
             public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
                 AsyncEnumerable.Empty<ICommand>();
         }
 
         [SagaContract("Fulfillment")]
         sealed class SameContractSaga : ISaga<TestSagaState, TestEvent> {
+            public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) => [];
+
             public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
                 AsyncEnumerable.Empty<ICommand>();
         }
 
         [SagaContract("Fulfillment", version: 2, @namespace: "Orders", startFromEnd: true)]
         sealed class FullContractSaga : ISaga<TestSagaState, TestEvent> {
+            public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) => [];
+
             public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
                 AsyncEnumerable.Empty<ICommand>();
         }
 
         [SagaContract("Outbox", onError: SubscriptionErrorMode.Block)]
         sealed class BlockingSaga : ISaga<TestSagaState, TestEvent> {
+            public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) => [];
+
             public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
                 AsyncEnumerable.Empty<ICommand>();
         }
 
         [SagaContract("Double")]
         sealed class DoubleSaga : ISaga<TestSagaState, TestEvent>, ISaga<OtherTestSagaState, OtherTestEvent> {
+            public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) => [];
+
+            public IEnumerable<AggregateIdentifier> Correlate(OtherTestEvent @event, EventMetadata metadata) => [];
+
             public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
                 AsyncEnumerable.Empty<ICommand>();
 
@@ -392,6 +396,8 @@ public class ServiceCollectionExtensionsTests {
 
         [SagaContract("TwoDeadlines")]
         sealed class TwoDeadlinesSaga : ISaga<TestSagaState, TestEvent, TestDeadline>, ISaga<TestSagaState, TestEvent, string> {
+            public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) => [];
+
             public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
                 AsyncEnumerable.Empty<ICommand>();
 

@@ -52,12 +52,8 @@ public class EmbeddedMsspHostingTests(ITestOutputHelper output) {
                 aggregates.AddPolicies(o => o.ScanTypes(handler)).AddMssp();
                 break;
             default:
-                // Like ScenarioHandlers' own registration: a saga that resolves to the aggregate's
-                // own stream parks the event, because the aggregate stream is not a saga stream.
-                aggregates.AddSagas(o => o
-                    .ScanTypes(handler)
-                    .WithResolver<IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]))
-                    .AddMssp();
+                // ProbeSaga correlates each order to its own saga stream (saga-{OrderId}), not to the aggregate's stream.
+                aggregates.AddSagas(o => o.ScanTypes(handler)).AddMssp();
                 break;
         }
         if (!storeRegisteredFirst)

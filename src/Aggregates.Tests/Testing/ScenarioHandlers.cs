@@ -133,27 +133,13 @@ static class ScenarioHandlers {
 
     /// <summary>
     /// Registers <paramref name="handlerTypes"/> as handlers of <paramref name="kind"/>. Each probe
-    /// saga gets its own resolver, so two probe sagas never share a saga stream: <see cref="Probe"/>
-    /// maps each order to the saga <c>saga-{OrderId}</c>, the others use their own prefix.
+    /// saga correlates an order to its own saga stream, so two probe sagas never share one:
+    /// <see cref="Probe"/> maps each order to the saga <c>saga-{OrderId}</c>, the others use their own prefix.
     /// </summary>
     public static TestHostOptions Handlers(this TestHostOptions options, HandlerKind kind, params Type[] handlerTypes) => kind switch {
         HandlerKind.Projection => options.Projections(handlerTypes),
         HandlerKind.Policy => options.Policies(handlerTypes),
-        _ => options.Sagas(s => handlerTypes.Aggregate(s.ScanTypes(handlerTypes), (sagas, sagaType) => OwnResolvers[sagaType](sagas)))
-    };
-
-    static readonly Dictionary<Type, Func<SagasOptions, SagasOptions>> OwnResolvers = new() {
-        [typeof(ProbeSaga)] = s => s.WithResolver<ProbeSaga, IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]),
-        [typeof(SecondProbeSaga)] = s => s.WithResolver<SecondProbeSaga, IOrderEvent>(e => [new AggregateIdentifier($"second-saga-{e.OrderId}")]),
-        [typeof(FromEndSaga)] = s => s.WithResolver<FromEndSaga, IOrderEvent>(e => [new AggregateIdentifier($"from-end-saga-{e.OrderId}")]),
-        // A version bump keeps the same saga stream, so the V2 and V3 sagas resolve like ProbeSaga.
-        [typeof(ProbeV2Saga)] = s => s.WithResolver<ProbeV2Saga, IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]),
-        [typeof(ProbeV3Saga)] = s => s.WithResolver<ProbeV3Saga, IOrderEvent>(e => [new AggregateIdentifier($"saga-{e.OrderId}")]),
-        // A saga reacts once per linked event, so a replay into ProbeSaga's streams would not react
-        // to events v1 already linked: the replay saga gets streams of its own.
-        [typeof(ReplayProbeV2Saga)] = s => s.WithResolver<ReplayProbeV2Saga, IOrderEvent>(e => [new AggregateIdentifier($"replay-saga-{e.OrderId}")]),
-        [typeof(FromEndBumpSaga)] = s => s.WithResolver<FromEndBumpSaga, IOrderEvent>(e => [new AggregateIdentifier($"from-end-bump-saga-{e.OrderId}")]),
-        [typeof(BlockingSaga)] = s => s.WithResolver<BlockingSaga, IOrderEvent>(e => [new AggregateIdentifier($"blocking-saga-{e.OrderId}")])
+        _ => options.Sagas(s => s.ScanTypes(handlerTypes))
     };
 
     static void Handle(HandlerProbe probe, object handler, IOrderEvent @event, EventMetadata? metadata = null) {
@@ -187,7 +173,9 @@ static class ScenarioHandlers {
         public ProbeSagaState Apply(IOrderEvent @event) => this with { Seen = Seen + 1 };
     }
 
-    abstract class SagaBase(HandlerProbe probe) : ISaga<ProbeSagaState, IOrderEvent> {
+    abstract class SagaBase(HandlerProbe probe, string prefix) : ISaga<ProbeSagaState, IOrderEvent> {
+        public IEnumerable<AggregateIdentifier> Correlate(IOrderEvent @event, EventMetadata metadata) => [new AggregateIdentifier($"{prefix}-{@event.OrderId}")];
+
         public async IAsyncEnumerable<ICommand> ReactAsync(ProbeSagaState state, IOrderEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
             Handle(probe, this, @event);
             yield break;
@@ -221,13 +209,13 @@ static class ScenarioHandlers {
     sealed class FromEndPolicy(HandlerProbe probe) : PolicyBase(probe);
 
     [SagaContract("Probe", @namespace: "IntegrationTests.Sagas")]
-    sealed class ProbeSaga(HandlerProbe probe) : SagaBase(probe);
+    sealed class ProbeSaga(HandlerProbe probe) : SagaBase(probe, "saga");
 
     [SagaContract("SecondProbe", @namespace: "IntegrationTests.Sagas")]
-    sealed class SecondProbeSaga(HandlerProbe probe) : SagaBase(probe);
+    sealed class SecondProbeSaga(HandlerProbe probe) : SagaBase(probe, "second-saga");
 
     [SagaContract("FromEndProbe", @namespace: "IntegrationTests.Sagas", startFromEnd: true)]
-    sealed class FromEndSaga(HandlerProbe probe) : SagaBase(probe);
+    sealed class FromEndSaga(HandlerProbe probe) : SagaBase(probe, "from-end-saga");
 
     [ProjectionContract("Probe", version: 2, @namespace: "IntegrationTests.Projections")]
     sealed class ProbeV2Projection(HandlerProbe probe) : ProjectionBase(probe);
@@ -253,17 +241,20 @@ static class ScenarioHandlers {
     [PolicyContract("Probe", version: 2, @namespace: "IntegrationTests.Policies", continueFrom: Aggregates.Subscriptions.ContinueFrom.None)]
     sealed class ReplayProbeV2Policy(HandlerProbe probe) : PolicyBase(probe);
 
+    // A version bump keeps the same saga stream, so the V2 and V3 sagas correlate like ProbeSaga.
     [SagaContract("Probe", version: 2, @namespace: "IntegrationTests.Sagas")]
-    sealed class ProbeV2Saga(HandlerProbe probe) : SagaBase(probe);
+    sealed class ProbeV2Saga(HandlerProbe probe) : SagaBase(probe, "saga");
 
     [SagaContract("Probe", version: 3, @namespace: "IntegrationTests.Sagas")]
-    sealed class ProbeV3Saga(HandlerProbe probe) : SagaBase(probe);
+    sealed class ProbeV3Saga(HandlerProbe probe) : SagaBase(probe, "saga");
 
     [SagaContract("FromEndBump", version: 2, @namespace: "IntegrationTests.Sagas", startFromEnd: true)]
-    sealed class FromEndBumpSaga(HandlerProbe probe) : SagaBase(probe);
+    sealed class FromEndBumpSaga(HandlerProbe probe) : SagaBase(probe, "from-end-bump-saga");
 
+    // A saga reacts once per linked event, so a replay into ProbeSaga's streams would not react
+    // to events v1 already linked: the replay saga gets streams of its own.
     [SagaContract("Probe", version: 2, @namespace: "IntegrationTests.Sagas", continueFrom: Aggregates.Subscriptions.ContinueFrom.None)]
-    sealed class ReplayProbeV2Saga(HandlerProbe probe) : SagaBase(probe);
+    sealed class ReplayProbeV2Saga(HandlerProbe probe) : SagaBase(probe, "replay-saga");
 
     [ProjectionContract("Blocking", @namespace: "IntegrationTests.Projections", onError: Aggregates.Subscriptions.SubscriptionErrorMode.Block)]
     sealed class BlockingProjection(HandlerProbe probe) : ProjectionBase(probe);
@@ -272,5 +263,5 @@ static class ScenarioHandlers {
     sealed class BlockingPolicy(HandlerProbe probe) : PolicyBase(probe);
 
     [SagaContract("Blocking", @namespace: "IntegrationTests.Sagas", onError: Aggregates.Subscriptions.SubscriptionErrorMode.Block)]
-    sealed class BlockingSaga(HandlerProbe probe) : SagaBase(probe);
+    sealed class BlockingSaga(HandlerProbe probe) : SagaBase(probe, "blocking-saga");
 }

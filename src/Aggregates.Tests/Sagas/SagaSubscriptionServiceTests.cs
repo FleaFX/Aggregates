@@ -16,14 +16,13 @@ public class SagaSubscriptionServiceTests {
     readonly IParkedMessageSink _parkedMessageSink = A.Fake<IParkedMessageSink>();
     readonly ISagaRepository<TestSagaState, TestEvent> _repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
     readonly ISaga<TestSagaState, TestEvent, TestDeadline> _saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
-    readonly ISagaIdResolver<TestEvent> _resolver = A.Fake<ISagaIdResolver<TestEvent>>();
     readonly FakeScheduledStore _scheduled = new() { Deserializer = (type, _) => type switch { "Test.Command@v1" => new TestCommand(), "Test.Deadline@v1" => new TestDeadline(1), _ => null } };
 
     // Park on the first failure, so the tests don't wait for retries.
     SubscriptionErrorHandlingOptions _errorOptions = new() { MaxRetries = 1 };
 
     public SagaSubscriptionServiceTests() {
-        A.CallTo(() => _resolver.Resolve(A<TestEvent>._, A<EventMetadata>._)).Returns([SagaId]);
+        A.CallTo(() => _saga.Correlate(A<TestEvent>._, A<EventMetadata>._)).Returns([SagaId]);
         A.CallTo(() => _repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
             .Returns(ValueTask.FromResult<SagaRoot<TestSagaState, TestEvent>?>(null));
         A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
@@ -59,8 +58,7 @@ public class SagaSubscriptionServiceTests {
                 new SubscriptionResubscribeOptions(), provider.GetRequiredService<IServiceScopeFactory>(), retryPolicy,
                 _parkedMessageSink, TimeProvider.System, NullLoggerFactory.Instance),
             new SchedulerActivation<ISaga<TestSagaState, TestEvent>>(_scheduled, [registration]),
-            registration,
-            _resolver);
+            registration);
     }
 
     // The repository is loaded once per saga id the event is handled for.
@@ -116,9 +114,9 @@ public class SagaSubscriptionServiceTests {
     }
 
     [Fact]
-    public async Task GivenResolverFails_ParksEvent_AndContinues() {
-        var failure = new InvalidOperationException("resolver failed");
-        A.CallTo(() => _resolver.Resolve(new TestEvent(3), A<EventMetadata>._)).Throws(failure);
+    public async Task GivenCorrelateFails_ParksEvent_AndContinues() {
+        var failure = new InvalidOperationException("correlate failed");
+        A.CallTo(() => _saga.Correlate(new TestEvent(3), A<EventMetadata>._)).Throws(failure);
         var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(5,
             position => new TestEvent((int)position)));
         using var service = BuildService(factory);
@@ -138,7 +136,7 @@ public class SagaSubscriptionServiceTests {
     public async Task GivenSecondSagaFails_DoesNotRunFirstSagaAgain() {
         _errorOptions = new SubscriptionErrorHandlingOptions { MaxRetries = 3, InitialDelay = TimeSpan.Zero, MaxDelay = TimeSpan.Zero };
         var secondSagaId = new AggregateIdentifier("saga-2");
-        A.CallTo(() => _resolver.Resolve(A<TestEvent>._, A<EventMetadata>._)).Returns([SagaId, secondSagaId]);
+        A.CallTo(() => _saga.Correlate(A<TestEvent>._, A<EventMetadata>._)).Returns([SagaId, secondSagaId]);
         HandledFor(secondSagaId).Throws(new InvalidOperationException("saga failed"));
         var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, position => new TestEvent((int)position)));
         using var service = BuildService(factory);
@@ -149,7 +147,7 @@ public class SagaSubscriptionServiceTests {
 
         HandledFor(secondSagaId).MustHaveHappened(3, Times.Exactly);
         HandledFor(SagaId).MustHaveHappenedOnceExactly();
-        A.CallTo(() => _resolver.Resolve(A<TestEvent>._, A<EventMetadata>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => _saga.Correlate(A<TestEvent>._, A<EventMetadata>._)).MustHaveHappenedOnceExactly();
     }
 
     [Fact]
@@ -222,7 +220,7 @@ public class SagaSubscriptionServiceTests {
     [Fact]
     public async Task HandleAsync_HandlesTheEventForEverySagaItResolvesTo() {
         var secondSagaId = new AggregateIdentifier("saga-2");
-        A.CallTo(() => _resolver.Resolve(A<TestEvent>._, A<EventMetadata>._)).Returns([SagaId, secondSagaId]);
+        A.CallTo(() => _saga.Correlate(A<TestEvent>._, A<EventMetadata>._)).Returns([SagaId, secondSagaId]);
         var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new TestEvent(1)));
         using var service = BuildService(factory);
 

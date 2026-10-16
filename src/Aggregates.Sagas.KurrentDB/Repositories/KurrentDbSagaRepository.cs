@@ -40,7 +40,7 @@ sealed class KurrentDbSagaRepository<TSagaState, TEvent>(KurrentDBClient client,
             if (entry.EventType != EventReference.LinkEventType)
                 throw new InvalidOperationException(
                     $"Stream '{sagaId}' is not a saga stream: it contains '{entry.EventType}' at revision {revision}. "
-                    + $"Saga streams only hold links and scheduled requests; does the resolver of {typeof(TEvent).Name} return an aggregate id?");
+                    + $"Saga streams only hold links and scheduled requests; does a saga on {typeof(TEvent).Name} correlate its events to an aggregate id?");
 
             if (!EventReference.TryParseLinkData(resolvedEvent.OriginalEvent.Data.Span, out var link))
                 throw new InvalidOperationException(

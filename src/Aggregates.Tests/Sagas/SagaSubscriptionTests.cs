@@ -16,9 +16,7 @@ public class SagaSubscriptionTests(ITestOutputHelper output) {
             .Commands(typeof(PlaceOrder))
             .Projections(typeof(PlacedProjection))
             .Policies(typeof(PlacedPolicy))
-            .Sagas(s => s
-                .ScanTypes(typeof(PlacedSaga))
-                .WithResolver<OrderPlaced>(e => [new AggregateIdentifier($"saga-{e.OrderId}")])));
+            .Sagas(s => s.ScanTypes(typeof(PlacedSaga))));
 
         await host.SendAsync(new PlaceOrder("order-1", "alice"));
 
@@ -41,6 +39,9 @@ public class SagaSubscriptionTests(ITestOutputHelper output) {
 
     [SagaContract("PlacedSaga", @namespace: "IntegrationTests")]
     sealed class PlacedSaga(HandlerProbe probe) : ISaga<PlacedState, OrderPlaced> {
+        public IEnumerable<AggregateIdentifier> Correlate(OrderPlaced @event, EventMetadata metadata) =>
+            [new AggregateIdentifier($"saga-{@event.OrderId}")];
+
         public async IAsyncEnumerable<ICommand> ReactAsync(PlacedState state, OrderPlaced @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
             probe.Record(this, @event);
             yield break;
