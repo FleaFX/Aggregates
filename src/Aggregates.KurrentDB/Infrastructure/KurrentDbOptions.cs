@@ -21,6 +21,7 @@ public sealed class KurrentDbOptions {
     /// <summary>
     /// Deserializes a KurrentDB-stored event back to a domain event.
     /// Returns <see langword="null"/> when the event type is unknown; the event is then skipped.
+    /// The integration upgrades the result with <see cref="EventContractAttribute.Upgrade"/>.
     /// </summary>
     public Func<string, ReadOnlyMemory<byte>, object?>? Deserialize { get; set; }
 

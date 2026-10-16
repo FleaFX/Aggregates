@@ -1,3 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
+
 namespace Aggregates;
 
 /// <summary>
@@ -18,7 +21,8 @@ public class EventContractAttribute : Attribute {
     /// <param name="version">The version of the event contract. Defaults to 1.</param>
     /// <param name="eventUpgrader">
     /// An optional type implementing <see cref="IUpgradeEvent{TOldVersion,TNewVersion}"/> that
-    /// upgrades a previous version of this event to the current version.
+    /// upgrades this version of the event to the next one: put it on the old version, with the
+    /// attributed type as <c>TOldVersion</c>. See <see cref="Upgrade"/>.
     /// </param>
     /// <param name="namespace">
     /// An optional namespace prepended to the contract name, separated by a dot.
@@ -62,6 +66,20 @@ public class EventContractAttribute : Attribute {
         if (_upgrader == null) return false;
         upgradedEvent = _upgrader(@event);
         return true;
+    }
+
+    /// <summary>
+    /// Upgrades <paramref name="event"/> with the upgrader on its type, then the result with the
+    /// upgrader on its type, and so on, until a type has none. The storage integrations apply this
+    /// to every event their <c>Deserialize</c> returns.
+    /// </summary>
+    /// <param name="event">A deserialized event, or <see langword="null"/>.</param>
+    /// <returns>The last version of the event, or <see langword="null"/> when <paramref name="event"/> is <see langword="null"/>.</returns>
+    [return: NotNullIfNotNull(nameof(@event))]
+    public static object? Upgrade(object? @event) {
+        while (@event?.GetType().GetCustomAttribute<EventContractAttribute>() is { } contract && contract.TryUpgrade(@event, out var upgraded))
+            @event = upgraded;
+        return @event;
     }
 
     /// <summary>

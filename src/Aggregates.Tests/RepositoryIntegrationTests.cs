@@ -22,4 +22,19 @@ public class RepositoryIntegrationTests(ITestOutputHelper output) {
         stream.Select(e => e.EventType).Should().Equal("IntegrationTests.OrderPlaced@v1", "IntegrationTests.OrderShipped@v1");
         host.Serialization.DeserializeMetadata(stream[0].Metadata).Should().Contain("customer", "alice");
     }
+
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task Repository_UpgradesOldEvents_BeforeApply(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        await using var host = await TestHost.StartAsync(store, output, o => o
+            .Events([.. Orders.EventTypes, typeof(OrderCreated)])
+            .Commands(typeof(PlaceOrder), typeof(ShipOrder)));
+
+        await store.AppendAsync(host.Serialization, "order-1", new OrderCreated("order-1"));
+        await host.SendAsync(new PlaceOrder("order-1", "alice"));
+        await host.SendAsync(new ShipOrder("order-1"));
+
+        var stream = (await store.ReadAllAsync()).Where(e => e.Stream == "order-1").ToList();
+        stream.Select(e => e.EventType).Should().Equal("IntegrationTests.OrderCreated@v1", "IntegrationTests.OrderShipped@v1");
+    }
 }

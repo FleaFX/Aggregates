@@ -126,21 +126,20 @@ public class EventTypeFilterTests(ITestOutputHelper output) {
         second.Probe.Events(handler).Should().Equal(new OrderPlaced("order-during", "bob"));
     }
 
-    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
-    public async Task OldVersionWithUpgrader_PassesTheFilter(Transport transport) {
+    [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
+    public async Task OldVersionWithUpgrader_ArrivesAsTheCurrentVersion(HandlerKind kind, Transport transport) {
         await using var store = await Stores.StartAsync(transport);
-        var handler = ScenarioHandlers.Probe(HandlerKind.Projection);
+        var handler = ScenarioHandlers.Probe(kind);
         await using var host = await TestHost.StartAsync(store, output, o => o
             .Events([.. Orders.EventTypes, typeof(OrderCreated)])
-            .Handlers(HandlerKind.Projection, handler));
+            .Handlers(kind, handler));
 
         await store.AppendAsync(host.Serialization, "order-1", new OrderCreated("order-1"));
 
-        var storedName = host.Serialization.TypeName(typeof(OrderCreated));
-        await Eventually.UntilAsync(
-            () => host.Probe.DeserializeCalls.TryGetValue(storedName, out var count) && count == 1,
-            "the stored version passes the filter");
+        await Eventually.UntilAsync(() => host.Probe.Count(handler) >= 1, "the handler sees the upgraded event");
         await Eventually.QuietAsync();
+
+        host.Probe.Events(handler).Should().Equal(new OrderPlaced("order-1", "unknown"));
     }
 
     static string ProbeCheckpoint(HandlerKind kind) =>
