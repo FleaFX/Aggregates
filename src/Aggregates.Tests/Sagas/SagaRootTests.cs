@@ -32,8 +32,8 @@ public class SagaRootTests {
     }
 
     [Fact]
-    public async Task AcceptAsync_CallsReactAsyncWithStateAfterApply() {
-        // ReactAsync must receive the state AFTER Apply, not the state before.
+    public async Task AcceptAsync_CallsReactAsyncWithStateBeforeApply() {
+        // ReactAsync receives the state BEFORE Apply; the root's state includes the event afterwards.
         TestSagaState? capturedState = null;
         var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
@@ -43,7 +43,24 @@ public class SagaRootTests {
 
         await root.AcceptAsync(new TestEvent(7), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
 
-        capturedState.Should().Be(new TestSagaState(7));
+        capturedState.Should().Be(new TestSagaState(0));
+        root.State.Should().Be(new TestSagaState(7));
+    }
+
+    [Fact]
+    public async Task AcceptAsync_InOneUnitOfWork_ReactsWithTheEarlierEventsApplied() {
+        var capturedStates = new List<TestSagaState?>();
+        var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
+        A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Invokes(call => capturedStates.Add(call.GetArgument<TestSagaState>(0)))
+            .Returns(AsyncEnumerable.Empty<ICommand>());
+        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+
+        await root.AcceptAsync(new TestEvent(3), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
+        await root.AcceptAsync(new TestEvent(4), new EventReference("stream-1", 1), saga, TestContext.Current.CancellationToken);
+
+        capturedStates.Should().Equal(new TestSagaState(0), new TestSagaState(3));
+        root.State.Should().Be(new TestSagaState(7));
     }
 
     [Fact]
