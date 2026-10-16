@@ -20,10 +20,10 @@ namespace Aggregates.Testing;
 /// A fresh embedded MSSP store in its own temporary directory, deleted on dispose.
 /// </summary>
 /// <remarks>
-/// The store is opened here rather than with MSSP's <c>services.AddMssp(...)</c>: that
-/// registration only provides a client once its hosted service has started, while the generic
-/// host constructs every hosted service, including the Aggregates subscription services that
-/// need the client, before starting any of them.
+/// The store is opened here because the tests write into it and read from it directly
+/// (<c>AppendAsync</c>, <c>CurrentPosition</c> and <c>SubscribeAsync</c> on the
+/// <see cref="EmbeddedMsspClient"/>), outside a host. For registration through
+/// <c>services.AddMssp(...)</c>, see <see cref="EmbeddedMsspHostingTests"/>.
 /// </remarks>
 sealed class MsspStoreFixture : IStoreFixture {
     readonly string _directory;
