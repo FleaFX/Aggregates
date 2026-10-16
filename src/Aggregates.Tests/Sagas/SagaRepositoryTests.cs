@@ -11,7 +11,7 @@ public class SagaRepositoryTests(ITestOutputHelper output) {
     [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
     public async Task GetAsync_RehydratesStateCommittedByHandler(Transport transport) {
         await using var store = await Stores.StartAsync(transport);
-        // No resolver, so no subscription: the saga is only driven through its handler here.
+        // The saga correlates no event, so its subscription leaves it alone: the saga is only driven through its handler here.
         await using var host = await TestHost.StartAsync(store, output, o => o
             .Events(Orders.EventTypes)
             .Sagas(s => s.ScanTypes(typeof(CountingSaga))));
@@ -52,6 +52,8 @@ public class SagaRepositoryTests(ITestOutputHelper output) {
 
     [SagaContract("Counting")]
     sealed class CountingSaga : ISaga<CountingState, IOrderEvent> {
+        public IEnumerable<AggregateIdentifier> Correlate(IOrderEvent @event, EventMetadata metadata) => [];
+
         public IAsyncEnumerable<ICommand> ReactAsync(CountingState state, IOrderEvent @event, CancellationToken cancellationToken = default) =>
             AsyncEnumerable.Empty<ICommand>();
     }

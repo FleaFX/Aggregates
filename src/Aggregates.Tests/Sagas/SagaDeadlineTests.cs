@@ -25,9 +25,7 @@ public class SagaDeadlineTests(ITestOutputHelper output) {
             .Events(StoredTypes)
             .Commands(CommandTypes)
             .FailDeserializing(failDeserializing)
-            .Sagas(s => s
-                .ScanTypes(typeof(BillDeadlineSaga))
-                .WithResolver<IBillEvent>(e => [new AggregateIdentifier($"bill-deadlines-{e.BillId}")]))
+            .Sagas(s => s.ScanTypes(typeof(BillDeadlineSaga)))
             .Services(s => s.AddSingleton<TimeProvider>(time)));
 
     // The entries of the saga stream of a bill, in stream order: the index is the revision.
@@ -207,11 +205,11 @@ public class SagaDeadlineTests(ITestOutputHelper output) {
     public async Task FailedSagaCommit_LeavesNoDeadline(Transport transport) {
         await using var store = await Stores.StartAsync(transport);
         var time = new FakeTimeProvider(Now);
-        // No resolver: this host never handles events for the saga, so the test drives the commit by hand.
+        // The saga correlates no event: this host never handles events for it, so the test drives the commit by hand.
         await using var host = await TestHost.StartAsync(store, output, o => o
             .Events(StoredTypes)
             .Commands(CommandTypes)
-            .Sagas(s => s.ScanTypes(typeof(BillDeadlineSaga)))
+            .Sagas(s => s.ScanTypes(typeof(UnroutedBillDeadlineSaga)))
             .Services(s => s.AddSingleton<TimeProvider>(time)));
 
         await store.AppendRawAsync("bill-deadlines-bill-1", "$>", "0@elsewhere"u8.ToArray());
@@ -220,7 +218,7 @@ public class SagaDeadlineTests(ITestOutputHelper output) {
         await using var scope = host.Services.CreateAsyncScope();
         var planned = new BillPlanned("bill-1", Now.AddDays(1));
         var root = new SagaRoot<DueState, IBillEvent>(default, AggregateVersion.None);
-        await root.AcceptAsync(planned, new EventReference("bill-1", 0), new BillDeadlineSaga(new HandlerProbe()), TestContext.Current.CancellationToken);
+        await root.AcceptAsync(planned, new EventReference("bill-1", 0), new UnroutedBillDeadlineSaga(), TestContext.Current.CancellationToken);
         var unitOfWork = new UnitOfWork();
         unitOfWork.Attach(new Aggregate("bill-deadlines-bill-1", root));
 
@@ -369,6 +367,9 @@ public class SagaDeadlineTests(ITestOutputHelper output) {
     // deadline a day later.
     [SagaContract("BillDeadlines", @namespace: "IntegrationTests")]
     sealed class BillDeadlineSaga(HandlerProbe probe) : ISaga<DueState, IBillEvent, IBillDeadline> {
+        public IEnumerable<AggregateIdentifier> Correlate(IBillEvent @event, EventMetadata metadata) =>
+            [new AggregateIdentifier($"bill-deadlines-{@event.BillId}")];
+
         public async IAsyncEnumerable<ICommand> ReactAsync(DueState state, IBillEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
             if (@event is BillPlanned planned)
                 yield return Deadline.At(planned.Due, new BillDue(planned.BillId, planned.Due, 1));
@@ -388,5 +389,19 @@ public class SagaDeadlineTests(ITestOutputHelper output) {
                 yield return Deadline.At(due.Due.AddDays(due.Level), due with { Level = due.Level + 1 });
             await Task.CompletedTask;
         }
+    }
+
+    [SagaContract("UnroutedBillDeadlines", @namespace: "IntegrationTests")]
+    sealed class UnroutedBillDeadlineSaga : ISaga<DueState, IBillEvent, IBillDeadline> {
+        public IEnumerable<AggregateIdentifier> Correlate(IBillEvent @event, EventMetadata metadata) => [];
+
+        public async IAsyncEnumerable<ICommand> ReactAsync(DueState state, IBillEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            if (@event is BillPlanned planned)
+                yield return Deadline.At(planned.Due, new BillDue(planned.BillId, planned.Due, 1));
+            await Task.CompletedTask;
+        }
+
+        public IAsyncEnumerable<ICommand> ReactToDeadlineAsync(DueState state, IBillDeadline deadline, CancellationToken cancellationToken = default) =>
+            AsyncEnumerable.Empty<ICommand>();
     }
 }

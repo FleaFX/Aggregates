@@ -37,7 +37,7 @@ sealed class MsspSagaRepository<TSagaState, TEvent>(IMsspClient client, MsspOpti
             if (recorded.EventType != EventReference.LinkEventType)
                 throw new InvalidOperationException(
                     $"Stream '{sagaId}' is not a saga stream: it contains '{recorded.EventType}' at revision {recorded.Revision}. "
-                    + $"Saga streams only hold links and scheduled requests; does the resolver of {typeof(TEvent).Name} return an aggregate id?");
+                    + $"Saga streams only hold links and scheduled requests; does a saga on {typeof(TEvent).Name} correlate its events to an aggregate id?");
             if (!EventReference.TryParseLinkData(recorded.Data.Span, out var link))
                 throw new InvalidOperationException($"Stream '{sagaId}' holds an invalid link at revision {recorded.Revision}.");
             entries[i] = new SagaStreamEntry(link, default);

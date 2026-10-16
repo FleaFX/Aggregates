@@ -23,9 +23,7 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
         TestHost.StartAsync(store, output, o => o
             .Events(StoredTypes)
             .Commands(typeof(PlanBill), typeof(PayBill), typeof(RemindBill), typeof(FailBill))
-            .Sagas(s => s
-                .ScanTypes(typeof(BillReminderSaga))
-                .WithResolver<IBillEvent>(e => [new AggregateIdentifier($"bill-reminders-{e.BillId}")]))
+            .Sagas(s => s.ScanTypes(typeof(BillReminderSaga)))
             .Services(s => s.AddSingleton<TimeProvider>(time)));
 
     static Task WaitForRequestsAsync(IStoreFixture store, int count) =>
@@ -126,11 +124,11 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
     public async Task FailedSagaCommit_LeavesNoDeferredCommand(Transport transport) {
         await using var store = await Stores.StartAsync(transport);
         var time = new FakeTimeProvider(Now);
-        // No resolver: this host never handles events for the saga, so the test drives the commit by hand.
+        // The saga correlates no event: this host never handles events for it, so the test drives the commit by hand.
         await using var host = await TestHost.StartAsync(store, output, o => o
             .Events(StoredTypes)
             .Commands(typeof(PlanBill), typeof(PayBill), typeof(RemindBill), typeof(FailBill))
-            .Sagas(s => s.ScanTypes(typeof(BillReminderSaga)))
+            .Sagas(s => s.ScanTypes(typeof(UnroutedBillReminderSaga)))
             .Services(s => s.AddSingleton<TimeProvider>(time)));
 
         await store.AppendRawAsync("bill-reminders-bill-1", "$>", "0@elsewhere"u8.ToArray());
@@ -139,7 +137,7 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
         await using var scope = host.Services.CreateAsyncScope();
         var planned = new BillPlanned("bill-1", Now.AddDays(1));
         var root = new SagaRoot<ReminderState, IBillEvent>(default, AggregateVersion.None);
-        await root.AcceptAsync(planned, new EventReference("bill-1", 0), new BillReminderSaga(), TestContext.Current.CancellationToken);
+        await root.AcceptAsync(planned, new EventReference("bill-1", 0), new UnroutedBillReminderSaga(), TestContext.Current.CancellationToken);
         var unitOfWork = new UnitOfWork();
         unitOfWork.Attach(new Aggregate("bill-reminders-bill-1", root));
 
@@ -186,9 +184,7 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
             .WithoutEventTypeRegistry()
             .Projections(typeof(BillProbeProjection))
             .Policies(typeof(BillProbePolicy))
-            .Sagas(s => s
-                .ScanTypes(typeof(BillReminderSaga))
-                .WithResolver<IBillEvent>(e => [new AggregateIdentifier($"bill-reminders-{e.BillId}")]))
+            .Sagas(s => s.ScanTypes(typeof(BillReminderSaga)))
             .Services(s => s.AddSingleton<TimeProvider>(time)));
 
         await host.SendAsync(new PlanBill("bill-1", Now.AddDays(-1)));
@@ -212,9 +208,7 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
         await using var host = await TestHost.StartAsync(store, output, o => o
             .Events(StoredTypes)
             .Commands(typeof(PlanBill), typeof(PayBill), typeof(RemindBill), typeof(FailBill))
-            .Sagas(s => s
-                .ScanTypes(typeof(FailingBillReminderSaga))
-                .WithResolver<FailingBillReminderSaga, IBillEvent>(e => [new AggregateIdentifier($"failing-reminders-{e.BillId}")]))
+            .Sagas(s => s.ScanTypes(typeof(FailingBillReminderSaga)))
             .Services(s => s.AddSingleton<TimeProvider>(time)));
 
         await host.SendAsync(new PlanBill("bill-1", Now.AddDays(2)));
@@ -247,9 +241,7 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
             .Events(StoredTypes)
             .Commands(typeof(PlanBill), typeof(PayBill), typeof(RemindBill), typeof(FailBill))
             .FailDeserializing(typeof(RemindBill))
-            .Sagas(s => s
-                .ScanTypes(typeof(BillReminderSaga))
-                .WithResolver<IBillEvent>(e => [new AggregateIdentifier($"bill-reminders-{e.BillId}")]))
+            .Sagas(s => s.ScanTypes(typeof(BillReminderSaga)))
             .Services(s => s.AddSingleton<TimeProvider>(time)));
         await WaitForCaughtUpAsync(store);
         time.Advance(TimeSpan.FromDays(3));
@@ -274,9 +266,7 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
             .Events(StoredTypes)
             .Commands(typeof(PlanBill), typeof(PayBill), typeof(RemindBill), typeof(FailBill))
             .FailDeserializing(typeof(RemindBill))
-            .Sagas(s => s
-                .ScanTypes(typeof(BillReminderSaga))
-                .WithResolver<IBillEvent>(e => [new AggregateIdentifier($"bill-reminders-{e.BillId}")]))
+            .Sagas(s => s.ScanTypes(typeof(BillReminderSaga)))
             .Services(s => s.AddSingleton<TimeProvider>(time)))) {
             await WaitForCaughtUpAsync(store);
             time.Advance(TimeSpan.FromDays(3));
@@ -312,9 +302,7 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
                 .Events(StoredTypes)
                 .Commands(typeof(PlanBill), typeof(PayBill), typeof(RemindBill), typeof(FailBill))
                 .FailDeserializing(typeof(RemindBill))
-                .Sagas(s => s
-                    .ScanTypes(typeof(BillReminderSaga))
-                    .WithResolver<IBillEvent>(e => [new AggregateIdentifier($"bill-reminders-{e.BillId}")]))
+                .Sagas(s => s.ScanTypes(typeof(BillReminderSaga)))
                 .Services(s => s.AddSingleton<TimeProvider>(time)));
             await WaitForCaughtUpAsync(store);
         }
@@ -342,9 +330,7 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
         await using var second = await TestHost.StartAsync(store, output, o => o
             .Events(StoredTypes)
             .Commands(typeof(PlanBill), typeof(PayBill), typeof(RemindBill), typeof(FailBill))
-            .Sagas(s => s
-                .ScanTypes(typeof(BillReminderSagaV2))
-                .WithResolver<IBillEvent>(e => [new AggregateIdentifier($"bill-reminders-{e.BillId}")]))
+            .Sagas(s => s.ScanTypes(typeof(BillReminderSagaV2)))
             .Services(s => s.AddSingleton<TimeProvider>(time)));
         await WaitForCaughtUpAsync(store, "IntegrationTests.BillReminders@v2");
         time.Advance(TimeSpan.FromDays(3));
@@ -360,9 +346,7 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
         var time = new FakeTimeProvider(Now);
         await using var host = await TestHost.StartAsync(store, output, o => o
             .Events(StoredTypes)
-            .Sagas(s => s
-                .ScanTypes(typeof(SilentSaga))
-                .WithResolver<IBillEvent>(e => [new AggregateIdentifier($"silent-{e.BillId}")]))
+            .Sagas(s => s.ScanTypes(typeof(SilentSaga)))
             .Services(s => s.AddSingleton<TimeProvider>(time)));
 
         await store.AppendAsync(host.Serialization, "bill-1", new BillPlanned("bill-1", Now));
@@ -397,24 +381,44 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
 
     [SagaContract("BillReminders", @namespace: "IntegrationTests")]
     sealed class BillReminderSaga : ISaga<ReminderState, IBillEvent> {
+        public IEnumerable<AggregateIdentifier> Correlate(IBillEvent @event, EventMetadata metadata) =>
+            [new AggregateIdentifier($"bill-reminders-{@event.BillId}")];
+
+        public IAsyncEnumerable<ICommand> ReactAsync(ReminderState state, IBillEvent @event, CancellationToken cancellationToken = default) =>
+            Reminders.Plan(@event);
+    }
+
+    [SagaContract("UnroutedBillReminders", @namespace: "IntegrationTests")]
+    sealed class UnroutedBillReminderSaga : ISaga<ReminderState, IBillEvent> {
+        public IEnumerable<AggregateIdentifier> Correlate(IBillEvent @event, EventMetadata metadata) => [];
+
         public IAsyncEnumerable<ICommand> ReactAsync(ReminderState state, IBillEvent @event, CancellationToken cancellationToken = default) =>
             Reminders.Plan(@event);
     }
 
     [SagaContract("BillReminders", version: 2, @namespace: "IntegrationTests")]
     sealed class BillReminderSagaV2 : ISaga<ReminderState, IBillEvent> {
+        public IEnumerable<AggregateIdentifier> Correlate(IBillEvent @event, EventMetadata metadata) =>
+            [new AggregateIdentifier($"bill-reminders-{@event.BillId}")];
+
         public IAsyncEnumerable<ICommand> ReactAsync(ReminderState state, IBillEvent @event, CancellationToken cancellationToken = default) =>
             Reminders.Plan(@event);
     }
 
     [SagaContract("FailingBillReminders", @namespace: "IntegrationTests")]
     sealed class FailingBillReminderSaga : ISaga<ReminderState, IBillEvent> {
+        public IEnumerable<AggregateIdentifier> Correlate(IBillEvent @event, EventMetadata metadata) =>
+            [new AggregateIdentifier($"failing-reminders-{@event.BillId}")];
+
         public IAsyncEnumerable<ICommand> ReactAsync(ReminderState state, IBillEvent @event, CancellationToken cancellationToken = default) =>
             FailingReminders.Plan(@event);
     }
 
     [SagaContract("Silent", @namespace: "IntegrationTests")]
     sealed class SilentSaga(HandlerProbe probe) : ISaga<ReminderState, IBillEvent> {
+        public IEnumerable<AggregateIdentifier> Correlate(IBillEvent @event, EventMetadata metadata) =>
+            [new AggregateIdentifier($"silent-{@event.BillId}")];
+
         public async IAsyncEnumerable<ICommand> ReactAsync(ReminderState state, IBillEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
             probe.Record(this, @event);
             yield break;

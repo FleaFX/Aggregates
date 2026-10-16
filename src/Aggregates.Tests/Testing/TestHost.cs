@@ -78,7 +78,7 @@ sealed class TestHostOptions {
     }
 
     /// <summary>
-    /// Registers sagas; use <see cref="SagasOptions.ScanTypes"/> and <see cref="SagasOptions.WithResolver{TEvent}(ISagaIdResolver{TEvent})"/>.
+    /// Registers sagas; use <see cref="SagasOptions.ScanTypes"/>.
     /// </summary>
     public TestHostOptions Sagas(Action<SagasOptions> configure) {
         ConfigureSagas += configure;

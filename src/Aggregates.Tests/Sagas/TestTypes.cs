@@ -16,6 +16,8 @@ record TestDeadline(int Value);
 // Minimal concrete ISaga implementation used only as a type parameter marker in
 // SagaHandler<TSaga, TSagaState, TEvent> — actual saga logic is always faked.
 class TestSaga : ISaga<TestSagaState, TestEvent> {
+    public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) => [];
+
     public IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, CancellationToken cancellationToken = default) =>
         AsyncEnumerable.Empty<ICommand>();
 }
@@ -28,12 +30,16 @@ record OtherTestSagaState(int Total) : IState<OtherTestSagaState, OtherTestEvent
 }
 
 class OtherTestSaga : ISaga<OtherTestSagaState, OtherTestEvent> {
+    public IEnumerable<AggregateIdentifier> Correlate(OtherTestEvent @event, EventMetadata metadata) => [];
+
     public IAsyncEnumerable<ICommand> ReactAsync(OtherTestSagaState state, OtherTestEvent @event, CancellationToken cancellationToken = default) =>
         AsyncEnumerable.Empty<ICommand>();
 }
 
 [SagaContract("DeferredCommandTest", @namespace: "Tests")]
 class DeferredCommandTestSaga : ISaga<TestSagaState, TestEvent> {
+    public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) => [];
+
     public async IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
         yield return new TestCommand().DeferUntil(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
         await Task.CompletedTask;
@@ -42,6 +48,8 @@ class DeferredCommandTestSaga : ISaga<TestSagaState, TestEvent> {
 
 [SagaContract("DeadlineTest", @namespace: "Tests")]
 class DeadlineTestSaga : ISaga<TestSagaState, TestEvent, TestDeadline> {
+    public IEnumerable<AggregateIdentifier> Correlate(TestEvent @event, EventMetadata metadata) => [];
+
     public async IAsyncEnumerable<ICommand> ReactAsync(TestSagaState state, TestEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
         yield return Deadline.At(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), new TestDeadline(@event.Value));
         await Task.CompletedTask;

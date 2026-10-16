@@ -96,14 +96,12 @@ public class SagaStreamLinkTests(ITestOutputHelper output) {
     }
 
     [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
-    public async Task Subscription_WithResolverReturningAnAggregateId_ParksTheEvent(Transport transport) {
+    public async Task Subscription_WithSagaCorrelatingToAnAggregateId_ParksTheEvent(Transport transport) {
         await using var store = await Stores.StartAsync(transport);
-        // A misconfigured resolver: the saga id is the aggregate's own stream.
+        // A misconfigured saga: it correlates the event to the aggregate's own stream.
         await using var host = await TestHost.StartAsync(store, output, o => o
             .Events(Orders.EventTypes)
-            .Sagas(s => s
-                .ScanTypes(typeof(CountingSaga))
-                .WithResolver<IOrderEvent>(e => [new AggregateIdentifier(e.OrderId)])));
+            .Sagas(s => s.ScanTypes(typeof(AggregateIdSaga))));
 
         await store.AppendAsync(host.Serialization, "order-1", new OrderPlaced("order-1", "alice"));
 
@@ -111,7 +109,7 @@ public class SagaStreamLinkTests(ITestOutputHelper output) {
             async ValueTask<bool> () => (await store.ReadAllAsync()).Any(e => e.Stream.StartsWith("parked-")),
             "the event is parked");
         await Eventually.QuietAsync();
-        host.Probe.Count<CountingSaga>().Should().Be(0, "the saga never reacts on an aggregate stream");
+        host.Probe.Count<AggregateIdSaga>().Should().Be(0, "the saga never reacts on an aggregate stream");
         (await store.ReadAllAsync()).Count(e => e.Stream == "order-1").Should().Be(1, "nothing is written to the aggregate stream");
         host.Stopping.IsCompleted.Should().BeFalse("the host keeps running");
     }
@@ -170,6 +168,19 @@ public class SagaStreamLinkTests(ITestOutputHelper output) {
 
     [SagaContract("LinkCounting", @namespace: "IntegrationTests")]
     sealed class CountingSaga(HandlerProbe probe) : ISaga<CountingState, IOrderEvent> {
+        public IEnumerable<AggregateIdentifier> Correlate(IOrderEvent @event, EventMetadata metadata) => [];
+
+        public async IAsyncEnumerable<ICommand> ReactAsync(CountingState state, IOrderEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            probe.Record(this, @event);
+            yield break;
+        }
+    }
+
+    [SagaContract("AggregateIdCounting", @namespace: "IntegrationTests")]
+    sealed class AggregateIdSaga(HandlerProbe probe) : ISaga<CountingState, IOrderEvent> {
+        public IEnumerable<AggregateIdentifier> Correlate(IOrderEvent @event, EventMetadata metadata) =>
+            [new AggregateIdentifier(@event.OrderId)];
+
         public async IAsyncEnumerable<ICommand> ReactAsync(CountingState state, IOrderEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
             probe.Record(this, @event);
             yield break;

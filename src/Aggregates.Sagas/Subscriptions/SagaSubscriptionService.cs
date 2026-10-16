@@ -13,12 +13,12 @@ namespace Aggregates.Sagas;
 /// transient failure, parks messages that could not be deserialized, and records checkpoints.
 /// For each event that matches <typeparamref name="TEvent"/>, the service:
 /// <list type="number">
-///   <item>Calls <see cref="ISagaIdResolver{TEvent}.Resolve"/> to determine which saga instances are interested. The event's stored metadata is passed directly so resolvers can read saga identifiers from it. A failing resolver is retried and the event parked via <see cref="SubscriptionRetryPolicy"/>; no saga handles it then.</item>
+///   <item>Calls <see cref="ISaga{TSagaState,TEvent}.Correlate"/> on an instance of <typeparamref name="TSaga"/> from a fresh DI scope to determine which saga instances are interested. The event's stored metadata is passed directly so the saga can read saga identifiers from it. A failing <c>Correlate</c> is retried and the event parked via <see cref="SubscriptionRetryPolicy"/>; no saga handles it then.</item>
 ///   <item>Creates a fresh DI scope per saga instance and resolves the handler chain of <typeparamref name="TSaga"/> from it.</item>
 ///   <item>Opens a <see cref="MetadataScope"/> seeded from the event's stored metadata so that commands dispatched by the saga inherit correlation/causation identifiers.</item>
 ///   <item>Handles the event for every resolved saga identifier, with automatic retry and parked-message fallback via <see cref="SubscriptionRetryPolicy"/>.</item>
 /// </list>
-/// When the contract blocks (<see cref="SubscriptionErrorMode.Block"/>), the resolver and each saga
+/// When the contract blocks (<see cref="SubscriptionErrorMode.Block"/>), the correlation and each saga
 /// instance are retried until they succeed instead of parked.
 /// A fresh DI scope is created per saga invocation so that scoped services are never captured
 /// as singletons by this long-lived hosted service.
@@ -38,8 +38,7 @@ sealed class SagaSubscriptionService<TSaga, TSagaState, TEvent>(
     SubscriptionRetryPolicy retryPolicy,
     Scheduler scheduler,
     SchedulerActivation<TSaga> activation,
-    SubscriptionRegistration registration,
-    ISagaIdResolver<TEvent> resolver) : BackgroundService, IReplayableSubscription
+    SubscriptionRegistration registration) : BackgroundService, IReplayableSubscription
     where TSaga : ISaga<TSagaState, TEvent>
     where TSagaState : IState<TSagaState, TEvent> {
 
@@ -53,13 +52,13 @@ sealed class SagaSubscriptionService<TSaga, TSagaState, TEvent>(
                 $"Subscription '{registration.SubscriptionId}' handles {typeof(TEvent).Name}, but the event of {message.Source} is a {message.Event?.GetType().Name ?? "null"}.");
 
         // Every saga the event resolves to: a saga that handled it before skips it, because its stream links the event already.
-        foreach (var sagaId in resolver.Resolve(typedEvent, message.Metadata).ToArray())
+        foreach (var sagaId in await CorrelateAsync(typedEvent, message.Metadata))
             await HandleSagaAsync(sagaId, typedEvent, message, cancellationToken);
     }
 
     /// <inheritdoc/>
     public async ValueTask HandleDeadlineAsync(ScheduledDeadline deadline, CancellationToken cancellationToken = default) {
-        // The saga stream holds the request, so its name is the saga id: no resolver is needed.
+        // The saga stream holds the request, so its name is the saga id: no correlation is needed.
         var sagaId = new AggregateIdentifier(deadline.Request.StreamId);
         await using var scope = scopeFactory.CreateAsyncScope();
         var handler = scope.ServiceProvider.GetRequiredService<LoggingSagaHandler<TSaga, TSagaState, TEvent>>();
@@ -83,17 +82,25 @@ sealed class SagaSubscriptionService<TSaga, TSagaState, TEvent>(
         if (message.Event is not TEvent typedEvent)
             return;
 
-        // Resolved in its own retry, so a retry never runs the handlers of earlier sagas again.
+        // Correlated in its own retry, so a retry never runs the handlers of earlier sagas again.
         AggregateIdentifier[]? sagaIds = null;
-        await retryPolicy.ExecuteAsync(ct => {
-            sagaIds = [.. resolver.Resolve(typedEvent, message.Metadata)];
-            return ValueTask.CompletedTask;
+        await retryPolicy.ExecuteAsync(async ct => {
+            sagaIds = await CorrelateAsync(typedEvent, message.Metadata);
         }, registration.SubscriptionId, message, registration.ErrorMode, cancellationToken);
 
-        // Null when the resolver failed and the event was parked.
+        // Null when the correlation failed and the event was parked.
         foreach (var sagaId in sagaIds ?? [])
             await retryPolicy.ExecuteAsync(ct => HandleSagaAsync(sagaId, typedEvent, message, ct),
                 registration.SubscriptionId, message, registration.ErrorMode, cancellationToken);
+    }
+
+    /// <summary>
+    /// The identifiers of the saga instances <paramref name="event"/> correlates to, from an instance of
+    /// <typeparamref name="TSaga"/> in a fresh scope, so that the saga can use scoped dependencies.
+    /// </summary>
+    async ValueTask<AggregateIdentifier[]> CorrelateAsync(TEvent @event, EventMetadata metadata) {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        return [.. scope.ServiceProvider.GetRequiredService<TSaga>().Correlate(@event, metadata)];
     }
 
     /// <summary>
