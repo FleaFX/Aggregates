@@ -34,7 +34,8 @@ public sealed class SagaRoot<TSagaState, TEvent>(TSagaState? state, AggregateVer
 
     /// <summary>
     /// Applies <paramref name="event"/> to the current state, then eagerly materializes
-    /// the commands produced by <see cref="ISaga{TSagaState,TEvent}.ReactAsync"/>. Records
+    /// the commands produced by <see cref="ISaga{TSagaState,TEvent}.ReactAsync"/>, which gets the
+    /// state from before <paramref name="event"/>. Records
     /// <paramref name="source"/> as a change, so the commit stores a link to the source event
     /// instead of a copy of it. A <see cref="DeferredCommand"/> or <see cref="Deadline"/> the saga
     /// yields is recorded as a change (<see cref="DeferredCommandRequest"/>, <see cref="DeadlineRequest"/>)
@@ -56,9 +57,12 @@ public sealed class SagaRoot<TSagaState, TEvent>(TSagaState? state, AggregateVer
         if (handled?.Contains(source) == true || _changes.Contains(source))
             return [];
 
+        // The saga reacts with what it knew before the event: from that it can compute the state
+        // after the event (Apply), but not the other way around.
+        var before = State;
         _changes.Add(source);
         State = State.Apply(@event);
-        return await CollectAsync(saga.ReactAsync(State, @event, cancellationToken), saga, cause: null);
+        return await CollectAsync(saga.ReactAsync(before, @event, cancellationToken), saga, cause: null);
     }
 
     /// <summary>

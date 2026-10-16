@@ -24,7 +24,10 @@ public interface ISaga<in TSagaState, in TEvent>
     /// implements <see cref="ISaga{TSagaState,TEvent,TDeadline}"/>, deadlines requested with
     /// <see cref="Deadline.At"/>.
     /// </summary>
-    /// <param name="state">The saga state after applying <paramref name="event"/>.</param>
+    /// <param name="state">
+    /// The saga state before <paramref name="event"/>: what the saga knew until now. The event is
+    /// applied afterwards; use <c>state.Apply(@event)</c> for the state after it.
+    /// </param>
     /// <param name="event">The triggering event.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     IAsyncEnumerable<ICommand> ReactAsync(TSagaState state, TEvent @event, CancellationToken cancellationToken = default);
