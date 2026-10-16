@@ -50,6 +50,7 @@ public class ParkedMessageReplayTests(ITestOutputHelper output) {
         await store.AppendAsync(host.Serialization, "order-2", new OrderPlaced("order-2", "bob"));
         await Eventually.UntilAsync(async ValueTask<bool> () => (await parked.ListAsync(id, TestContext.Current.CancellationToken)).Count == 1,
             "the poison event is parked");
+        await Eventually.UntilAsync(() => host.Probe.Count(handler) == 1, "the subscription handles order-2");
         host.Probe.PoisonFixed = true;
 
         var replay = await parked.ReplayAsync(id, 0, TestContext.Current.CancellationToken);
@@ -95,6 +96,7 @@ public class ParkedMessageReplayTests(ITestOutputHelper output) {
         await store.AppendAsync(host.Serialization, "order-2", new OrderPlaced("order-2", "bob"));
         await Eventually.UntilAsync(async ValueTask<bool> () => (await parked.ListAsync(id, TestContext.Current.CancellationToken)).Count == 1,
             "the poison event is parked");
+        await Eventually.UntilAsync(() => host.Probe.Count(handler) == 1, "the subscription handles order-2");
 
         await parked.DismissAsync(id, 0, TestContext.Current.CancellationToken);
 
