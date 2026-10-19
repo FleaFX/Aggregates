@@ -1,5 +1,6 @@
 using Aggregates.Policies;
 using Aggregates.Projections;
+using Aggregates.Projections.Sql;
 using Aggregates.Sagas;
 using Aggregates.Subscriptions;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +24,8 @@ sealed class TestHostOptions {
     internal bool UsePolicies { get; private set; }
     internal Action<SagasOptions>? ConfigureSagas { get; private set; }
     internal Action<IServiceCollection>? ConfigureServices { get; private set; }
+    internal Action<SqlPositionsOptions>? ConfigureSqlPositions { get; private set; }
+    internal bool RecordsSqlPositions { get; private set; }
 
     /// <summary>
     /// The event types the serializer knows; other stored event types deserialize to <see langword="null"/>.
@@ -90,6 +93,16 @@ sealed class TestHostOptions {
     /// </summary>
     public TestHostOptions Services(Action<IServiceCollection> configure) {
         ConfigureServices += configure;
+        return this;
+    }
+
+    /// <summary>
+    /// Records the position of each projected event with every SQL commit
+    /// (<see cref="Aggregates.Projections.Sql.ServiceCollectionExtensions.RecordSqlPositions"/>).
+    /// </summary>
+    public TestHostOptions RecordSqlPositions(Action<SqlPositionsOptions>? configure = null) {
+        RecordsSqlPositions = true;
+        ConfigureSqlPositions = configure;
         return this;
     }
 }
@@ -168,8 +181,12 @@ sealed class TestHost : IAsyncDisposable {
         var aggregates = builder.Services.AddAggregates(o => o.ScanTypes([.. options.CommandTypes]));
         store.ConfigureAggregates(aggregates, serialization);
 
-        if (options.UseProjections)
-            store.ConfigureProjections(builder.Services.AddProjections(o => o.ScanTypes([.. options.ProjectionTypes])));
+        if (options.UseProjections) {
+            var projections = builder.Services.AddProjections(o => o.ScanTypes([.. options.ProjectionTypes]));
+            store.ConfigureProjections(projections);
+            if (options.RecordsSqlPositions)
+                projections.RecordSqlPositions(options.ConfigureSqlPositions);
+        }
         if (options.UsePolicies)
             store.ConfigurePolicies(aggregates.AddPolicies(o => o.ScanTypes([.. options.PolicyTypes])));
         if (options.ConfigureSagas is { } configureSagas)

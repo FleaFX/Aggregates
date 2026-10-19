@@ -17,6 +17,7 @@ namespace Aggregates.Projections;
 /// when the contract blocks (<see cref="SubscriptionErrorMode.Block"/>).
 /// A fresh DI scope is created per event so that scoped services are never captured as
 /// singletons by this long-lived hosted service.
+/// While a live event is projected, <see cref="ProjectedEvent.Current"/> describes it.
 /// As an <see cref="IReplayableSubscription"/>, it projects a replayed parked event the same way, once.
 /// </remarks>
 /// <typeparam name="TProjection">The projection class.</typeparam>
@@ -37,7 +38,7 @@ sealed class ProjectionSubscriptionService<TProjection, TEvent>(
             throw new InvalidOperationException(
                 $"Subscription '{registration.SubscriptionId}' handles {typeof(TEvent).Name}, but the event of {message.Source} is a {message.Event?.GetType().Name ?? "null"}.");
 
-        await ProjectAsync(typedEvent, message.Metadata, cancellationToken);
+        await ProjectAsync(typedEvent, message.Metadata, position: null, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -48,15 +49,22 @@ sealed class ProjectionSubscriptionService<TProjection, TEvent>(
         if (message.Event is not TEvent typedEvent)
             return;
 
-        await retryPolicy.ExecuteAsync(ct => ProjectAsync(typedEvent, message.Metadata, ct),
+        await retryPolicy.ExecuteAsync(ct => ProjectAsync(typedEvent, message.Metadata, message.CommitPosition, ct),
             registration.SubscriptionId, message, registration.ErrorMode, cancellationToken);
     }
 
     /// <summary>
-    /// Projects <paramref name="event"/> once, in a fresh scope.
+    /// Projects <paramref name="event"/> once, in a fresh scope. For a live event (with a
+    /// <paramref name="position"/>), <see cref="ProjectedEvent.Current"/> describes it during the
+    /// projection and its commit; a replayed event has none.
     /// </summary>
-    async ValueTask ProjectAsync(TEvent @event, EventMetadata metadata, CancellationToken cancellationToken) {
+    async ValueTask ProjectAsync(TEvent @event, EventMetadata metadata, ulong? position, CancellationToken cancellationToken) {
         await using var scope = scopeFactory.CreateAsyncScope();
+        // Set inside this async method: the value flows into the commit and is restored when the method returns.
+        // A new instance per attempt, so a retry numbers its transactions from 1 again.
+        ProjectedEvent.Current = position is { } livePosition
+            ? new ProjectedEvent(registration.SubscriptionId, livePosition, scope.ServiceProvider)
+            : null;
         var handler = scope.ServiceProvider.GetRequiredService<LoggingProjectionHandler<TProjection, TEvent>>();
         await handler.HandleAsync(@event, metadata, cancellationToken);
     }
