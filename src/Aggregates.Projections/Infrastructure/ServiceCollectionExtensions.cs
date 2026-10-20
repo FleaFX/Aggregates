@@ -54,6 +54,9 @@ public static class ServiceCollectionExtensions {
         services.TryAddSingleton(new SubscriptionResubscribeOptions());
         services.TryAddSingleton<SubscriptionLoop>();
 
+        // Subscription state — reported by the loop, the retry policy and the scheduler; read by SubscriptionHealthCheck
+        services.TryAddSingleton<SubscriptionMonitor>();
+
         var registeredProjections = new List<(Type EventType, Type ProjectionType)>();
 
         foreach (var (projectionType, projectionInterface) in SubscriptionRegistrations.FindHandlers(options.Types, typeof(IProjection<>))) {

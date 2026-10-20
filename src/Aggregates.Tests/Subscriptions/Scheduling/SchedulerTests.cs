@@ -20,8 +20,10 @@ public class SchedulerTests {
     readonly InMemoryCheckpointStore _checkpointStore = new();
     readonly ISubscriptionFactory _factory = A.Fake<ISubscriptionFactory>();
     readonly IParkedMessageSink _parked = A.Fake<IParkedMessageSink>();
+    readonly SubscriptionMonitor _monitor;
 
     public SchedulerTests() {
+        _monitor = new(_time);
         A.CallTo(() => _factory.IsTransient(A<Exception>._)).Returns(true);
     }
 
@@ -39,7 +41,9 @@ public class SchedulerTests {
             A.Fake<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
             new SubscriptionRetryPolicy(_parked, new SubscriptionErrorHandlingOptions()),
             _parked,
-            _time, LoggerFactory(logger ?? _logger));
+            _time, LoggerFactory(logger ?? _logger), _monitor);
+
+    SubscriptionStatus Status() => _monitor.GetStatuses().Single(status => status.Id == ScheduledFormat.SchedulerStream(Owner));
 
     // Every logger the scheduler creates writes to logger.
     static ILoggerFactory LoggerFactory(ILogger logger) {
@@ -503,6 +507,115 @@ public class SchedulerTests {
             A<CancellationToken>._)).MustHaveHappenedOnceExactly();
         await cts.CancelAsync();
         await run;
+    }
+
+    [Fact]
+    public async Task BeforeActivation_IsWaiting_AndRunningOnceActivated() {
+        _store.AppendRequest("saga-1", Owner, Start.AddDays(-1));
+        var activation = new SchedulerActivation<TestSaga>(_store, [Registration]);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var delivered = new ConcurrentQueue<ScheduledRequest>();
+
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        await Eventually.QuietAsync();
+
+        Status().State.Should().Be(SubscriptionState.Waiting);
+
+        await activation.EnsureActivatedAsync(TestContext.Current.CancellationToken);
+        await Eventually.UntilAsync(() => delivered.Count == 1, "the request is delivered after the saga is activated");
+
+        Status().State.Should().Be(SubscriptionState.Running);
+        await cts.CancelAsync();
+        await run;
+    }
+
+    [Fact]
+    public async Task AfterAFeedFailure_IsRetrying_UntilItReadsAgain() {
+        var activation = Activated();
+        _store.AppendRequest("saga-1", Owner, Start.AddDays(-1));
+        _store.FailNextSubscribe = new InvalidOperationException("connection lost");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var delivered = new ConcurrentQueue<ScheduledRequest>();
+
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+
+        await Eventually.UntilAsync(() => Status().State == SubscriptionState.Retrying, "the feed failed");
+        Status().Attempts.Should().Be(1);
+        Status().Error!.Message.Should().Be("connection lost");
+
+        // The backoff starts on the fake clock shortly after the failure: keep moving the clock until it fires.
+        await Eventually.UntilAsync(() => {
+            _time.Advance(TimeSpan.FromSeconds(2));
+            return delivered.Count == 1;
+        }, "the request is delivered after resubscribing");
+
+        await Eventually.UntilAsync(() => Status().State == SubscriptionState.Running, "the feed reads again");
+        Status().Error.Should().BeNull();
+        await cts.CancelAsync();
+        await run;
+    }
+
+    [Fact]
+    public async Task AfterADeliveryFailure_IsRetrying_AndRunningAfterTheRetry() {
+        var activation = Activated();
+        _store.AppendRequest("saga-1", Owner, Start.AddDays(-1));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var delivered = new ConcurrentQueue<ScheduledRequest>();
+        var attempts = 0;
+
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => {
+            if (Interlocked.Exchange(ref attempts, attempts + 1) == 0)
+                throw new InvalidOperationException("transient failure");
+            delivered.Enqueue(timeout);
+            return ValueTask.CompletedTask;
+        }, cts.Token);
+
+        await Eventually.UntilAsync(() => attempts == 1, "the first delivery attempt fails");
+        await Eventually.UntilAsync(() => Status().State == SubscriptionState.Retrying, "the delivery failed");
+        Status().Error!.Message.Should().Be("transient failure");
+        await Eventually.UntilAsync(() => {
+            _time.Advance(TimeSpan.FromSeconds(2));
+            return delivered.Count == 1;
+        }, "the delivery is retried");
+        await Eventually.UntilAsync(() => Status().State == SubscriptionState.Running, "the delivery succeeds");
+
+        await cts.CancelAsync();
+        await run;
+    }
+
+    [Fact]
+    public async Task AfterAFailureThatIsNotTransient_IsStopped_WithTheError() {
+        var factory = A.Fake<ISubscriptionFactory>();
+        A.CallTo(() => factory.IsTransient(A<Exception>._)).Returns(false);
+        var activation = Activated();
+        _store.FailNextSubscribe = new InvalidOperationException("not allowed");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var delivered = new ConcurrentQueue<ScheduledRequest>();
+
+        var run = Scheduler(factory).RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+
+        var act = () => run;
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        Status().State.Should().Be(SubscriptionState.Stopped);
+        Status().Error!.Message.Should().Be("not allowed");
+    }
+
+    [Fact]
+    public async Task WhenTheHostStops_IsStopped_WithoutError() {
+        var activation = Activated();
+        _store.AppendRequest("saga-1", Owner, Start.AddDays(3));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var delivered = new ConcurrentQueue<ScheduledRequest>();
+
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        await CaughtUpAsync(_logger);
+        await cts.CancelAsync();
+        await run;
+
+        Status().State.Should().Be(SubscriptionState.Stopped);
+        Status().Error.Should().BeNull();
+        Status().Attempts.Should().Be(0);
     }
 
     sealed class InMemoryCheckpointStore : ICheckpointStore {

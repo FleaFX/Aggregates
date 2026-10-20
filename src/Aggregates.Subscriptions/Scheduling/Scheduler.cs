@@ -19,6 +19,9 @@ namespace Aggregates.Subscriptions;
 /// <c>scheduled-{id}</c>. Transient failures of the store (see
 /// <see cref="ISubscriptionFactory.IsTransient"/>) are retried with backoff; any other failure
 /// ends <see cref="RunAsync(SubscriptionRegistration, SchedulerActivation, CancellationToken)"/>.
+/// When a <see cref="SubscriptionMonitor"/> is given, it reports its state there under its id:
+/// waiting until its handler is activated, running, retrying after a transient failure until the
+/// failed action succeeds or its feed reads again, and stopped when it ends.
 /// One instance serves every saga and policy.
 /// </remarks>
 /// <param name="store">The store of the scheduled entries.</param>
@@ -31,6 +34,7 @@ namespace Aggregates.Subscriptions;
 /// <param name="parkedMessageSink">Parks a command that can't be deserialized.</param>
 /// <param name="timeProvider">The clock.</param>
 /// <param name="loggerFactory">Creates the loggers of the scheduler and of the command dispatch.</param>
+/// <param name="monitor">Receives the state of the scheduler; optional.</param>
 public sealed class Scheduler(
     IScheduledStore store,
     ICheckpointStore checkpointStore,
@@ -41,7 +45,8 @@ public sealed class Scheduler(
     SubscriptionRetryPolicy retryPolicy,
     IParkedMessageSink parkedMessageSink,
     TimeProvider timeProvider,
-    ILoggerFactory loggerFactory
+    ILoggerFactory loggerFactory,
+    SubscriptionMonitor? monitor = null
 ) {
 
     /// <summary>
@@ -106,18 +111,26 @@ public sealed class Scheduler(
     internal async Task RunCoreAsync(SubscriptionRegistration registration, SchedulerActivation activation,
         Func<ScheduledRequest, CancellationToken, ValueTask> deliver, CancellationToken stoppingToken) {
         var subscriptionId = ScheduledFormat.SchedulerStream(registration.SubscriptionId);
-        var retry = new SchedulerRetry(subscriptionFactory, resubscribeOptions, timeProvider, _logger, subscriptionId);
+        var retry = new SchedulerRetry(subscriptionFactory, resubscribeOptions, timeProvider, _logger, subscriptionId, monitor);
+        Exception? failure = null;
+        monitor?.Report(subscriptionId, SubscriptionState.Waiting);
         try {
             if (!await retry.ExecuteAsync(ct => activation.IsActivatedAsync(registration, ct), "check whether its handler deferred commands", stoppingToken)) {
                 _logger.LogWaiting(subscriptionId);
+                // Again: a retried check reported it as running when it succeeded.
+                monitor?.Report(subscriptionId, SubscriptionState.Waiting);
                 await activation.Activated.WaitAsync(stoppingToken);
                 _logger.LogActivated(subscriptionId);
             }
+            monitor?.Report(subscriptionId, SubscriptionState.Running);
             await RunActiveAsync(registration, subscriptionId, retry, deliver, stoppingToken);
         } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
         } catch (Exception exception) {
+            failure = exception;
             _logger.LogStopped(exception, subscriptionId);
             throw;
+        } finally {
+            monitor?.Report(subscriptionId, SubscriptionState.Stopped, error: failure);
         }
     }
 

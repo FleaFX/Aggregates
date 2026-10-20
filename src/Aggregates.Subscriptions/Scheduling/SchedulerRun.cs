@@ -108,9 +108,12 @@ sealed class SchedulerRun(
     async ValueTask DeliverAsync(ScheduledRequest due, CancellationToken cancellationToken) {
         try {
             await deliver(due, cancellationToken);
-            _deliveryFailures = 0;
+            if (_deliveryFailures > 0) {
+                retry.Recovered();
+                _deliveryFailures = 0;
+            }
         } catch (Exception exception) when (exception is not OperationCanceledException && retry.IsTransient(exception)) {
-            var delay = retry.Delay(++_deliveryFailures);
+            var delay = retry.Failed(++_deliveryFailures, exception);
             logger.LogDeliveryFailed(exception, subscriptionId, due.Request, delay, _deliveryFailures);
             await Task.Delay(delay, timeProvider, cancellationToken);
             return;
