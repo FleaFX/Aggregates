@@ -3,6 +3,7 @@ using FakeItEasy;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Aggregates.Subscriptions;
 
@@ -128,13 +129,13 @@ public class SubscriptionRetryPolicyTests {
         static readonly SubscriptionMessage AnyMessage =
             new(Event: null, CommitPosition: 42UL, Source: new EventReference("stream-1", 42), Metadata: EventMetadata.Empty);
 
-        static SubscriptionRetryPolicy BuildPolicy(IParkedMessageSink sink, int maxRetries, ILogger<SubscriptionRetryPolicy>? logger = null) =>
+        static SubscriptionRetryPolicy BuildPolicy(IParkedMessageSink sink, int maxRetries, ILogger<SubscriptionRetryPolicy>? logger = null, SubscriptionMonitor? monitor = null) =>
             new(sink, new SubscriptionErrorHandlingOptions {
                 MaxRetries = maxRetries,
                 InitialDelay = TimeSpan.Zero,
                 MaxDelay = TimeSpan.Zero,
                 BackoffMultiplier = 1.0
-            }, logger);
+            }, logger, monitor);
 
         [Fact]
         public async Task Block_RetriesBeyondMaxRetries_UntilSuccess_WithoutParking() {
@@ -214,6 +215,75 @@ public class SubscriptionRetryPolicyTests {
             callCount.Should().Be(2);
             A.CallTo(() => sink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._))
                 .MustHaveHappenedOnceExactly();
+        }
+
+        [Fact]
+        public async Task Block_ReportsBlocked_FromTheLastRetry_AndRunningWhenItSucceeds() {
+            var sink = A.Fake<IParkedMessageSink>();
+            var monitor = new SubscriptionMonitor(new FakeTimeProvider());
+            var seen = new List<SubscriptionStatus?>();
+            var callCount = 0;
+            var policy = BuildPolicy(sink, maxRetries: 2, monitor: monitor);
+
+            await policy.ExecuteAsync(
+                _ => {
+                    callCount++;
+                    seen.Add(monitor.GetStatuses().SingleOrDefault());
+                    if (callCount < 4) throw new InvalidOperationException($"failure {callCount}");
+                    return ValueTask.CompletedTask;
+                },
+                "sub-1", AnyMessage, SubscriptionErrorMode.Block, TestContext.Current.CancellationToken);
+
+            seen[0].Should().BeNull();
+            seen[1].Should().BeNull();
+            seen[2]!.State.Should().Be(SubscriptionState.Blocked);
+            seen[2]!.Position.Should().Be(42);
+            seen[2]!.Attempts.Should().Be(2);
+            seen[2]!.Error!.Message.Should().Be("failure 2");
+            seen[3]!.State.Should().Be(SubscriptionState.Blocked);
+            seen[3]!.Attempts.Should().Be(3);
+            seen[3]!.Error!.Message.Should().Be("failure 3");
+            seen[3]!.Since.Should().Be(seen[2]!.Since);
+            var status = monitor.GetStatuses().Should().ContainSingle().Which;
+            status.State.Should().Be(SubscriptionState.Running);
+            status.Position.Should().Be(42);
+            status.Attempts.Should().Be(0);
+            status.Error.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task Block_ReportsNothing_WhenAnAttemptBeforeTheLastSucceeds() {
+            var sink = A.Fake<IParkedMessageSink>();
+            var monitor = new SubscriptionMonitor(new FakeTimeProvider());
+            var callCount = 0;
+            var policy = BuildPolicy(sink, maxRetries: 3, monitor: monitor);
+
+            await policy.ExecuteAsync(
+                _ => {
+                    callCount++;
+                    if (callCount < 2) throw new InvalidOperationException("transient");
+                    return ValueTask.CompletedTask;
+                },
+                "sub-1", AnyMessage, SubscriptionErrorMode.Block, TestContext.Current.CancellationToken);
+
+            monitor.GetStatuses().Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task Park_ReportsNothing() {
+            var sink = A.Fake<IParkedMessageSink>();
+            var monitor = new SubscriptionMonitor(new FakeTimeProvider());
+            var callCount = 0;
+            var policy = BuildPolicy(sink, maxRetries: 2, monitor: monitor);
+
+            await policy.ExecuteAsync(
+                _ => { callCount++; throw new InvalidOperationException("permanent"); },
+                "sub-1", AnyMessage, SubscriptionErrorMode.Park, TestContext.Current.CancellationToken);
+
+            callCount.Should().Be(2);
+            A.CallTo(() => sink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._))
+                .MustHaveHappenedOnceExactly();
+            monitor.GetStatuses().Should().BeEmpty();
         }
     }
 

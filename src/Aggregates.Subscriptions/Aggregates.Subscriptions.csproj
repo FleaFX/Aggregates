@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Aggregates\Aggregates.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
   </ItemGroup>
 

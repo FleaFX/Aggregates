@@ -63,6 +63,9 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton(new SubscriptionResubscribeOptions());
         builder.Services.TryAddSingleton<SubscriptionLoop>();
 
+        // Subscription state — reported by the loop, the retry policy and the scheduler; read by SubscriptionHealthCheck
+        builder.Services.TryAddSingleton<SubscriptionMonitor>();
+
         // Deferred commands — one scheduler serves every saga and policy; the activation is per handler class
         builder.Services.TryAddSingleton<Scheduler>();
         builder.Services.TryAddSingleton(typeof(SchedulerActivation<>));

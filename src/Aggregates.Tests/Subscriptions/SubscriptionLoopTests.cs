@@ -19,6 +19,9 @@ public class SubscriptionLoopTests {
     readonly FakeTimeProvider _time = new();
     readonly FakeLogger<SubscriptionLoop> _logger = new();
     readonly List<ulong> _processed = [];
+    readonly SubscriptionMonitor _monitor;
+
+    public SubscriptionLoopTests() => _monitor = new(_time);
 
     // Checkpoints are only written by the final flush, unless a test lowers the batch size.
     SubscriptionCheckpointOptions _checkpointOptions = new() { MaxBatchSize = 1000, MaxInterval = TimeSpan.FromHours(1) };
@@ -29,7 +32,7 @@ public class SubscriptionLoopTests {
     static CancellationToken Token => TestContext.Current.CancellationToken;
 
     SubscriptionLoop BuildLoop(ScriptedSubscriptionFactory factory, EventTypeRegistry? registry = null) =>
-        new(factory, _store, _sink, _checkpointOptions, _resubscribeOptions, _time, _logger, registry);
+        new(factory, _store, _sink, _checkpointOptions, _resubscribeOptions, _time, _logger, registry, _monitor);
 
     static SubscriptionRegistration Registration(bool startFromEnd = false, params string[] predecessors) =>
         new(SubscriptionId, typeof(object), typeof(object), startFromEnd, predecessors);
@@ -832,6 +835,149 @@ public class SubscriptionLoopTests {
             await RunUntilIdleAsync(factory, registration: Registration());
 
             factory.EndPositionCalls.Should().Be(0);
+        }
+    }
+
+    public class Monitoring : SubscriptionLoopTests {
+        SubscriptionStatus Status() => _monitor.GetStatuses().Single(status => status.Id == SubscriptionId);
+
+        // Runs the loop until the factory is idle and returns the subscription's status then, before stopping the loop.
+        async Task<SubscriptionStatus> StatusWhenIdleAsync(ScriptedSubscriptionFactory factory, SubscriptionRegistration? registration = null) {
+            var idle = factory.Idle;
+            using var stopping = CancellationTokenSource.CreateLinkedTokenSource(Token);
+            var run = BuildLoop(factory).RunAsync(registration ?? Registration(), Process, stopping.Token);
+
+            await idle.WaitAsync(Timeout, Token);
+            var status = Status();
+            await stopping.CancelAsync();
+            await run.WaitAsync(Timeout, Token);
+            return status;
+        }
+
+        [Fact]
+        public async Task WhileSubscribed_IsRunning() {
+            var factory = new ScriptedSubscriptionFactory().Then(Message(1));
+
+            var status = await StatusWhenIdleAsync(factory);
+
+            status.State.Should().Be(SubscriptionState.Running);
+            status.Since.Should().Be(_time.GetUtcNow());
+            status.Position.Should().BeNull();
+            status.Attempts.Should().Be(0);
+            status.Error.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task AfterATransientFailure_IsRetrying_UntilAMessageArrives() {
+            var failure = new IOException("connection lost");
+            var factory = new ScriptedSubscriptionFactory()
+                .ThenFail(failure, Message(1))
+                .Then();
+
+            var status = await StatusWhenIdleAsync(factory);
+
+            status.State.Should().Be(SubscriptionState.Retrying);
+            status.Position.Should().Be(1);
+            status.Attempts.Should().Be(1);
+            status.Error.Should().BeSameAs(failure);
+        }
+
+        [Fact]
+        public async Task AfterATransientFailure_IsRunningAgain_OnTheNextMessage() {
+            var factory = new ScriptedSubscriptionFactory()
+                .ThenFail(new IOException("connection lost"), Message(1))
+                .Then(Message(2));
+
+            var status = await StatusWhenIdleAsync(factory);
+
+            status.State.Should().Be(SubscriptionState.Running);
+            status.Position.Should().Be(2);
+            status.Attempts.Should().Be(0);
+            status.Error.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task AfterAnUnexpectedEnd_IsRetrying_WithoutError() {
+            var factory = new ScriptedSubscriptionFactory()
+                .ThenEnd(Message(1))
+                .Then();
+
+            var status = await StatusWhenIdleAsync(factory);
+
+            status.State.Should().Be(SubscriptionState.Retrying);
+            status.Position.Should().Be(1);
+            status.Attempts.Should().Be(1);
+            status.Error.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task GivenBlockAndAnUndeserializableMessage_IsBlocked() {
+            var error = new InvalidOperationException("poison");
+            var factory = new ScriptedSubscriptionFactory()
+                .Then(Message(1), Undeserializable(2, error));
+
+            var status = await StatusWhenIdleAsync(factory, Registration() with { ErrorMode = SubscriptionErrorMode.Block });
+
+            status.State.Should().Be(SubscriptionState.Blocked);
+            status.Position.Should().Be(2);
+            status.Attempts.Should().Be(1);
+            status.Error.Should().BeSameAs(error);
+        }
+
+        [Fact]
+        public async Task GivenBlockAndTheMessageDeserializesAgain_IsRunning() {
+            var error = new InvalidOperationException("poison");
+            var factory = new ScriptedSubscriptionFactory()
+                .Then(Message(1), Undeserializable(2, error))
+                .Then(Message(2));
+
+            var status = await StatusWhenIdleAsync(factory, Registration() with { ErrorMode = SubscriptionErrorMode.Block });
+
+            status.State.Should().Be(SubscriptionState.Running);
+            status.Position.Should().Be(2);
+            status.Error.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task AfterAFailureThatIsNotTransient_IsStopped_WithTheError() {
+            var failure = new UnauthorizedAccessException("denied");
+            var factory = new ScriptedSubscriptionFactory(isTransient: e => e is not UnauthorizedAccessException)
+                .ThenFail(failure, Message(1));
+
+            var act = () => BuildLoop(factory).RunAsync(Registration(), Process, Token);
+
+            await act.Should().ThrowAsync<UnauthorizedAccessException>();
+
+            var status = Status();
+            status.State.Should().Be(SubscriptionState.Stopped);
+            status.Position.Should().Be(1);
+            status.Error.Should().BeSameAs(failure);
+        }
+
+        [Fact]
+        public async Task WhenTheHostStops_IsStopped_WithoutError() {
+            await RunUntilIdleAsync(new ScriptedSubscriptionFactory().Then(Message(1)));
+
+            var status = Status();
+            status.State.Should().Be(SubscriptionState.Stopped);
+            status.Position.Should().Be(1);
+            status.Attempts.Should().Be(0);
+            status.Error.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task WithoutACheckpoint_WhenRequired_IsStopped() {
+            _checkpointOptions = new() { MaxBatchSize = 1000, MaxInterval = TimeSpan.FromHours(1), RequireCheckpoint = true };
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            var act = () => BuildLoop(factory).RunAsync(Registration(), Process, Token);
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+
+            var status = Status();
+            status.State.Should().Be(SubscriptionState.Stopped);
+            status.Position.Should().BeNull();
+            status.Error.Should().BeAssignableTo<InvalidOperationException>().Which.Message.Should().Contain("RequireCheckpoint");
         }
     }
 

@@ -117,14 +117,17 @@ sealed class SchedulerFeed : IAsyncDisposable {
                         await _channel.Writer.WriteAsync(entry, cancellationToken);
                         if (!entry.IsProgress || entry.CommitPosition > (from ?? 0))
                             from = entry.CommitPosition;
-                        failures = 0;
+                        if (failures > 0) {
+                            _retry.Recovered();
+                            failures = 0;
+                        }
                     }
-                    delay = _retry.Delay(++failures);
+                    delay = _retry.Failed(++failures, exception: null);
                     _logger.LogFeedEnded(_subscriptionId, from, delay, failures);
                 } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
                     return;
                 } catch (Exception exception) when (_retry.IsTransient(exception)) {
-                    delay = _retry.Delay(++failures);
+                    delay = _retry.Failed(++failures, exception);
                     _logger.LogFeedFailed(failures >= ErrorLevelFailures ? LogLevel.Error : LogLevel.Warning, exception, _subscriptionId, from, delay, failures);
                 }
 

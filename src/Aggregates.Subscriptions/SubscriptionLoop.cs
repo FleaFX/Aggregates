@@ -46,6 +46,10 @@ namespace Aggregates.Subscriptions;
 ///   once more; it continues once the message deserializes, typically after a fix is deployed.</item>
 ///   <item>When the loop ends, the last processed position is written once more. A failure to
 ///   write it is logged and never replaces the exception that ended the loop.</item>
+///   <item>When a <see cref="SubscriptionMonitor"/> is given, the loop reports its state there:
+///   running when it starts and when a message arrives after a failure, retrying after a transient
+///   failure or an unexpected end, blocked before a message that can't be deserialized when the
+///   registration blocks, and stopped when it ends, with the failure that ended it.</item>
 /// </list>
 /// The loop holds no state between calls to <see cref="RunAsync"/>, so one instance can serve
 /// every subscription.
@@ -58,7 +62,8 @@ public sealed partial class SubscriptionLoop(
     SubscriptionResubscribeOptions resubscribeOptions,
     TimeProvider timeProvider,
     ILogger<SubscriptionLoop> logger,
-    EventTypeRegistry? eventTypeRegistry = null
+    EventTypeRegistry? eventTypeRegistry = null,
+    SubscriptionMonitor? monitor = null
 ) {
 
     static readonly TimeSpan FinalFlushTimeout = TimeSpan.FromSeconds(5);
@@ -88,9 +93,12 @@ public sealed partial class SubscriptionLoop(
         var tracker = new CheckpointTracker(checkpointStore, subscriptionId, checkpointOptions, timeProvider);
         var eventTypes = GetEventTypes(registration);
         var failures = 0;
+        ulong? from = null;
+        Exception? failure = null;
+        monitor?.Report(subscriptionId, SubscriptionState.Running);
         try {
             while (true) {
-                var from = tracker.LastPosition;
+                from = tracker.LastPosition;
                 TimeSpan delay;
                 try {
                     from ??= await GetStartPositionAsync(registration, stoppingToken);
@@ -124,22 +132,28 @@ public sealed partial class SubscriptionLoop(
 
                         if (failures > 0) {
                             LogResubscribed(logger, subscriptionId, from, failures);
+                            monitor?.Report(subscriptionId, SubscriptionState.Running, message.CommitPosition);
                             failures = 0;
                         }
                     }
 
                     delay = NextDelay(++failures);
-                    if (blocked is { } undeserializable)
+                    if (blocked is { } undeserializable) {
                         LogBlockedUndeserializable(logger, undeserializable.DeserializationError!, subscriptionId, undeserializable.CommitPosition, failures, delay);
-                    else
+                        monitor?.Report(subscriptionId, SubscriptionState.Blocked, undeserializable.CommitPosition, failures, undeserializable.DeserializationError);
+                    } else {
                         LogSubscriptionEnded(logger, subscriptionId, tracker.LastPosition ?? from, failures, delay);
+                        monitor?.Report(subscriptionId, SubscriptionState.Retrying, tracker.LastPosition ?? from, failures);
+                    }
                 } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                     return;
                 } catch (Exception exception) when (exception is not MissingCheckpointException && subscriptionFactory.IsTransient(exception)) {
                     delay = NextDelay(++failures);
                     LogResubscribing(logger, failures >= ErrorLevelFailures ? LogLevel.Error : LogLevel.Warning,
                         exception, subscriptionId, tracker.LastPosition ?? from, failures, delay);
+                    monitor?.Report(subscriptionId, SubscriptionState.Retrying, tracker.LastPosition ?? from, failures, exception);
                 } catch (Exception exception) {
+                    failure = exception;
                     LogSubscriptionFailed(logger, exception, subscriptionId, tracker.LastPosition ?? from);
                     throw;
                 }
@@ -151,6 +165,7 @@ public sealed partial class SubscriptionLoop(
                 }
             }
         } finally {
+            monitor?.Report(subscriptionId, SubscriptionState.Stopped, tracker.LastPosition ?? from, error: failure);
             await FlushFinalCheckpointAsync(tracker, subscriptionId);
         }
     }

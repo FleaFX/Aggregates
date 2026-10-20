@@ -15,7 +15,9 @@ namespace Aggregates.Subscriptions;
 ///   allowing the subscription checkpoint to advance past this message. With
 ///   <see cref="SubscriptionErrorMode.Block"/> there is no final failure: it keeps retrying, with the
 ///   backoff capped at <see cref="SubscriptionErrorHandlingOptions.MaxDelay"/>, until an attempt
-///   succeeds.</item>
+///   succeeds. From the failure of the last regular attempt on, it reports the subscription as
+///   <see cref="SubscriptionState.Blocked"/> to the <see cref="SubscriptionMonitor"/>, and as running
+///   again once an attempt succeeds.</item>
 ///   <item><see cref="OperationCanceledException"/> is always propagated — it is never swallowed
 ///   or counted as a retry attempt.</item>
 /// </list>
@@ -23,10 +25,12 @@ namespace Aggregates.Subscriptions;
 /// <param name="parkedMessageSink">Parks a message after its final failure.</param>
 /// <param name="options">The number of attempts and the backoff.</param>
 /// <param name="logger">Logs when a blocking subscription starts and stops retrying; optional.</param>
+/// <param name="monitor">Receives the state of a blocking subscription; optional.</param>
 public sealed partial class SubscriptionRetryPolicy(
     IParkedMessageSink parkedMessageSink,
     SubscriptionErrorHandlingOptions options,
-    ILogger<SubscriptionRetryPolicy>? logger = null
+    ILogger<SubscriptionRetryPolicy>? logger = null,
+    SubscriptionMonitor? monitor = null
 ) {
 
     readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
@@ -61,14 +65,18 @@ public sealed partial class SubscriptionRetryPolicy(
         for (var attempt = 1; ; attempt++) {
             try {
                 await handler(cancellationToken);
-                if (attempt > maxRetries)
+                if (attempt > maxRetries) {
                     LogUnblocked(_logger, subscriptionId, message.CommitPosition, attempt);
+                    monitor?.Report(subscriptionId, SubscriptionState.Running, message.CommitPosition);
+                }
                 return;
             } catch (OperationCanceledException) {
                 throw;
             } catch (Exception exception) when (attempt < maxRetries || errorMode == SubscriptionErrorMode.Block) {
                 if (attempt == maxRetries)
                     LogBlocked(_logger, exception, subscriptionId, message.CommitPosition, attempt);
+                if (attempt >= maxRetries)
+                    monitor?.Report(subscriptionId, SubscriptionState.Blocked, message.CommitPosition, attempt, exception);
                 await Task.Delay(
                     Backoff.Delay(attempt, options.InitialDelay, options.MaxDelay, options.BackoffMultiplier),
                     cancellationToken);
