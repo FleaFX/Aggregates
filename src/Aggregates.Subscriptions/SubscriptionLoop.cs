@@ -39,6 +39,10 @@ namespace Aggregates.Subscriptions;
 ///   Transient failures, and a subscription that ends without failure, lead to a new subscription
 ///   after a delay as configured by <see cref="SubscriptionResubscribeOptions"/>. Any other
 ///   failure is logged and rethrown.</item>
+///   <item>Once the loop is stopping, the subscription ending is a stop, not a failure: a
+///   transport may report the cancellation as its own exception (a gRPC client throws an
+///   <c>RpcException</c> with status <c>Cancelled</c>) or simply end the subscription. The loop
+///   then returns without logging a failure and without reporting it as retrying.</item>
 ///   <item>A message whose <see cref="SubscriptionMessage.DeserializationError"/> is set is parked
 ///   right away, without retries, and not handed to the processing delegate. When the registration
 ///   blocks instead (<see cref="SubscriptionErrorMode.Block"/>), the loop stops before the message
@@ -137,6 +141,10 @@ public sealed partial class SubscriptionLoop(
                         }
                     }
 
+                    // A transport may end the subscription on cancellation instead of throwing.
+                    if (stoppingToken.IsCancellationRequested)
+                        return;
+
                     delay = NextDelay(++failures);
                     if (blocked is { } undeserializable) {
                         LogBlockedUndeserializable(logger, undeserializable.DeserializationError!, subscriptionId, undeserializable.CommitPosition, failures, delay);
@@ -145,7 +153,8 @@ public sealed partial class SubscriptionLoop(
                         LogSubscriptionEnded(logger, subscriptionId, tracker.LastPosition ?? from, failures, delay);
                         monitor?.Report(subscriptionId, SubscriptionState.Retrying, tracker.LastPosition ?? from, failures);
                     }
-                } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
+                } catch (Exception) when (stoppingToken.IsCancellationRequested) {
+                    // Not only OperationCanceledException: a transport may report the cancellation as its own exception.
                     return;
                 } catch (Exception exception) when (exception is not MissingCheckpointException && subscriptionFactory.IsTransient(exception)) {
                     delay = NextDelay(++failures);
