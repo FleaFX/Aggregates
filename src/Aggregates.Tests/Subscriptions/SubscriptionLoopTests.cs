@@ -500,6 +500,131 @@ public class SubscriptionLoopTests {
         }
     }
 
+    public class RequireCheckpoint : SubscriptionLoopTests {
+        void Require(params string[] allowed) =>
+            _checkpointOptions = new() { MaxBatchSize = 1000, MaxInterval = TimeSpan.FromHours(1), RequireCheckpoint = true, AllowedWithoutCheckpoint = allowed };
+
+        [Fact]
+        public async Task WithoutAnyCheckpoint_Throws_BeforeSubscribing() {
+            Require();
+            var registration = Registration(false, "sub-1@v2", "sub-1@v1");
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            var act = () => BuildLoop(factory).RunAsync(registration, Process, Token);
+
+            var thrown = (await act.Should().ThrowAsync<InvalidOperationException>()).Which;
+            thrown.Message.Should().Contain("'sub-1'")
+                .And.Contain("sub-1@v2, sub-1@v1")
+                .And.Contain("beginning")
+                .And.Contain("AllowedWithoutCheckpoint");
+            factory.Requests.Should().BeEmpty();
+            A.CallTo(() => _store.StoreAsync(A<string>._, A<ulong>._, A<CancellationToken>._)).MustNotHaveHappened();
+            Logs(LogLevel.Critical).Should().ContainSingle().Which.Exception.Should().BeSameAs(thrown);
+            Logs(LogLevel.Warning).Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task WithoutPredecessors_Throws_AndSaysSo() {
+            Require();
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            var act = () => BuildLoop(factory).RunAsync(Registration(), Process, Token);
+
+            (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain("it has no predecessor");
+            factory.Requests.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task WithStartFromEnd_Throws_WithoutAskingForTheEndPosition() {
+            Require();
+            var factory = new ScriptedSubscriptionFactory().Then();
+            factory.EndPosition = 42;
+
+            var act = () => BuildLoop(factory).RunAsync(Registration(true), Process, Token);
+
+            (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message.Should().Contain("from the end");
+            factory.EndPositionCalls.Should().Be(0);
+            A.CallTo(() => _store.StoreAsync(A<string>._, A<ulong>._, A<CancellationToken>._)).MustNotHaveHappened();
+            factory.Requests.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task GivenItsOwnCheckpoint_Subscribes() {
+            Require();
+            A.CallTo(() => _store.GetAsync(SubscriptionId, A<CancellationToken>._)).Returns(41UL);
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            await RunUntilIdleAsync(factory);
+
+            factory.FromPositions.Should().Equal(41UL);
+            Logs(LogLevel.Critical).Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task GivenAPredecessorCheckpoint_AdoptsIt() {
+            Require();
+            A.CallTo(() => _store.GetAsync("sub-1@v2", A<CancellationToken>._)).Returns(41UL);
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            await RunUntilIdleAsync(factory, registration: Registration(false, "sub-1@v2"));
+
+            factory.FromPositions.Should().Equal(41UL);
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 41UL, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+            Logs(LogLevel.Critical).Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task GivenTheIdIsAllowed_StartsFromTheBeginning_AndLogsIt() {
+            Require(SubscriptionId);
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            await RunUntilIdleAsync(factory);
+
+            factory.FromPositions.Should().ContainSingle().Which.Should().BeNull();
+            var information = Logs(LogLevel.Information).Single(record => record.Message.Contains("allowed to start without"));
+            State(information, "SubscriptionId").Should().Be("sub-1");
+            State(information, "Start").Should().Be("beginning");
+        }
+
+        [Fact]
+        public async Task GivenTheIdIsAllowed_AndStartFromEnd_StoresTheEndPosition() {
+            Require(SubscriptionId);
+            var factory = new ScriptedSubscriptionFactory().Then();
+            factory.EndPosition = 42;
+
+            await RunUntilIdleAsync(factory, registration: Registration(true));
+
+            factory.FromPositions.Should().Equal(42UL);
+            A.CallTo(() => _store.StoreAsync(SubscriptionId, 42UL, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        }
+
+        [Theory]
+        [InlineData("sub-2")]
+        [InlineData("SUB-1")]
+        public async Task GivenAnotherIdIsAllowed_Throws(string allowed) {
+            Require(allowed);
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            var act = () => BuildLoop(factory).RunAsync(Registration(), Process, Token);
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+            factory.Requests.Should().BeEmpty();
+        }
+
+        [Fact]
+        public async Task GivenTheCheckpointReadFailsOnce_TriesAgain_AndSubscribesAfterIt() {
+            Require();
+            A.CallTo(() => _store.GetAsync(SubscriptionId, A<CancellationToken>._)).Returns(41UL);
+            A.CallTo(() => _store.GetAsync(SubscriptionId, A<CancellationToken>._)).Throws(new IOException("store down")).Once();
+            var factory = new ScriptedSubscriptionFactory().Then();
+
+            await RunUntilIdleAsync(factory);
+
+            factory.FromPositions.Should().Equal(41UL);
+            Logs(LogLevel.Critical).Should().BeEmpty();
+        }
+    }
+
     public class EventTypes : SubscriptionLoopTests {
         static readonly EventTypeRegistry Registry = EventTypeRegistry.FromTypes(
             [typeof(FilterA), typeof(FilterB), typeof(FilterC)]);

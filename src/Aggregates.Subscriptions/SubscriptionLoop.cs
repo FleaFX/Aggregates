@@ -20,7 +20,10 @@ namespace Aggregates.Subscriptions;
 ///   checkpoint wins over starting from the end. Without a predecessor checkpoint, the
 ///   subscription starts from the beginning, or from the end when the registration says so,
 ///   fixed at the end position the transport reports before the first subscribe, so a
-///   subscription that stops before its first event misses none appended meanwhile.</item>
+///   subscription that stops before its first event misses none appended meanwhile. With
+///   <see cref="SubscriptionCheckpointOptions.RequireCheckpoint"/>, it fails instead, before it
+///   subscribes, unless its id is in <see cref="SubscriptionCheckpointOptions.AllowedWithoutCheckpoint"/>;
+///   that failure is never transient.</item>
 ///   <item>When an <see cref="EventTypeRegistry"/> is registered, the loop asks it for the
 ///   stored names of the event types the registration can receive (see
 ///   <see cref="EventTypeRegistry.GetTypeNames"/>) and the transport delivers only those.
@@ -132,7 +135,7 @@ public sealed partial class SubscriptionLoop(
                         LogSubscriptionEnded(logger, subscriptionId, tracker.LastPosition ?? from, failures, delay);
                 } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                     return;
-                } catch (Exception exception) when (subscriptionFactory.IsTransient(exception)) {
+                } catch (Exception exception) when (exception is not MissingCheckpointException && subscriptionFactory.IsTransient(exception)) {
                     delay = NextDelay(++failures);
                     LogResubscribing(logger, failures >= ErrorLevelFailures ? LogLevel.Error : LogLevel.Warning,
                         exception, subscriptionId, tracker.LastPosition ?? from, failures, delay);
@@ -153,7 +156,8 @@ public sealed partial class SubscriptionLoop(
     }
 
     // The start position: the subscription's own checkpoint, or the nearest predecessor's,
-    // which is adopted before subscribing. Null for a fresh start (or end) without adoption.
+    // which is adopted before subscribing. Null for a fresh start (or end) without adoption,
+    // which RequireCheckpoint refuses unless the id is allowed.
     async ValueTask<ulong?> GetStartPositionAsync(SubscriptionRegistration registration, CancellationToken stoppingToken) {
         var predecessors = registration.Predecessors ?? [];
         if (await checkpointStore.GetOrAdoptAsync(registration.SubscriptionId, predecessors, stoppingToken) is { } checkpoint) {
@@ -165,9 +169,15 @@ public sealed partial class SubscriptionLoop(
             return checkpoint.Position;
         }
 
+        var start = registration.StartFromEnd ? "end" : "beginning";
+        if (checkpointOptions.RequireCheckpoint) {
+            if (!checkpointOptions.AllowedWithoutCheckpoint.Contains(registration.SubscriptionId))
+                throw new MissingCheckpointException(registration.SubscriptionId, predecessors, start);
+            LogAllowedWithoutCheckpoint(logger, registration.SubscriptionId, start);
+        }
+
         if (predecessors.Count > 0)
-            LogNoPredecessorCheckpoint(logger, registration.SubscriptionId,
-                string.Join(", ", predecessors), registration.StartFromEnd ? "end" : "beginning");
+            LogNoPredecessorCheckpoint(logger, registration.SubscriptionId, string.Join(", ", predecessors), start);
 
         if (registration.StartFromEnd && await subscriptionFactory.GetEndPositionAsync(stoppingToken) is { } end) {
             await checkpointStore.StoreAsync(registration.SubscriptionId, end, stoppingToken);
@@ -204,6 +214,25 @@ public sealed partial class SubscriptionLoop(
             LogFinalFlushFailed(logger, exception, subscriptionId, tracker.LastPosition);
         }
     }
+
+    /// <summary>
+    /// Thrown when a subscription would start without a checkpoint while
+    /// <see cref="SubscriptionCheckpointOptions.RequireCheckpoint"/> is on. Never transient.
+    /// </summary>
+    /// <param name="subscriptionId">The subscription.</param>
+    /// <param name="predecessors">Its predecessors, none of which has a checkpoint.</param>
+    /// <param name="start">Where it would have started: "beginning" or "end".</param>
+    sealed class MissingCheckpointException(string subscriptionId, IReadOnlyList<string> predecessors, string start)
+        : InvalidOperationException(
+            $"Subscription '{subscriptionId}' has no checkpoint, and " +
+            (predecessors.Count == 0 ? "it has no predecessor" : $"neither have its predecessors {string.Join(", ", predecessors)}") +
+            $"; it would start from the {start}, but SubscriptionCheckpointOptions.RequireCheckpoint is on. " +
+            "If its position exists elsewhere, write it first: import the 0.x positions (Aggregates.KurrentDB.Migration), " +
+            "restore the checkpoint store, or set continueFrom to the subscription it continues from. " +
+            $"To start it from the {start} on purpose, add '{subscriptionId}' to SubscriptionCheckpointOptions.AllowedWithoutCheckpoint.");
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Subscription '{SubscriptionId}' has no checkpoint and is allowed to start without one; starting from the {Start}")]
+    static partial void LogAllowedWithoutCheckpoint(ILogger logger, string subscriptionId, string start);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Subscription '{SubscriptionId}' has no checkpoint; continuing from '{Predecessor}' after position {Position}")]
     static partial void LogContinuingFromPredecessor(ILogger logger, string subscriptionId, string predecessor, ulong position);
