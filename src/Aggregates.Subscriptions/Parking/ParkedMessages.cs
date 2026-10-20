@@ -32,26 +32,25 @@ public sealed partial class ParkedMessages(
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<ParkedMessage>> ListAsync(string subscriptionId, CancellationToken cancellationToken = default) {
         ArgumentException.ThrowIfNullOrEmpty(subscriptionId);
-        var stream = ParkedFormat.ParkedStream(subscriptionId);
         var parked = new List<ParkedMessage>();
-        var closed = new HashSet<ulong>();
+        var closed = new HashSet<string>(StringComparer.Ordinal);
         await foreach (var entry in Store.ReadParkedAsync(subscriptionId, cancellationToken)) {
             switch (entry.EventType) {
                 case ParkedFormat.ParkedEventType:
                     parked.Add(ParkedFormat.ReadParked(subscriptionId, entry));
                     break;
                 case ParkedFormat.ReplayedEventType or ParkedFormat.DismissedEventType
-                    when EventReference.TryParseLinkData(entry.Data.Span, out var reference) && reference.StreamId == stream:
-                    closed.Add(reference.Revision);
+                    when ParkedFormat.TryReadClosed(subscriptionId, entry, out var id):
+                    closed.Add(id);
                     break;
             }
         }
-        return [.. parked.Where(message => !closed.Contains(message.Revision))];
+        return [.. parked.Where(message => !closed.Contains(message.Id))];
     }
 
     /// <inheritdoc/>
-    public async ValueTask<ParkedMessageReplay> ReplayAsync(string subscriptionId, ulong revision, CancellationToken cancellationToken = default) =>
-        await ReplayAsync(await GetListedAsync(subscriptionId, revision, cancellationToken), cancellationToken);
+    public async ValueTask<ParkedMessageReplay> ReplayAsync(string subscriptionId, string id, CancellationToken cancellationToken = default) =>
+        await ReplayAsync(await GetListedAsync(subscriptionId, id, cancellationToken), cancellationToken);
 
     /// <inheritdoc/>
     public async ValueTask<IReadOnlyList<ParkedMessageReplay>> ReplayAllAsync(string subscriptionId, CancellationToken cancellationToken = default) {
@@ -67,27 +66,25 @@ public sealed partial class ParkedMessages(
     }
 
     /// <inheritdoc/>
-    public async ValueTask DismissAsync(string subscriptionId, ulong revision, CancellationToken cancellationToken = default) {
-        var message = await GetListedAsync(subscriptionId, revision, cancellationToken);
-        await Store.AppendParkedAsync(subscriptionId, ParkedFormat.DismissedEventType, Reference(message).ToLinkData(), cancellationToken);
-        LogDismissed(logger, message.Revision, subscriptionId, message.Source);
+    public async ValueTask DismissAsync(string subscriptionId, string id, CancellationToken cancellationToken = default) {
+        var message = await GetListedAsync(subscriptionId, id, cancellationToken);
+        await Store.AppendParkedAsync(subscriptionId, ParkedFormat.DismissedEventType, ParkedFormat.WriteClosed(message), cancellationToken);
+        LogDismissed(logger, message.Id, subscriptionId, message.Source);
     }
 
     IParkedMessageStore Store => store ?? throw new InvalidOperationException(
         "No parked-message store is configured: add a storage integration, such as AddKurrentDb() or AddMssp() " +
         "on the builder of the projections, policies or sagas.");
 
-    // The parked message as an entry of its parked stream, the data of a replayed or dismissed entry.
-    static EventReference Reference(ParkedMessage message) =>
-        new(ParkedFormat.ParkedStream(message.SubscriptionId), message.Revision);
-
     /// <summary>
-    /// The listed message with <paramref name="revision"/>.
+    /// The listed message with <paramref name="id"/>.
     /// </summary>
-    async ValueTask<ParkedMessage> GetListedAsync(string subscriptionId, ulong revision, CancellationToken cancellationToken) =>
-        (await ListAsync(subscriptionId, cancellationToken)).FirstOrDefault(message => message.Revision == revision)
-        ?? throw new InvalidOperationException(
-            $"Parked message {revision} of '{subscriptionId}' is not listed: it was replayed or dismissed, or it doesn't exist.");
+    async ValueTask<ParkedMessage> GetListedAsync(string subscriptionId, string id, CancellationToken cancellationToken) {
+        ArgumentException.ThrowIfNullOrEmpty(id);
+        return (await ListAsync(subscriptionId, cancellationToken)).FirstOrDefault(message => message.Id == id)
+            ?? throw new InvalidOperationException(
+                $"Parked message {id} of '{subscriptionId}' is not listed: it was replayed or dismissed, or it doesn't exist.");
+    }
 
     /// <summary>
     /// Replays <paramref name="message"/>, and records a success in its parked stream.
@@ -101,12 +98,12 @@ public sealed partial class ParkedMessages(
         }
 
         if (error is not null) {
-            LogReplayFailed(logger, error, message.Revision, message.SubscriptionId, message.Source);
+            LogReplayFailed(logger, error, message.Id, message.SubscriptionId, message.Source);
             return new ParkedMessageReplay(message, error);
         }
 
-        await Store.AppendParkedAsync(message.SubscriptionId, ParkedFormat.ReplayedEventType, Reference(message).ToLinkData(), cancellationToken);
-        LogReplayed(logger, message.Revision, message.SubscriptionId, message.Source);
+        await Store.AppendParkedAsync(message.SubscriptionId, ParkedFormat.ReplayedEventType, ParkedFormat.WriteClosed(message), cancellationToken);
+        LogReplayed(logger, message.Id, message.SubscriptionId, message.Source);
         return new ParkedMessageReplay(message, null);
     }
 
@@ -117,10 +114,10 @@ public sealed partial class ParkedMessages(
     async ValueTask<Exception?> ReplayCoreAsync(ParkedMessage message, CancellationToken cancellationToken) {
         if (message.Source is not { } source)
             throw new InvalidOperationException(
-                $"Parked message {message.Revision} of '{message.SubscriptionId}' doesn't tell which event it refers to: it can't be replayed, only dismissed.");
+                $"Parked message {message.Id} of '{message.SubscriptionId}' doesn't tell which event it refers to: it can't be replayed, only dismissed.");
         if (await Store.ReadEventAsync(source, cancellationToken) is not { } entry)
             throw new InvalidOperationException(
-                $"Event {source} of parked message {message.Revision} of '{message.SubscriptionId}' doesn't exist anymore: it can't be replayed, only dismissed.");
+                $"Event {source} of parked message {message.Id} of '{message.SubscriptionId}' doesn't exist anymore: it can't be replayed, only dismissed.");
 
         return entry.EventType is ScheduledFormat.CommandRequestEventType or ScheduledFormat.DeadlineRequestEventType
             ? await ReplayRequestAsync(message, source, entry, cancellationToken)
@@ -147,7 +144,7 @@ public sealed partial class ParkedMessages(
     /// </summary>
     async ValueTask<Exception?> ReplayRequestAsync(ParkedMessage message, EventReference source, StoredEntry entry, CancellationToken cancellationToken) {
         if (!ScheduledFormat.TryReadRequest(entry.Data, out var envelope))
-            throw new InvalidOperationException($"Request {source} of parked message {message.Revision} of '{message.SubscriptionId}' is not valid.");
+            throw new InvalidOperationException($"Request {source} of parked message {message.Id} of '{message.SubscriptionId}' is not valid.");
         var payload = Deserialize(envelope.Type, envelope.Data, source);
 
         if (entry.EventType == ScheduledFormat.DeadlineRequestEventType) {
@@ -202,12 +199,12 @@ public sealed partial class ParkedMessages(
         new[] { registration.SubscriptionId }.Concat(registration.Predecessors ?? [])
             .Any(id => string.Equals(scheduler ? ScheduledFormat.SchedulerStream(id) : id, subscriptionId, StringComparison.Ordinal));
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Replayed parked message {Revision} of '{SubscriptionId}' ({Source})")]
-    static partial void LogReplayed(ILogger logger, ulong revision, string subscriptionId, EventReference? source);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Replayed parked message {Id} of '{SubscriptionId}' ({Source})")]
+    static partial void LogReplayed(ILogger logger, string id, string subscriptionId, EventReference? source);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Replaying parked message {Revision} of '{SubscriptionId}' ({Source}) failed; it stays parked")]
-    static partial void LogReplayFailed(ILogger logger, Exception exception, ulong revision, string subscriptionId, EventReference? source);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Replaying parked message {Id} of '{SubscriptionId}' ({Source}) failed; it stays parked")]
+    static partial void LogReplayFailed(ILogger logger, Exception exception, string id, string subscriptionId, EventReference? source);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Dismissed parked message {Revision} of '{SubscriptionId}' ({Source})")]
-    static partial void LogDismissed(ILogger logger, ulong revision, string subscriptionId, EventReference? source);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Dismissed parked message {Id} of '{SubscriptionId}' ({Source})")]
+    static partial void LogDismissed(ILogger logger, string id, string subscriptionId, EventReference? source);
 }

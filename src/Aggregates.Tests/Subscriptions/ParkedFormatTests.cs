@@ -31,7 +31,7 @@ public class ParkedFormatTests {
         var parked = ParkedFormat.ReadParked("sub-1", Entry(ParkedFormat.WriteParked(message, exception)));
 
         parked.SubscriptionId.Should().Be("sub-1");
-        parked.Revision.Should().Be(3);
+        parked.Id.Should().Be("3");
         parked.ParkedAt.Should().Be(Created);
         parked.Source.Should().Be(new EventReference("order-1", 7));
         parked.CommitPosition.Should().Be(42);

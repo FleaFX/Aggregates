@@ -7,9 +7,10 @@ namespace Aggregates.Subscriptions;
 /// The id it was parked under: a subscription id, or the id of a scheduler
 /// (<c>scheduled-{subscription id}</c>) for a deferred command or a saga deadline.
 /// </param>
-/// <param name="Revision">
-/// Its revision in <c>parked-{SubscriptionId}</c>, which identifies it for
-/// <see cref="IParkedMessages.ReplayAsync"/> and <see cref="IParkedMessages.DismissAsync"/>.
+/// <param name="Id">
+/// Identifies it among the messages parked under the same subscription id, for
+/// <see cref="IParkedMessages.ReplayAsync"/> and <see cref="IParkedMessages.DismissAsync"/>. It stays the
+/// same as long as the message is parked. Compare it, but don't derive anything from it.
 /// </param>
 /// <param name="ParkedAt">When it was parked, by the clock of the store.</param>
 /// <param name="Source">
@@ -26,7 +27,7 @@ namespace Aggregates.Subscriptions;
 /// <param name="StackTrace">The stack trace of the exception of the last attempt, if any.</param>
 public sealed record ParkedMessage(
     string SubscriptionId,
-    ulong Revision,
+    string Id,
     DateTimeOffset ParkedAt,
     EventReference? Source,
     ulong CommitPosition,

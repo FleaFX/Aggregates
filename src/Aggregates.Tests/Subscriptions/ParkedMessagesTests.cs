@@ -54,14 +54,14 @@ public class ParkedMessagesTests {
         var messages = await Messages().ListAsync("Orders@v2", Token);
 
         messages.Should().HaveCount(2);
-        messages[0].Revision.Should().Be(0);
+        messages[0].Id.Should().Be("0");
         messages[0].SubscriptionId.Should().Be("Orders@v2");
         messages[0].CommitPosition.Should().Be(42);
         messages[0].Source.Should().Be(new EventReference("order-1", 7));
         messages[0].EventType.Should().Be(typeof(OrderPlaced).FullName);
         messages[0].ExceptionType.Should().Be(typeof(InvalidOperationException).FullName);
         messages[0].ExceptionMessage.Should().Be("boom");
-        messages[1].Revision.Should().Be(1);
+        messages[1].Id.Should().Be("1");
         messages[1].CommitPosition.Should().Be(43);
         messages[1].Source.Should().Be(new EventReference("order-2", 8));
     }
@@ -76,7 +76,7 @@ public class ParkedMessagesTests {
 
         var messages = await Messages().ListAsync("Orders@v2", Token);
 
-        messages.Should().ContainSingle().Which.Revision.Should().Be(1);
+        messages.Should().ContainSingle().Which.Id.Should().Be("1");
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class ParkedMessagesTests {
 
         var messages = await Messages().ListAsync("Orders@v2", Token);
 
-        messages.Should().ContainSingle().Which.Revision.Should().Be(0);
+        messages.Should().ContainSingle().Which.Id.Should().Be("0");
     }
 
     [Fact]
@@ -105,7 +105,7 @@ public class ParkedMessagesTests {
         _store.Deserializer = (_, _) => @event;
         _store.Park("Orders@v2", Message(42), new InvalidOperationException("boom"));
 
-        var replay = await Messages().ReplayAsync("Orders@v2", 0, Token);
+        var replay = await Messages().ReplayAsync("Orders@v2", "0", Token);
 
         replay.Succeeded.Should().BeTrue();
         A.CallTo(() => _orders.HandleAsync(A<SubscriptionMessage>.That.Matches(message =>
@@ -124,7 +124,7 @@ public class ParkedMessagesTests {
         _store.Deserializer = (_, _) => @event;
         _store.Park("Orders@v1", Message(42), new InvalidOperationException("boom"));
 
-        var replay = await Messages().ReplayAsync("Orders@v1", 0, Token);
+        var replay = await Messages().ReplayAsync("Orders@v1", "0", Token);
 
         replay.Succeeded.Should().BeTrue();
         A.CallTo(() => _orders.HandleAsync(A<SubscriptionMessage>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
@@ -139,13 +139,13 @@ public class ParkedMessagesTests {
         var failure = new InvalidOperationException("still failing");
         A.CallTo(() => _orders.HandleAsync(A<SubscriptionMessage>._, A<CancellationToken>._)).Throws(failure);
 
-        var replay = await Messages().ReplayAsync("Orders@v2", 0, Token);
+        var replay = await Messages().ReplayAsync("Orders@v2", "0", Token);
 
         replay.Succeeded.Should().BeFalse();
         replay.Error.Should().BeSameAs(failure);
         A.CallTo(() => _orders.HandleAsync(A<SubscriptionMessage>._, A<CancellationToken>._)).MustHaveHappened(2, Times.Exactly);
         _store.Entries("Orders@v2").Should().NotContain(entry => entry.EventType == ParkedFormat.ReplayedEventType);
-        (await Messages().ListAsync("Orders@v2", Token)).Should().ContainSingle().Which.Revision.Should().Be(0);
+        (await Messages().ListAsync("Orders@v2", Token)).Should().ContainSingle().Which.Id.Should().Be("0");
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public class ParkedMessagesTests {
         _store.Park("Orders@v2", Message(42), new InvalidOperationException("boom"));
         A.CallTo(() => _orders.HandleAsync(A<SubscriptionMessage>._, A<CancellationToken>._)).Throws(new InvalidOperationException("transient")).Once();
 
-        var replay = await Messages().ReplayAsync("Orders@v2", 0, Token);
+        var replay = await Messages().ReplayAsync("Orders@v2", "0", Token);
 
         replay.Succeeded.Should().BeTrue();
     }
@@ -165,7 +165,7 @@ public class ParkedMessagesTests {
         _store.Append("Orders@v2", ParkedFormat.ParkedEventType,
             "{\"CommitPosition\":42,\"ExceptionType\":\"X\",\"Message\":\"m\"}"u8.ToArray());
 
-        var replay = await Messages().ReplayAsync("Orders@v2", 0, Token);
+        var replay = await Messages().ReplayAsync("Orders@v2", "0", Token);
 
         replay.Succeeded.Should().BeFalse();
         replay.Error!.Message.Should().Contain("only dismissed");
@@ -176,7 +176,7 @@ public class ParkedMessagesTests {
     public async Task ReplayAsync_OfADeletedEvent_FailsWithoutHandling() {
         _store.Park("Orders@v2", Message(42), new InvalidOperationException("boom"));
 
-        var replay = await Messages().ReplayAsync("Orders@v2", 0, Token);
+        var replay = await Messages().ReplayAsync("Orders@v2", "0", Token);
 
         replay.Succeeded.Should().BeFalse();
         replay.Error!.Message.Should().Contain("doesn't exist anymore");
@@ -195,7 +195,7 @@ public class ParkedMessagesTests {
             : (_, _) => null;
         _store.Park("Orders@v2", Message(42), new InvalidOperationException("boom"));
 
-        var replay = await Messages().ReplayAsync("Orders@v2", 0, Token);
+        var replay = await Messages().ReplayAsync("Orders@v2", "0", Token);
 
         replay.Succeeded.Should().BeFalse();
         if (deserializerThrows) {
@@ -213,7 +213,7 @@ public class ParkedMessagesTests {
         _store.Deserializer = (_, _) => "a string";
         _store.Park("Orders@v2", Message(42), new InvalidOperationException("boom"));
 
-        var replay = await Messages().ReplayAsync("Orders@v2", 0, Token);
+        var replay = await Messages().ReplayAsync("Orders@v2", "0", Token);
 
         replay.Succeeded.Should().BeFalse();
         replay.Error!.Message.Should().Contain("doesn't handle");
@@ -225,7 +225,7 @@ public class ParkedMessagesTests {
         _store.Events[new EventReference("order-1", 0)] = new StoredEntry("IntegrationTests.OrderPlaced@v1", "{}"u8.ToArray(), EventMetadata.Empty);
         _store.Park("Unknown@v1", Message(42), new InvalidOperationException("boom"));
 
-        var replay = await Messages().ReplayAsync("Unknown@v1", 0, Token);
+        var replay = await Messages().ReplayAsync("Unknown@v1", "0", Token);
 
         replay.Succeeded.Should().BeFalse();
         replay.Error!.Message.Should().Contain("No subscription in this host");
@@ -239,20 +239,21 @@ public class ParkedMessagesTests {
         _store.Events[new EventReference("order-1", 0)] = new StoredEntry("IntegrationTests.OrderPlaced@v1", "{}"u8.ToArray(), EventMetadata.Empty);
         _store.Park("Orders@v1", Message(42), new InvalidOperationException("boom"));
 
-        var replay = await Messages(third).ReplayAsync("Orders@v1", 0, Token);
+        var replay = await Messages(third).ReplayAsync("Orders@v1", "0", Token);
 
         replay.Succeeded.Should().BeFalse();
         replay.Error!.Message.Should().Contain("2 subscriptions");
     }
 
     [Theory]
-    [InlineData(9UL)]
-    [InlineData(0UL)]
-    public async Task ReplayAsync_OfANotListedMessage_Throws(ulong revision) {
+    [InlineData("9")]
+    [InlineData("0")]
+    [InlineData("not-a-number")]
+    public async Task ReplayAsync_OfANotListedMessage_Throws(string id) {
         _store.Park("Orders@v2", Message(42), new InvalidOperationException("boom"));
         _store.Append("Orders@v2", ParkedFormat.ReplayedEventType, new EventReference("parked-Orders@v2", 0).ToLinkData());
 
-        var act = () => Messages().ReplayAsync("Orders@v2", revision, Token).AsTask();
+        var act = () => Messages().ReplayAsync("Orders@v2", id, Token).AsTask();
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*is not listed*");
     }
@@ -272,7 +273,7 @@ public class ParkedMessagesTests {
         A.CallTo(() => dispatcher.DispatchAsync(command, A<CancellationToken>._))
             .Invokes(_ => correlation = (string?)MetadataScope.Current?.Snapshot()["correlation"]);
 
-        var replay = await Messages(scopeFactory: ScopeFactory(dispatcher)).ReplayAsync("scheduled-Reminders@v1", 0, Token);
+        var replay = await Messages(scopeFactory: ScopeFactory(dispatcher)).ReplayAsync("scheduled-Reminders@v1", "0", Token);
 
         replay.Succeeded.Should().BeTrue();
         A.CallTo(() => dispatcher.DispatchAsync(command, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
@@ -290,7 +291,7 @@ public class ParkedMessagesTests {
         _store.Deserializer = (_, _) => payload;
         _store.Park("scheduled-Reminders@v1", new SubscriptionMessage(null, 42, source, EventMetadata.Empty), new InvalidOperationException("boom"));
 
-        var replay = await Messages().ReplayAsync("scheduled-Reminders@v1", 0, Token);
+        var replay = await Messages().ReplayAsync("scheduled-Reminders@v1", "0", Token);
 
         replay.Succeeded.Should().BeTrue();
         A.CallTo(() => _reminders.HandleDeadlineAsync(A<ScheduledDeadline>.That.Matches(deadline =>
@@ -308,7 +309,7 @@ public class ParkedMessagesTests {
         _store.Deserializer = (_, _) => "not a command";
         _store.Park("scheduled-Reminders@v1", new SubscriptionMessage(null, 42, source, EventMetadata.Empty), new InvalidOperationException("boom"));
 
-        var replay = await Messages().ReplayAsync("scheduled-Reminders@v1", 0, Token);
+        var replay = await Messages().ReplayAsync("scheduled-Reminders@v1", "0", Token);
 
         replay.Succeeded.Should().BeFalse();
         replay.Error!.Message.Should().Contain("which is not a command");
@@ -330,19 +331,19 @@ public class ParkedMessagesTests {
 
         replays.Should().HaveCount(2);
         replays[0].Succeeded.Should().BeTrue();
-        replays[0].Message.Revision.Should().Be(0);
+        replays[0].Message.Id.Should().Be("0");
         replays[1].Succeeded.Should().BeFalse();
-        replays[1].Message.Revision.Should().Be(1);
+        replays[1].Message.Id.Should().Be("1");
         replays[1].Error.Should().BeSameAs(failure);
         A.CallTo(() => _orders.HandleAsync(A<SubscriptionMessage>._, A<CancellationToken>._)).MustHaveHappened(3, Times.Exactly);
-        (await Messages().ListAsync("Orders@v2", Token)).Select(message => message.Revision).Should().Equal(1UL, 2UL);
+        (await Messages().ListAsync("Orders@v2", Token)).Select(message => message.Id).Should().Equal("1", "2");
     }
 
     [Fact]
     public async Task DismissAsync_RecordsTheDismissal_WithoutHandling() {
         _store.Park("Orders@v2", Message(42), new InvalidOperationException("boom"));
 
-        await Messages().DismissAsync("Orders@v2", 0, Token);
+        await Messages().DismissAsync("Orders@v2", "0", Token);
 
         var entry = _store.Entries("Orders@v2").Should().ContainSingle(stored => stored.EventType == ParkedFormat.DismissedEventType).Which;
         Encoding.UTF8.GetString(entry.Data.Span).Should().Be("0@parked-Orders@v2");
@@ -354,9 +355,24 @@ public class ParkedMessagesTests {
     public async Task DismissAsync_OfANotListedMessage_Throws() {
         _store.Park("Orders@v2", Message(42), new InvalidOperationException("boom"));
 
-        var act = () => Messages().DismissAsync("Orders@v2", 9, Token).AsTask();
+        var act = () => Messages().DismissAsync("Orders@v2", "9", Token).AsTask();
 
         await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*is not listed*");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task ReplayAsync_AndDismissAsync_WithoutId_Throw(string? id) {
+        _store.Park("Orders@v2", Message(42), new InvalidOperationException("boom"));
+
+        var replay = () => Messages().ReplayAsync("Orders@v2", id!, Token).AsTask();
+        var dismiss = () => Messages().DismissAsync("Orders@v2", id!, Token).AsTask();
+
+        await replay.Should().ThrowAsync<ArgumentException>();
+        await dismiss.Should().ThrowAsync<ArgumentException>();
+        A.CallTo(() => _orders.HandleAsync(A<SubscriptionMessage>._, A<CancellationToken>._)).MustNotHaveHappened();
+        _store.Entries("Orders@v2").Should().ContainSingle().Which.EventType.Should().Be(ParkedFormat.ParkedEventType);
     }
 
     [Fact]

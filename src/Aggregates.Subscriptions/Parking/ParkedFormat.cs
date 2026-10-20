@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text.Json;
 
 namespace Aggregates.Subscriptions;
@@ -88,9 +90,37 @@ public static class ParkedFormat {
             }
         } catch (JsonException) {
         }
-        return new ParkedMessage(subscriptionId, entry.Revision, entry.Created, source, commitPosition, eventType,
+        return new ParkedMessage(subscriptionId, Id(entry.Revision), entry.Created, source, commitPosition, eventType,
             exceptionType ?? string.Empty, exceptionMessage ?? string.Empty, stackTrace);
     }
+
+    /// <summary>
+    /// Reads which message a <see cref="ReplayedEventType"/> or <see cref="DismissedEventType"/> entry of
+    /// the parked stream of <paramref name="subscriptionId"/> closes.
+    /// </summary>
+    /// <param name="subscriptionId">The id the messages were parked under.</param>
+    /// <param name="entry">The replayed or dismissed entry.</param>
+    /// <param name="id">The <see cref="ParkedMessage.Id"/> of the message it closes.</param>
+    /// <returns><see langword="false"/> when its data is not a link to an entry of that parked stream.</returns>
+    internal static bool TryReadClosed(string subscriptionId, ParkedEntry entry, [NotNullWhen(true)] out string? id) {
+        if (EventReference.TryParseLinkData(entry.Data.Span, out var reference) && reference.StreamId == ParkedStream(subscriptionId)) {
+            id = Id(reference.Revision);
+            return true;
+        }
+        id = null;
+        return false;
+    }
+
+    /// <summary>
+    /// The data of the entry that records the replay or dismissal of <paramref name="message"/>: its
+    /// parked entry in link format (<c>{revision}@parked-{subscription id}</c>).
+    /// </summary>
+    /// <param name="message">A message read by <see cref="ReadParked"/>.</param>
+    internal static byte[] WriteClosed(ParkedMessage message) =>
+        new EventReference(ParkedStream(message.SubscriptionId), ulong.Parse(message.Id, CultureInfo.InvariantCulture)).ToLinkData();
+
+    // The id of a parked message is the revision of its entry in the parked stream; retention can change that here.
+    static string Id(ulong revision) => revision.ToString(CultureInfo.InvariantCulture);
 
     static string? String(JsonElement element, string name) =>
         element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String ? property.GetString() : null;
