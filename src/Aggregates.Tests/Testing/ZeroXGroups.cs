@@ -1,3 +1,4 @@
+using Grpc.Core;
 using KurrentDB.Client;
 
 namespace Aggregates.Testing;
@@ -73,8 +74,10 @@ static class ZeroXGroups {
                     // server (spike v1-07 S12).
                     stop.CancelAfter(linger);
             }
-        } catch (OperationCanceledException) when (stop.IsCancellationRequested && !TestContext.Current.CancellationToken.IsCancellationRequested) {
-            // The timeout, not the test: fall through to the count assertion.
+        } catch (Exception exception) when (exception is OperationCanceledException or RpcException { StatusCode: StatusCode.Cancelled }
+            && stop.IsCancellationRequested && !TestContext.Current.CancellationToken.IsCancellationRequested) {
+            // The timeout or the end of the linger, not the test: fall through to the count assertion.
+            // The client reports the cancellation as an RpcException when its gRPC stream sees it first.
         }
 
         if (positions.Count < count)
