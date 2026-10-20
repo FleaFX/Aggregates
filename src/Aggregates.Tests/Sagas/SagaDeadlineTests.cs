@@ -319,7 +319,7 @@ public class SagaDeadlineTests(ITestOutputHelper output) {
         await WaitForCaughtUpAsync(store);
         var parked = third.Services.GetRequiredService<IParkedMessages>();
 
-        var replay = await parked.ReplayAsync($"scheduled-{Saga}", 0, TestContext.Current.CancellationToken);
+        var replay = await parked.ReplayAsync($"scheduled-{Saga}", "0", TestContext.Current.CancellationToken);
 
         replay.Succeeded.Should().BeTrue();
         await Eventually.UntilAsync(async ValueTask<bool> () => (await RemindersAsync(store, third, "bill-1")).Count == 2,

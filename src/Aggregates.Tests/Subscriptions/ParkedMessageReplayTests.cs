@@ -34,7 +34,7 @@ public class ParkedMessageReplayTests(ITestOutputHelper output) {
         message.EventType.Should().Be(typeof(OrderPlaced).FullName);
         message.ExceptionType.Should().Be(typeof(InvalidOperationException).FullName);
         message.ExceptionMessage.Should().Contain("on purpose");
-        message.Revision.Should().Be(0);
+        message.Id.Should().Be("0");
         message.ParkedAt.Should().NotBe(default);
     }
 
@@ -53,7 +53,7 @@ public class ParkedMessageReplayTests(ITestOutputHelper output) {
         await Eventually.UntilAsync(() => host.Probe.Count(handler) == 1, "the subscription handles order-2");
         host.Probe.PoisonFixed = true;
 
-        var replay = await parked.ReplayAsync(id, 0, TestContext.Current.CancellationToken);
+        var replay = await parked.ReplayAsync(id, "0", TestContext.Current.CancellationToken);
 
         replay.Succeeded.Should().BeTrue();
         host.Probe.Events(handler).Should().Equal(new OrderPlaced("order-2", "bob"), new OrderPlaced("poison-1", "alice"));
@@ -75,7 +75,7 @@ public class ParkedMessageReplayTests(ITestOutputHelper output) {
         await Eventually.UntilAsync(async ValueTask<bool> () => (await parked.ListAsync(id, TestContext.Current.CancellationToken)).Count == 1,
             "the poison event is parked");
 
-        var replay = await parked.ReplayAsync(id, 0, TestContext.Current.CancellationToken);
+        var replay = await parked.ReplayAsync(id, "0", TestContext.Current.CancellationToken);
 
         replay.Succeeded.Should().BeFalse();
         replay.Error!.Message.Should().Contain("on purpose");
@@ -98,7 +98,7 @@ public class ParkedMessageReplayTests(ITestOutputHelper output) {
             "the poison event is parked");
         await Eventually.UntilAsync(() => host.Probe.Count(handler) == 1, "the subscription handles order-2");
 
-        await parked.DismissAsync(id, 0, TestContext.Current.CancellationToken);
+        await parked.DismissAsync(id, "0", TestContext.Current.CancellationToken);
 
         (await parked.ListAsync(id, TestContext.Current.CancellationToken)).Should().BeEmpty();
         host.Probe.Events(handler).Should().Equal(new OrderPlaced("order-2", "bob"));
@@ -149,7 +149,7 @@ public class ParkedMessageReplayTests(ITestOutputHelper output) {
         second.Probe.PoisonFixed = true;
         var parkedOfSecond = ParkedMessagesOf(second);
 
-        var replay = await parkedOfSecond.ReplayAsync(id, 0, TestContext.Current.CancellationToken);
+        var replay = await parkedOfSecond.ReplayAsync(id, "0", TestContext.Current.CancellationToken);
 
         replay.Succeeded.Should().BeTrue();
         second.Probe.Events(v2).Should().Equal(new OrderPlaced("poison-1", "alice"));
@@ -179,7 +179,7 @@ public class ParkedMessageReplayTests(ITestOutputHelper output) {
         var parkedOfSecond = ParkedMessagesOf(second);
         var idOfSecond = SubscriptionIdOf(second);
 
-        var replay = await parkedOfSecond.ReplayAsync(idOfSecond, 0, TestContext.Current.CancellationToken);
+        var replay = await parkedOfSecond.ReplayAsync(idOfSecond, "0", TestContext.Current.CancellationToken);
 
         replay.Succeeded.Should().BeTrue();
         second.Probe.Events(handler).Should().Equal(new OrderShipped("order-1"));
@@ -206,7 +206,7 @@ public class ParkedMessageReplayTests(ITestOutputHelper output) {
 
         (await parkedOfSecond.ListAsync(id, TestContext.Current.CancellationToken)).Should().ContainSingle();
 
-        var replay = await parkedOfSecond.ReplayAsync(id, 0, TestContext.Current.CancellationToken);
+        var replay = await parkedOfSecond.ReplayAsync(id, "0", TestContext.Current.CancellationToken);
 
         replay.Succeeded.Should().BeFalse();
         replay.Error!.Message.Should().Contain("No subscription in this host");

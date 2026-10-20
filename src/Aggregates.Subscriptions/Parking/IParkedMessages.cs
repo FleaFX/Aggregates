@@ -29,16 +29,16 @@ public interface IParkedMessages {
     ValueTask<IReadOnlyList<ParkedMessage>> ListAsync(string subscriptionId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Handles the parked message with <paramref name="revision"/> again: it reads the event (or
+    /// Handles the parked message with <paramref name="id"/> again: it reads the event (or
     /// request) back from the store and hands it to the handler, with the retries of
     /// <see cref="SubscriptionErrorHandlingOptions"/>. When that succeeds, the message is no longer
     /// listed; when it fails, it stays parked and the result tells why.
     /// </summary>
     /// <param name="subscriptionId">A subscription id, or the id of a scheduler (<c>scheduled-{subscription id}</c>).</param>
-    /// <param name="revision">The <see cref="ParkedMessage.Revision"/> of the message.</param>
+    /// <param name="id">The <see cref="ParkedMessage.Id"/> of the message.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <exception cref="InvalidOperationException">The message is not listed: it was replayed or dismissed, or it doesn't exist.</exception>
-    ValueTask<ParkedMessageReplay> ReplayAsync(string subscriptionId, ulong revision, CancellationToken cancellationToken = default);
+    ValueTask<ParkedMessageReplay> ReplayAsync(string subscriptionId, string id, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Replays the listed messages of <paramref name="subscriptionId"/> one by one, oldest first, and
@@ -50,11 +50,11 @@ public interface IParkedMessages {
     ValueTask<IReadOnlyList<ParkedMessageReplay>> ReplayAllAsync(string subscriptionId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Removes the parked message with <paramref name="revision"/> from the list without handling it.
+    /// Removes the parked message with <paramref name="id"/> from the list without handling it.
     /// </summary>
     /// <param name="subscriptionId">A subscription id, or the id of a scheduler (<c>scheduled-{subscription id}</c>).</param>
-    /// <param name="revision">The <see cref="ParkedMessage.Revision"/> of the message.</param>
+    /// <param name="id">The <see cref="ParkedMessage.Id"/> of the message.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <exception cref="InvalidOperationException">The message is not listed: it was replayed or dismissed, or it doesn't exist.</exception>
-    ValueTask DismissAsync(string subscriptionId, ulong revision, CancellationToken cancellationToken = default);
+    ValueTask DismissAsync(string subscriptionId, string id, CancellationToken cancellationToken = default);
 }
