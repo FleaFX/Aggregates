@@ -76,6 +76,15 @@ sealed class ScriptedSubscriptionFactory(Func<Exception, bool>? isTransient = nu
         Enqueue(messages, end: () => { });
 
     /// <summary>
+    /// The next subscription yields <paramref name="messages"/>, waits for cancellation like
+    /// <see cref="Then"/>, and then throws <paramref name="failure"/> instead of an
+    /// <see cref="OperationCanceledException"/>, or ends without failure when
+    /// <paramref name="failure"/> is <see langword="null"/>.
+    /// </summary>
+    public ScriptedSubscriptionFactory ThenOnStop(Exception? failure, params SubscriptionMessage[] messages) =>
+        Enqueue(messages, end: null, onStop: () => { if (failure is { } toThrow) throw toThrow; });
+
+    /// <summary>
     /// The next call to <see cref="Subscribe"/> throws <paramref name="failure"/>.
     /// </summary>
     public ScriptedSubscriptionFactory ThenFailToSubscribe(Exception failure) {
@@ -102,8 +111,8 @@ sealed class ScriptedSubscriptionFactory(Func<Exception, bool>? isTransient = nu
     /// <inheritdoc/>
     public bool IsTransient(Exception exception) => isTransient?.Invoke(exception) ?? true;
 
-    ScriptedSubscriptionFactory Enqueue(SubscriptionMessage[] messages, Action? end) {
-        lock (_lock) _scripts.Enqueue(() => end is null ? WaitAsync(messages) : PlayAsync(messages, end));
+    ScriptedSubscriptionFactory Enqueue(SubscriptionMessage[] messages, Action? end, Action? onStop = null) {
+        lock (_lock) _scripts.Enqueue(() => end is null ? WaitAsync(messages, onStop) : PlayAsync(messages, end));
         return this;
     }
 
@@ -115,7 +124,7 @@ sealed class ScriptedSubscriptionFactory(Func<Exception, bool>? isTransient = nu
         end();
     }
 
-    async IAsyncEnumerable<SubscriptionMessage> WaitAsync(SubscriptionMessage[] messages,
+    async IAsyncEnumerable<SubscriptionMessage> WaitAsync(SubscriptionMessage[] messages, Action? onStop = null,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default) {
         foreach (var message in messages) {
             await Task.Yield();
@@ -128,7 +137,11 @@ sealed class ScriptedSubscriptionFactory(Func<Exception, bool>? isTransient = nu
             _idle = NewSignal();
         }
         idle.TrySetResult();
-        await Task.Delay(Timeout.Infinite, cancellationToken);
+        try {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        } catch (OperationCanceledException) when (onStop is { } onCancellation) {
+            onCancellation();
+        }
     }
 
     static TaskCompletionSource NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);

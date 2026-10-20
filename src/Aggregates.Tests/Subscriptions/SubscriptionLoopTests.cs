@@ -966,6 +966,36 @@ public class SubscriptionLoopTests {
         }
 
         [Fact]
+        public async Task WhenTheHostStops_AndTheSubscriptionThrows_IsStopped_WithoutRetrying() {
+            var factory = new ScriptedSubscriptionFactory().ThenOnStop(new IOException("call cancelled"), Message(1));
+
+            await RunUntilIdleAsync(factory);
+
+            factory.FromPositions.Should().ContainSingle();
+            Logs(LogLevel.Warning).Should().BeEmpty();
+            Logs(LogLevel.Error).Should().BeEmpty();
+            var status = Status();
+            status.State.Should().Be(SubscriptionState.Stopped);
+            status.Position.Should().Be(1);
+            status.Error.Should().BeNull();
+        }
+
+        [Fact]
+        public async Task WhenTheHostStops_AndTheSubscriptionEnds_IsStopped_WithoutRetrying() {
+            var factory = new ScriptedSubscriptionFactory().ThenOnStop(null, Message(1));
+
+            await RunUntilIdleAsync(factory);
+
+            factory.FromPositions.Should().ContainSingle();
+            Logs(LogLevel.Warning).Should().BeEmpty();
+            Logs(LogLevel.Error).Should().BeEmpty();
+            var status = Status();
+            status.State.Should().Be(SubscriptionState.Stopped);
+            status.Position.Should().Be(1);
+            status.Error.Should().BeNull();
+        }
+
+        [Fact]
         public async Task WithoutACheckpoint_WhenRequired_IsStopped() {
             _checkpointOptions = new() { MaxBatchSize = 1000, MaxInterval = TimeSpan.FromHours(1), RequireCheckpoint = true };
             var factory = new ScriptedSubscriptionFactory().Then();
