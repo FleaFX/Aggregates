@@ -1,10 +1,11 @@
 namespace Aggregates.Subscriptions;
 
 /// <summary>
-/// Controls how often a subscription writes its checkpoint. Positions are recorded after each
-/// processed message and written to the <see cref="ICheckpointStore"/> in batches, when either
-/// threshold is reached, after the store passed <see cref="MaxFilteredEvents"/> events that
-/// the subscription's filter excluded, and once more when the subscription stops.
+/// Controls how often a subscription writes its checkpoint, and whether it may start without one.
+/// Positions are recorded after each processed message and written to the
+/// <see cref="ICheckpointStore"/> in batches, when either threshold is reached, after the store
+/// passed <see cref="MaxFilteredEvents"/> events that the subscription's filter excluded, and once
+/// more when the subscription stops.
 /// </summary>
 public sealed class SubscriptionCheckpointOptions {
     /// <summary>
@@ -33,4 +34,26 @@ public sealed class SubscriptionCheckpointOptions {
     /// not report progress yet. Default: 4096.
     /// </summary>
     public int MaxFilteredEvents { get; set; } = DefaultMaxFilteredEvents;
+
+    /// <summary>
+    /// Whether a subscription refuses to start without a checkpoint. When it has no checkpoint of
+    /// its own and none of its predecessors has one to adopt, it fails with an
+    /// <see cref="InvalidOperationException"/> before it subscribes, unless its id is in
+    /// <see cref="AllowedWithoutCheckpoint"/>. This holds for a start from the beginning and from
+    /// the end alike. It protects against a start that replays the store, or skips to its end, by
+    /// mistake: 0.x positions that were not imported yet, a checkpoint store that was cleaned up,
+    /// or a wrong continueFrom. It doesn't apply to the scheduler of deferred commands and saga
+    /// deadlines, which reads its requests again without executing any twice. Default:
+    /// <see langword="false"/>.
+    /// </summary>
+    public bool RequireCheckpoint { get; set; }
+
+    /// <summary>
+    /// The subscription ids that may start without a checkpoint while
+    /// <see cref="RequireCheckpoint"/> is on: from the beginning, or from the end with
+    /// startFromEnd. List a new subscription, or one that replays on purpose, in the deployment
+    /// that first starts it; remove it once its checkpoint (<c>checkpoint-{id}</c>) exists.
+    /// Compared ordinally. Default: empty.
+    /// </summary>
+    public IList<string> AllowedWithoutCheckpoint { get; set; } = [];
 }

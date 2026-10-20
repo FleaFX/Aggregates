@@ -7,7 +7,8 @@ namespace Aggregates.Subscriptions;
 /// <summary>
 /// End-to-end scenarios for a contract version bump: the new subscription continues from the
 /// checkpoint of the nearest predecessor that has one, on both transports and for every
-/// handler kind.
+/// handler kind. With <c>RequireCheckpoint</c>, a subscription without its own or a
+/// predecessor's checkpoint stops the host instead, unless its id is allowed.
 /// </summary>
 [Trait("Category", "Integration")]
 public class ContinueFromTests(ITestOutputHelper output) {
@@ -168,6 +169,68 @@ public class ContinueFromTests(ITestOutputHelper output) {
         var sagaStream = (await store.ReadAllAsync()).Where(e => e.Stream == "saga-order-1").ToArray();
         sagaStream.Should().HaveCount(2, "v1 and v2 each linked one event into the same saga stream");
         sagaStream.Should().OnlyContain(e => e.EventType == "$>");
+    }
+
+    [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
+    public async Task RequireCheckpoint_WithoutACheckpoint_StopsTheHost_AndHandlesNothing(HandlerKind kind, Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        var handler = ScenarioHandlers.ProbeV2(kind);
+        await store.AppendAsync(new SerializationSetup(new HandlerProbe(), Orders.EventTypes), "order-1", new OrderPlaced("order-1", "alice"));
+
+        await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, handler)
+            .Services(s => s.AddSingleton(new SubscriptionCheckpointOptions { RequireCheckpoint = true })));
+
+        await host.Stopping.WaitAsync(TimeSpan.FromSeconds(30), Token);
+
+        host.Probe.Count(handler).Should().Be(0);
+        (await host.Services.GetRequiredService<ICheckpointStore>().GetAsync(Id(kind, 2), Token))
+            .Should().BeNull("nothing was written, so an import can still write it");
+    }
+
+    [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
+    public async Task RequireCheckpoint_WithTheIdAllowed_StartsFromTheBeginning(HandlerKind kind, Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        var handler = ScenarioHandlers.ProbeV2(kind);
+        await store.AppendAsync(new SerializationSetup(new HandlerProbe(), Orders.EventTypes), "order-1", new OrderPlaced("order-1", "alice"));
+
+        await using var host = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, handler)
+            .Services(s => s.AddSingleton(new SubscriptionCheckpointOptions {
+                RequireCheckpoint = true,
+                AllowedWithoutCheckpoint = [Id(kind, 2)]
+            })));
+
+        await Eventually.UntilAsync(() => host.Probe.Count(handler) >= 1, "v2 replays order-1 because it is allowed to");
+        await Eventually.QuietAsync();
+        host.Probe.Events(handler).Should().Equal(new OrderPlaced("order-1", "alice"));
+        host.Stopping.IsCompleted.Should().BeFalse("the host keeps running");
+    }
+
+    [Theory, MemberData(nameof(ScenarioHandlers.KindsAndTransports), MemberType = typeof(ScenarioHandlers))]
+    public async Task RequireCheckpoint_AfterAVersionBump_ContinuesAfterThePredecessorsCheckpoint(HandlerKind kind, Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        var firstHandler = ScenarioHandlers.Probe(kind);
+        var secondHandler = ScenarioHandlers.ProbeV2(kind);
+
+        await using (var first = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, firstHandler))) {
+            await store.AppendAsync(first.Serialization, "order-1", new OrderPlaced("order-1", "alice"));
+            await Eventually.UntilAsync(() => first.Probe.Count(firstHandler) >= 1, "the first host handles order-1");
+            await Eventually.QuietAsync();
+        }
+
+        await using (var second = await TestHost.StartAsync(store, output, o => o.Events(Orders.EventTypes).Handlers(kind, secondHandler)
+                .Services(s => s.AddSingleton(new SubscriptionCheckpointOptions { RequireCheckpoint = true })))) {
+            // The adoption happens before the first subscription, but the new checkpoint is only
+            // observable through the store.
+            await Eventually.UntilAsync(async () =>
+                await second.Services.GetRequiredService<ICheckpointStore>().GetAsync(Id(kind, 2), Token) is not null,
+                "v2 adopts the v1 checkpoint");
+            await store.AppendAsync(second.Serialization, "order-2", new OrderPlaced("order-2", "bob"));
+
+            await Eventually.UntilAsync(() => second.Probe.Count(secondHandler) >= 1, "the second host handles order-2");
+            await Eventually.QuietAsync();
+            second.Probe.Events(secondHandler).Should().Equal(new OrderPlaced("order-2", "bob"));
+            second.Stopping.IsCompleted.Should().BeFalse();
+        }
     }
 
     // The subscription id of the Probe contract of <paramref name="kind"/> at <paramref name="version"/>.
