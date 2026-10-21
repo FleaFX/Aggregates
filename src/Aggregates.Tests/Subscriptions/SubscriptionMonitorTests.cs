@@ -15,7 +15,7 @@ public class SubscriptionMonitorTests {
 
         monitor.Report("sub-1", SubscriptionState.Blocked, 42, 3, error);
 
-        monitor.GetStatuses().Should().Equal(new SubscriptionStatus("sub-1", SubscriptionState.Blocked, _time.GetUtcNow(), 42, 3, error));
+        monitor.GetStatuses().Should().Equal(new SubscriptionStatus { Id = "sub-1", State = SubscriptionState.Blocked, Since = _time.GetUtcNow(), Position = 42, Attempts = 3, Error = error });
     }
 
     [Fact]

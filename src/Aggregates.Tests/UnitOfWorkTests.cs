@@ -39,6 +39,16 @@ public class UnitOfWorkTests {
 
             act.Should().Throw<InvalidOperationException>();
         }
+
+        [Fact]
+        public void Attach_RejectsADefaultIdentifier() {
+            var uow = new UnitOfWork();
+
+            var act = () => uow.Attach(new Aggregate(default, NewRoot()));
+
+            act.Should().Throw<ArgumentException>();
+            uow.Get(default).Should().BeNull();
+        }
     }
 
     public class Clear : UnitOfWorkTests {

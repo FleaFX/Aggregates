@@ -1,8 +1,9 @@
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Aggregates.Subscriptions;
 using KurrentDB.Client;
 
-namespace Aggregates.KurrentDB;
+namespace Aggregates.KurrentDB.Internal;
 
 /// <summary>
 /// An <see cref="IScheduledStore"/> on KurrentDB: reads the scheduled entries from <c>$all</c> with a
@@ -10,8 +11,13 @@ namespace Aggregates.KurrentDB;
 /// (de)serializes deferred commands and deadline payloads with <see cref="KurrentDbOptions.Serialize"/> and
 /// <see cref="KurrentDbOptions.Deserialize"/>.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
 /// <param name="client">The KurrentDB client.</param>
 /// <param name="options">The serializers of the application.</param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class KurrentDbScheduledStore(KurrentDBClient client, KurrentDbOptions options) : IScheduledStore {
     // The server reports progress once per 32 x 32 events it reads (spike v1-05).
     const uint CheckpointInterval = 32;

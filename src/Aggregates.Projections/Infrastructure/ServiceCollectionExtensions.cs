@@ -1,5 +1,6 @@
 using System.Reflection;
 using Aggregates.Subscriptions;
+using Aggregates.Subscriptions.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -57,8 +58,6 @@ public static class ServiceCollectionExtensions {
         // Subscription state — reported by the loop, the retry policy and the scheduler; read by SubscriptionHealthCheck
         services.TryAddSingleton<SubscriptionMonitor>();
 
-        var registeredProjections = new List<(Type EventType, Type ProjectionType)>();
-
         foreach (var (projectionType, projectionInterface) in SubscriptionRegistrations.FindHandlers(options.Types, typeof(IProjection<>))) {
             var eventType = projectionInterface.GetGenericArguments()[0];
             var contract = projectionType.GetCustomAttribute<ProjectionContractAttribute>();
@@ -81,17 +80,12 @@ public static class ServiceCollectionExtensions {
             services.AddKeyedSingleton(serviceType, registration.SubscriptionId, (sp, _) => ActivatorUtilities.CreateInstance(sp, serviceType, registration));
             services.AddSingleton(typeof(IHostedService), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
             services.AddSingleton(typeof(IReplayableSubscription), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
-
-            registeredProjections.Add((eventType, projectionType));
         }
 
-        return new ProjectionsBuilder(services, registeredProjections);
+        return new ProjectionsBuilder(services);
     }
 }
 
-internal sealed class ProjectionsBuilder(
-    IServiceCollection services,
-    IReadOnlyList<(Type EventType, Type ProjectionType)> registeredProjections) : IProjectionsBuilder {
+internal sealed class ProjectionsBuilder(IServiceCollection services) : IProjectionsBuilder {
     public IServiceCollection Services => services;
-    public IReadOnlyList<(Type EventType, Type ProjectionType)> RegisteredProjections => registeredProjections;
 }

@@ -1,7 +1,8 @@
+using System.ComponentModel;
 using Aggregates.Subscriptions;
 using MSSP;
 
-namespace Aggregates.MSSP;
+namespace Aggregates.MSSP.Internal;
 
 /// <summary>
 /// An <see cref="IParkedMessageSink"/> that persists parked messages in MSSP.
@@ -11,9 +12,14 @@ namespace Aggregates.MSSP;
 /// (see <see cref="ParkedFormat.WriteParked"/>).
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// Events whose type starts with <c>$</c> are never delivered to subscriptions, so parking a
 /// message does not feed back into the subscriptions.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class MsspParkedMessageSink(IMsspClient client) : IParkedMessageSink {
     /// <inheritdoc/>
     public async ValueTask ParkAsync(string subscriptionId, SubscriptionMessage message, Exception exception, CancellationToken cancellationToken = default) {

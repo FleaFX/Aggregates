@@ -1,13 +1,18 @@
+using System.ComponentModel;
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 
-namespace Aggregates.Subscriptions;
+namespace Aggregates.Subscriptions.Internal;
 
 /// <summary>
 /// Runs a subscription until the host stops: subscribes, hands every message to a processing
 /// delegate, records checkpoints, and subscribes again after a transient failure.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// <list type="bullet">
 ///   <item>The first subscription starts after the stored checkpoint. After a failure, the loop
 ///   subscribes again after the last processed message, which can be ahead of the stored
@@ -58,6 +63,7 @@ namespace Aggregates.Subscriptions;
 /// The loop holds no state between calls to <see cref="RunAsync"/>, so one instance can serve
 /// every subscription.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed partial class SubscriptionLoop(
     ISubscriptionFactory subscriptionFactory,
     ICheckpointStore checkpointStore,

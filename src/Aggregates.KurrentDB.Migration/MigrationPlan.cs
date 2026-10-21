@@ -6,17 +6,27 @@ namespace Aggregates.KurrentDB.Migration;
 /// and shown by <see cref="ToString"/>; applied by
 /// <see cref="PersistentSubscriptionMigration.ApplyAsync"/>.
 /// </summary>
-/// <param name="Step">The step the plan is for.</param>
-/// <param name="Options">The options the plan was made with.</param>
-/// <param name="Groups">One plan per selected group, in the order the server lists them.</param>
-/// <param name="Subscriptions">
-/// One row per 1.0 registration, only for the Import step with Registrations; empty otherwise.
-/// </param>
-public sealed record MigrationPlan(
-    MigrationStep Step,
-    MigrationOptions Options,
-    IReadOnlyList<GroupPlan> Groups,
-    IReadOnlyList<SubscriptionPlan> Subscriptions) {
+public sealed record MigrationPlan {
+    /// <summary>
+    /// The step the plan is for.
+    /// </summary>
+    public required MigrationStep Step { get; init; }
+
+    /// <summary>
+    /// The options the plan was made with.
+    /// </summary>
+    public required MigrationOptions Options { get; init; }
+
+    /// <summary>
+    /// One plan per selected group, in the order the server lists them.
+    /// </summary>
+    public required IReadOnlyList<GroupPlan> Groups { get; init; }
+
+    /// <summary>
+    /// One row per 1.0 registration, only for the Import step with Registrations; empty otherwise.
+    /// </summary>
+    public required IReadOnlyList<SubscriptionPlan> Subscriptions { get; init; }
+
     /// <summary>
     /// Whether <see cref="PersistentSubscriptionMigration.ApplyAsync"/> will execute the plan:
     /// it refuses while any group is blocked.

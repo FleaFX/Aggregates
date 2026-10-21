@@ -3,9 +3,17 @@ namespace Aggregates.Subscriptions;
 /// <summary>
 /// A stored checkpoint, and the predecessor it was adopted from.
 /// </summary>
-/// <param name="Position">The commit position to continue after.</param>
-/// <param name="AdoptedFrom">The index of the predecessor whose checkpoint was adopted; null when it is the subscription's own.</param>
-public readonly record struct SubscriptionCheckpoint(ulong Position, int? AdoptedFrom);
+public readonly record struct SubscriptionCheckpoint {
+    /// <summary>
+    /// The commit position to continue after.
+    /// </summary>
+    public required ulong Position { get; init; }
+
+    /// <summary>
+    /// The index of the predecessor whose checkpoint was adopted; null when it is the subscription's own.
+    /// </summary>
+    public int? AdoptedFrom { get; init; }
+}
 
 /// <summary>
 /// Extensions on <see cref="ICheckpointStore"/>.
@@ -24,12 +32,12 @@ public static class CheckpointStoreExtensions {
     public static async ValueTask<SubscriptionCheckpoint?> GetOrAdoptAsync(this ICheckpointStore store, string subscriptionId,
         IReadOnlyList<string> predecessorIds, CancellationToken cancellationToken = default) {
         if (await store.GetAsync(subscriptionId, cancellationToken) is { } own)
-            return new SubscriptionCheckpoint(own, null);
+            return new SubscriptionCheckpoint { Position = own };
         for (var i = 0; i < predecessorIds.Count; i++) {
             if (await store.GetAsync(predecessorIds[i], cancellationToken) is not { } inherited)
                 continue;
             await store.StoreAsync(subscriptionId, inherited, cancellationToken);
-            return new SubscriptionCheckpoint(inherited, i);
+            return new SubscriptionCheckpoint { Position = inherited, AdoptedFrom = i };
         }
         return null;
     }

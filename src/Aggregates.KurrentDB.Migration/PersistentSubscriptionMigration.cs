@@ -1,4 +1,5 @@
 using Aggregates.KurrentDB;
+using Aggregates.KurrentDB.Internal;
 using Aggregates.Subscriptions;
 using KurrentDB.Client;
 
@@ -78,14 +79,17 @@ public sealed class PersistentSubscriptionMigration(
                 MigrationStep.Rollback => MigrationRules.DecideRollback(snapshot, checkpoint, filter, options),
                 _ => MigrationRules.DecideImport(snapshot, state, position, checkpoint, options),
             };
-            groups.Add(new GroupPlan(snapshot.GroupName, state, position, checkpoint, snapshot.ParkedMessages, filter, action, reason));
+            groups.Add(new GroupPlan {
+                GroupName = snapshot.GroupName, State = state, Position = position, Checkpoint = checkpoint,
+                ParkedMessages = snapshot.ParkedMessages, EventTypeFilter = filter, Action = action, Reason = reason
+            });
         }
 
         var subscriptions = new List<SubscriptionPlan>();
         if (step == MigrationStep.Import && options.Registrations is { } registrations)
             subscriptions.AddRange(await ResolveSubscriptionsAsync(registrations, groups, options.EventTypeRegistry, cancellationToken));
 
-        return new MigrationPlan(step, options, groups, subscriptions);
+        return new MigrationPlan { Step = step, Options = options, Groups = groups, Subscriptions = subscriptions };
     }
 
     /// <summary>

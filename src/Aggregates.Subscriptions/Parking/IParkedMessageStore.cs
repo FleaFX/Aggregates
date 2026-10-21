@@ -1,3 +1,5 @@
+using Aggregates.Subscriptions.Internal;
+
 namespace Aggregates.Subscriptions;
 
 /// <summary>

@@ -1,3 +1,4 @@
+using System.Reflection;
 using FluentAssertions;
 
 namespace Aggregates;
@@ -15,6 +16,32 @@ public sealed record ShippedV1(string OrderId);
 /// Upgrades a <see cref="ShippedV1"/> to a <see cref="Shipped"/>.
 public sealed class ShippedV1ToShipped : IUpgradeEvent<ShippedV1, Shipped> {
     public Shipped Upgrade(ShippedV1 @event) => new(@event.OrderId);
+}
+
+/// The first version of Counted, whose upgrader counts each time it is created.
+[EventContract("Counted", @namespace: "Tests.Registry", eventUpgrader: typeof(CountedV1ToShipped))]
+public sealed record CountedV1(string OrderId);
+
+/// <summary>
+/// Upgrades a <see cref="CountedV1"/> to a <see cref="Shipped"/>, and counts each creation.
+/// </summary>
+public sealed class CountedV1ToShipped : IUpgradeEvent<CountedV1, Shipped> {
+    public static int Created;
+
+    public CountedV1ToShipped() => Interlocked.Increment(ref Created);
+
+    public Shipped Upgrade(CountedV1 @event) => new(@event.OrderId);
+}
+
+/// The first version of Dependent, whose upgrader has no parameterless constructor.
+[EventContract("Dependent", @namespace: "Tests.Registry", eventUpgrader: typeof(DependentV1ToShipped))]
+public sealed record DependentV1(string OrderId);
+
+/// <summary>
+/// Upgrades a <see cref="DependentV1"/> to a <see cref="Shipped"/>; has no parameterless constructor.
+/// </summary>
+public sealed class DependentV1ToShipped(string prefix) : IUpgradeEvent<DependentV1, Shipped> {
+    public Shipped Upgrade(DependentV1 @event) => new(prefix + @event.OrderId);
 }
 
 /// An event type whose upgrader upgrades two types, so the first upgrade it offers may not be its own.
@@ -130,6 +157,22 @@ public class EventTypeRegistryTests {
         public void Upgrade_StartsAtTheVersionOfTheEvent() {
             EventContractAttribute.Upgrade(new CancelledV2("o")).Should().Be(new CancelledV3("o"));
         }
+
+        [Fact]
+        public void Upgrade_CreatesTheUpgraderOnFirstUse() {
+            var before = CountedV1ToShipped.Created;
+            typeof(CountedV1).GetCustomAttribute<EventContractAttribute>().Should().NotBeNull();
+            CountedV1ToShipped.Created.Should().Be(before);
+            EventContractAttribute.Upgrade(new CountedV1("o-1")).Should().Be(new Shipped("o-1"));
+            CountedV1ToShipped.Created.Should().Be(before + 1);
+        }
+
+        [Fact]
+        public void ReadingTheAttribute_DoesNotThrow_ForAnUpgraderWithoutParameterlessConstructor() {
+            var attribute = typeof(DependentV1).GetCustomAttribute<EventContractAttribute>();
+
+            attribute!.EventUpgrader.Should().Be(typeof(DependentV1ToShipped));
+        }
     }
 
     public class GetTypeNames {
@@ -233,6 +276,14 @@ public class EventTypeRegistryTests {
             message.Should().Contain("Aggregates.DeliveredV2: eventUpgrader DeliveredV1ToV2 implements IUpgradeEvent<DeliveredV1, DeliveredV2>");
             message.Should().Contain("Aggregates.TwiceV1: eventUpgrader TwiceUpgrader");
             message.Should().NotContain("DeliveredV1: eventUpgrader");
+        }
+
+        [Fact]
+        public void GivenAnUpgraderWithoutParameterlessConstructor_Throws() {
+            var act = () => EventTypeRegistry.FromTypes([typeof(DependentV1), typeof(Shipped)]);
+
+            act.Should().Throw<InvalidOperationException>().Which.Message.Should()
+                .Contain("Aggregates.DependentV1: eventUpgrader DependentV1ToShipped has no public parameterless constructor.");
         }
 
         [Fact]

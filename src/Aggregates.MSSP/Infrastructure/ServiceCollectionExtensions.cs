@@ -1,3 +1,4 @@
+using Aggregates.MSSP.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 

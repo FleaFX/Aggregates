@@ -1,4 +1,5 @@
 using Aggregates.MSSP;
+using Aggregates.MSSP.Internal;
 using Aggregates.Subscriptions;
 using MSSP;
 using Microsoft.Extensions.DependencyInjection;

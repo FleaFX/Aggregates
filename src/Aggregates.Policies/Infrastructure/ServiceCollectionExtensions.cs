@@ -1,5 +1,6 @@
 using System.Reflection;
 using Aggregates.Subscriptions;
+using Aggregates.Subscriptions.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -64,8 +65,6 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton<Scheduler>();
         builder.Services.TryAddSingleton(typeof(SchedulerActivation<>));
 
-        var registeredPolicies = new List<(Type EventType, Type PolicyType)>();
-
         foreach (var (policyType, policyInterface) in SubscriptionRegistrations.FindHandlers(options.Types, typeof(IPolicy<>))) {
             var eventType = policyInterface.GetGenericArguments()[0];
             var contract = policyType.GetCustomAttribute<PolicyContractAttribute>();
@@ -88,17 +87,12 @@ public static class ServiceCollectionExtensions {
             builder.Services.AddKeyedSingleton(serviceType, registration.SubscriptionId, (sp, _) => ActivatorUtilities.CreateInstance(sp, serviceType, registration));
             builder.Services.AddSingleton(typeof(IHostedService), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
             builder.Services.AddSingleton(typeof(IReplayableSubscription), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
-
-            registeredPolicies.Add((eventType, policyType));
         }
 
-        return new PoliciesBuilder(builder.Services, registeredPolicies);
+        return new PoliciesBuilder(builder.Services);
     }
 }
 
-internal sealed class PoliciesBuilder(
-    IServiceCollection services,
-    IReadOnlyList<(Type EventType, Type PolicyType)> registeredPolicies) : IPoliciesBuilder {
+internal sealed class PoliciesBuilder(IServiceCollection services) : IPoliciesBuilder {
     public IServiceCollection Services => services;
-    public IReadOnlyList<(Type EventType, Type PolicyType)> RegisteredPolicies => registeredPolicies;
 }

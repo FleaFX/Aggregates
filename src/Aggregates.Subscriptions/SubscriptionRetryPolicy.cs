@@ -1,12 +1,17 @@
+using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Aggregates.Subscriptions;
+namespace Aggregates.Subscriptions.Internal;
 
 /// <summary>
 /// Wraps a subscription handler invocation with retry-with-backoff and parked-message fallback.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// Inject as a singleton and share across all subscription services.
 /// <list type="bullet">
 ///   <item>On success: returns normally.</item>
@@ -26,6 +31,7 @@ namespace Aggregates.Subscriptions;
 /// <param name="options">The number of attempts and the backoff.</param>
 /// <param name="logger">Logs when a blocking subscription starts and stops retrying; optional.</param>
 /// <param name="monitor">Receives the state of a blocking subscription; optional.</param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed partial class SubscriptionRetryPolicy(
     IParkedMessageSink parkedMessageSink,
     SubscriptionErrorHandlingOptions options,

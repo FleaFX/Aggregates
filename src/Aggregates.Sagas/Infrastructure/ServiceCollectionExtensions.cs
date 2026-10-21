@@ -1,5 +1,6 @@
 using System.Reflection;
 using Aggregates.Subscriptions;
+using Aggregates.Subscriptions.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -71,7 +72,6 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton(typeof(SchedulerActivation<>));
 
         var sagas = SubscriptionRegistrations.FindHandlers(options.Types, typeof(ISaga<,>));
-        var registeredSagas = new List<(Type StateType, Type EventType, Type SagaType)>();
 
         foreach (var (sagaType, sagaInterface) in sagas) {
             var stateType = sagaInterface.GetGenericArguments()[0];
@@ -85,7 +85,6 @@ public static class ServiceCollectionExtensions {
                     "A saga implements it once: use a marker interface (or object) as the deadline type to receive several kinds of deadlines.");
 
             builder.Services.TryAddScoped(sagaType);
-            registeredSagas.Add((stateType, eventType, sagaType));
 
             // Subscription hosted service — one per saga class
             var contract = sagaType.GetCustomAttribute<SagaContractAttribute>();
@@ -109,7 +108,7 @@ public static class ServiceCollectionExtensions {
             builder.Services.AddSingleton(typeof(IReplayableSubscription), sp => sp.GetRequiredKeyedService(serviceType, registration.SubscriptionId));
         }
 
-        return new SagasBuilder(builder.Services, registeredSagas);
+        return new SagasBuilder(builder.Services);
     }
 
     /// <summary>
@@ -123,9 +122,6 @@ public static class ServiceCollectionExtensions {
     }
 }
 
-internal sealed class SagasBuilder(
-    IServiceCollection services,
-    IReadOnlyList<(Type StateType, Type EventType, Type SagaType)> registeredSagas) : ISagasBuilder {
+internal sealed class SagasBuilder(IServiceCollection services) : ISagasBuilder {
     public IServiceCollection Services => services;
-    public IReadOnlyList<(Type StateType, Type EventType, Type SagaType)> RegisteredSagas => registeredSagas;
 }

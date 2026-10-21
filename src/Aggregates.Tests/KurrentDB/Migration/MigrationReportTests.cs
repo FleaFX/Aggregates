@@ -8,34 +8,38 @@ namespace Aggregates.KurrentDB.Migration;
 /// </summary>
 public class MigrationReportTests {
     static GroupPlan Plan(string name, GroupAction action, GroupState state = GroupState.Exact, ulong? position = null, ulong? checkpoint = null) =>
-        new(name, state, position, checkpoint, 0, null, action, "The reason.");
+        new() { GroupName = name, State = state, Position = position, Checkpoint = checkpoint, ParkedMessages = 0, Action = action, Reason = "The reason." };
 
     [Fact]
     public void TheHeader_CountsTheGroupsPerAction() {
-        var plan = new MigrationPlan(MigrationStep.Import, new(), [
-            Plan("A@v1", GroupAction.WriteCheckpoint, position: 100),
-            Plan("B@v1", GroupAction.WriteCheckpoint, position: 200),
-            Plan("C@v1", GroupAction.None),
-            Plan("D@v1", GroupAction.Blocked, GroupState.Connected),
-        ], []);
+        var plan = new MigrationPlan {
+            Step = MigrationStep.Import, Options = new(), Groups = [
+                Plan("A@v1", GroupAction.WriteCheckpoint, position: 100),
+                Plan("B@v1", GroupAction.WriteCheckpoint, position: 200),
+                Plan("C@v1", GroupAction.None),
+                Plan("D@v1", GroupAction.Blocked, GroupState.Connected),
+            ], Subscriptions = []
+        };
 
         plan.ToString().Should().StartWith("Import plan: 4 groups (1 None, 2 WriteCheckpoint, 1 Blocked).\n");
     }
 
     [Fact]
     public void TheHeader_CountsTheSubscriptionsAndTheirWarnings() {
-        var plan = new MigrationPlan(MigrationStep.Import, new(), [],
-            [Subscription("A@v1", false), Subscription("B@v1", true), Subscription("C@v1", true)]);
+        var plan = new MigrationPlan { Step = MigrationStep.Import, Options = new(), Groups = [],
+            Subscriptions = [Subscription("A@v1", false), Subscription("B@v1", true), Subscription("C@v1", true)] };
 
         plan.ToString().Should().StartWith("Import plan: 0 groups; 3 subscriptions, 2 warnings.\n");
     }
 
     [Fact]
     public void BlockedGroups_ComeFirst_RegardlessOfTheName() {
-        var plan = new MigrationPlan(MigrationStep.Import, new(), [
-            Plan("B@v1", GroupAction.WriteCheckpoint, position: 100),
-            Plan("A@v1", GroupAction.Blocked, GroupState.Connected),
-        ], []);
+        var plan = new MigrationPlan {
+            Step = MigrationStep.Import, Options = new(), Groups = [
+                Plan("B@v1", GroupAction.WriteCheckpoint, position: 100),
+                Plan("A@v1", GroupAction.Blocked, GroupState.Connected),
+            ], Subscriptions = []
+        };
 
         var report = plan.ToString();
         report.Should().Contain("\n! A@v1", "the blocked group is flagged");
@@ -45,9 +49,11 @@ public class MigrationReportTests {
 
     [Fact]
     public void NullPositions_AndBlockedRows_ShowADash() {
-        var plan = new MigrationPlan(MigrationStep.Import, new(), [
-            Plan("A@v1", GroupAction.Blocked, GroupState.Connected),
-        ], []);
+        var plan = new MigrationPlan {
+            Step = MigrationStep.Import, Options = new(), Groups = [
+                Plan("A@v1", GroupAction.Blocked, GroupState.Connected),
+            ], Subscriptions = []
+        };
 
         // The null position and checkpoint show as dashes, in cells as wide as their headers.
         plan.ToString().Should().Contain("! A@v1   Connected  -         -           0       Blocked  The reason.\n");
@@ -55,17 +61,19 @@ public class MigrationReportTests {
 
     [Fact]
     public void WithoutSubscriptions_ThereIsNoSubscriptionTable() {
-        var plan = new MigrationPlan(MigrationStep.Import, new(), [Plan("A@v1", GroupAction.WriteCheckpoint, position: 100)], []);
+        var plan = new MigrationPlan { Step = MigrationStep.Import, Options = new(), Groups = [Plan("A@v1", GroupAction.WriteCheckpoint, position: 100)], Subscriptions = [] };
 
         plan.ToString().Should().NotContain("Subscription");
     }
 
     [Fact]
     public void SubscriptionWarnings_ComeFirst_WithABang() {
-        var plan = new MigrationPlan(MigrationStep.Import, new(), [], [
-            Subscription("B@v1", false),
-            Subscription("A@v1", true),
-        ]);
+        var plan = new MigrationPlan {
+            Step = MigrationStep.Import, Options = new(), Groups = [], Subscriptions = [
+                Subscription("B@v1", false),
+                Subscription("A@v1", true),
+            ]
+        };
 
         var report = plan.ToString();
         report.Should().Contain("\n! A@v1", "the warning is flagged");
@@ -75,25 +83,25 @@ public class MigrationReportTests {
 
     [Fact]
     public void APlanThatCanApply_IsReadyToApply() {
-        var plan = new MigrationPlan(MigrationStep.Import, new(), [Plan("A@v1", GroupAction.WriteCheckpoint, position: 100)], []);
+        var plan = new MigrationPlan { Step = MigrationStep.Import, Options = new(), Groups = [Plan("A@v1", GroupAction.WriteCheckpoint, position: 100)], Subscriptions = [] };
 
         plan.ToString().Should().Contain("Ready to apply.");
     }
 
     [Fact]
     public void ABlockedPlan_SaysSo() {
-        var plan = new MigrationPlan(MigrationStep.Import, new(), [Plan("A@v1", GroupAction.Blocked, GroupState.Connected)], []);
+        var plan = new MigrationPlan { Step = MigrationStep.Import, Options = new(), Groups = [Plan("A@v1", GroupAction.Blocked, GroupState.Connected)], Subscriptions = [] };
 
         plan.ToString().Should().Contain("Blocked: resolve the blocked groups, or leave them out with IncludeGroup.");
     }
 
     [Fact]
     public void ARollbackWithoutRegistrations_WarnsAboutHigherVersions() {
-        var plan = new MigrationPlan(MigrationStep.Rollback, new(), [Plan("A@v1", GroupAction.RecreateGroup, checkpoint: 100)], []);
+        var plan = new MigrationPlan { Step = MigrationStep.Rollback, Options = new(), Groups = [Plan("A@v1", GroupAction.RecreateGroup, checkpoint: 100)], Subscriptions = [] };
 
         plan.ToString().Should().Contain("Without registrations, the 1.0 checkpoint is the one under the group's name: pass the registrations when 1.0 runs a higher version.");
     }
 
     static SubscriptionPlan Subscription(string id, bool warning) =>
-        new(id, typeof(object), "100", "own checkpoint", "-", warning);
+        new() { SubscriptionId = id, HandlerType = typeof(object), StartsAfter = "100", Source = "own checkpoint", EventTypes = "-", IsWarning = warning };
 }

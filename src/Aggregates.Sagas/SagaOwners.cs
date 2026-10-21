@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using Aggregates.Subscriptions;
+using Aggregates.Subscriptions.Internal;
 
 namespace Aggregates.Sagas;
 

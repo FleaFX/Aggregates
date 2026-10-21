@@ -1,7 +1,8 @@
+using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Aggregates.Subscriptions;
+namespace Aggregates.Subscriptions.Internal;
 
 /// <summary>
 /// The <see cref="IParkedMessages"/> of a host: lists parked messages from the parked streams, records
@@ -9,6 +10,10 @@ namespace Aggregates.Subscriptions;
 /// in this host.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// A replay reads the event (or request) back from the store, deserializes it with the storage
 /// integration's <c>Deserialize</c>, and hands it to the handler with the retries of
 /// <see cref="SubscriptionRetryPolicy.TryExecuteAsync"/>; a deferred command goes to the
@@ -21,6 +26,7 @@ namespace Aggregates.Subscriptions;
 /// <param name="scopeFactory">Creates the scope a deferred command is dispatched in.</param>
 /// <param name="logger">The logger.</param>
 /// <param name="store">The parked-message store of the storage integration; without one, every method throws.</param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed partial class ParkedMessages(
     IEnumerable<IReplayableSubscription> subscriptions,
     SubscriptionRetryPolicy retryPolicy,
@@ -99,12 +105,12 @@ public sealed partial class ParkedMessages(
 
         if (error is not null) {
             LogReplayFailed(logger, error, message.Id, message.SubscriptionId, message.Source);
-            return new ParkedMessageReplay(message, error);
+            return new ParkedMessageReplay { Message = message, Error = error };
         }
 
         await Store.AppendParkedAsync(message.SubscriptionId, ParkedFormat.ReplayedEventType, ParkedFormat.WriteClosed(message), cancellationToken);
         LogReplayed(logger, message.Id, message.SubscriptionId, message.Source);
-        return new ParkedMessageReplay(message, null);
+        return new ParkedMessageReplay { Message = message };
     }
 
     /// <summary>

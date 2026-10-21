@@ -1,14 +1,18 @@
+using System.ComponentModel;
 using System.Text.RegularExpressions;
 using Aggregates.Subscriptions;
-using Grpc.Core;
 using MSSP;
 
-namespace Aggregates.MSSP;
+namespace Aggregates.MSSP.Internal;
 
 /// <summary>
 /// Creates MSSP subscriptions.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// <para>
 /// Events whose type starts with <c>$</c> are never delivered; the library's own bookkeeping
 /// (checkpoints, parked messages) uses that prefix. The filter is evaluated by the store.
@@ -22,6 +26,7 @@ namespace Aggregates.MSSP;
 /// </remarks>
 /// <param name="client">The <see cref="IMsspClient"/> used to create subscriptions.</param>
 /// <param name="options">The <see cref="MsspOptions"/> containing deserialization configuration.</param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class MsspSubscriptionFactory(IMsspClient client, MsspOptions options) : ISubscriptionFactory {
     static readonly SubscriptionFilter ExcludeSystemEvents =
         SubscriptionFilter.ForEventTypePattern(new Regex("^[^$]", RegexOptions.Compiled));
@@ -53,9 +58,9 @@ public sealed class MsspSubscriptionFactory(IMsspClient client, MsspOptions opti
     /// credentials, or as invalid or unsupported. Everything else (connection loss, leader
     /// changes, a stopped embedded store) is transient.
     /// </remarks>
-    public bool IsTransient(Exception exception) => exception switch {
-        RpcException { StatusCode: StatusCode.PermissionDenied or StatusCode.Unauthenticated
-            or StatusCode.InvalidArgument or StatusCode.Unimplemented or StatusCode.FailedPrecondition } => false,
-        _ => true,
-    };
+    // Matched by name: only a remote MSSP client throws an RpcException, so this package doesn't depend on gRPC.
+    public bool IsTransient(Exception exception) =>
+        !(exception.GetType().FullName == "Grpc.Core.RpcException"
+          && exception.GetType().GetProperty("StatusCode")?.GetValue(exception)?.ToString()
+              is "PermissionDenied" or "Unauthenticated" or "InvalidArgument" or "Unimplemented" or "FailedPrecondition");
 }

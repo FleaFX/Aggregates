@@ -246,10 +246,10 @@ public class MigrationRulesTests {
             new(id, typeof(object), typeof(IOrderEvent), startFromEnd, predecessors);
 
         static GroupPlan Written(string name, ulong position, string? filter = null) =>
-            new(name, GroupState.Exact, position, null, 0, filter, GroupAction.WriteCheckpoint, "Drained.");
+            new() { GroupName = name, State = GroupState.Exact, Position = position, ParkedMessages = 0, EventTypeFilter = filter, Action = GroupAction.WriteCheckpoint, Reason = "Drained." };
 
         static GroupPlan Blocked(string name) =>
-            new(name, GroupState.Connected, null, null, 0, null, GroupAction.Blocked, "Connected.");
+            new() { GroupName = name, State = GroupState.Connected, ParkedMessages = 0, Action = GroupAction.Blocked, Reason = "Connected." };
 
         [Fact]
         public void OwnCheckpoint_Wins() {
@@ -263,8 +263,10 @@ public class MigrationRulesTests {
 
         [Fact]
         public void OwnCheckpoint_ComparesWithTheImportedGroupsFilter() {
-            var imported = new GroupPlan("Ns.X@v1", GroupState.Exact, 100, 100, 0,
-                "^(?:IntegrationTests\\.OrderPlaced@v1)$", GroupAction.None, "Already imported.");
+            var imported = new GroupPlan {
+                GroupName = "Ns.X@v1", State = GroupState.Exact, Position = 100, Checkpoint = 100, ParkedMessages = 0,
+                EventTypeFilter = "^(?:IntegrationTests\\.OrderPlaced@v1)$", Action = GroupAction.None, Reason = "Already imported."
+            };
             var plan = MigrationRules.ResolveSubscription(
                 Registration("Ns.X@v1"), Checkpoints(("Ns.X@v1", 100UL)), Groups(imported),
                 EventTypeRegistry.FromTypes([typeof(OrderPlaced), typeof(OrderShipped)]));
@@ -296,7 +298,7 @@ public class MigrationRulesTests {
 
         [Fact]
         public void OwnGroupEmpty_FallsThroughToThePredecessors() {
-            var empty = new GroupPlan("Ns.X@v2", GroupState.Empty, null, null, 0, null, GroupAction.None, "read no events");
+            var empty = new GroupPlan { GroupName = "Ns.X@v2", State = GroupState.Empty, ParkedMessages = 0, Action = GroupAction.None, Reason = "read no events" };
             var plan = MigrationRules.ResolveSubscription(
                 Registration("Ns.X@v2", predecessors: "Ns.X@v1"),
                 NoCheckpoints, Groups(empty, Written("Ns.X@v1", 100)), null);
@@ -370,9 +372,9 @@ public class MigrationRulesTests {
 
     public class ChangedGroups {
         static GroupPlan Row(string name, ulong? position = 100, GroupState state = GroupState.Exact) =>
-            new(name, state, position, null, 0, null, GroupAction.WriteCheckpoint, "Imported.");
+            new() { GroupName = name, State = state, Position = position, ParkedMessages = 0, Action = GroupAction.WriteCheckpoint, Reason = "Imported." };
 
-        static MigrationPlan Plan(params GroupPlan[] groups) => new(MigrationStep.Import, new(), groups, []);
+        static MigrationPlan Plan(params GroupPlan[] groups) => new() { Step = MigrationStep.Import, Options = new(), Groups = groups, Subscriptions = [] };
 
         [Fact]
         public void Unchanged_IsEmpty() {
@@ -399,8 +401,8 @@ public class MigrationRulesTests {
         [Fact]
         public void AtRollback_OnlyTheCheckpointAndTheActionCount() {
             static GroupPlan Recreate(GroupState state, ulong? position, ulong checkpoint) =>
-                new("A@v1", state, position, checkpoint, 0, "^(?:A)$", GroupAction.RecreateGroup, "Created again.");
-            static MigrationPlan Rollback(GroupPlan group) => new(MigrationStep.Rollback, new(), [group], []);
+                new() { GroupName = "A@v1", State = state, Position = position, Checkpoint = checkpoint, ParkedMessages = 0, EventTypeFilter = "^(?:A)$", Action = GroupAction.RecreateGroup, Reason = "Created again." };
+            static MigrationPlan Rollback(GroupPlan group) => new() { Step = MigrationStep.Rollback, Options = new(), Groups = [group], Subscriptions = [] };
 
             MigrationRules.ChangedGroups(
                 Rollback(Recreate(GroupState.Exact, 100, 300)),

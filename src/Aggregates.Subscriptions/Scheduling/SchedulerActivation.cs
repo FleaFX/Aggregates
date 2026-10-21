@@ -1,10 +1,17 @@
-namespace Aggregates.Subscriptions;
+using System.ComponentModel;
+
+namespace Aggregates.Subscriptions.Internal;
 
 /// <summary>
 /// Remembers whether a saga or policy ever deferred a command, so that its scheduler only runs then.
 /// A handler is activated when the stream of its scheduler (or of a predecessor's) exists; the first
 /// request in a process writes that stream before the request is stored.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public abstract class SchedulerActivation {
     static readonly byte[] ActivatedMarker = "activated"u8.ToArray();
 
@@ -66,9 +73,14 @@ public abstract class SchedulerActivation {
 /// The <see cref="SchedulerActivation"/> of the saga or policy <typeparamref name="THandler"/>.
 /// Registered as a singleton per handler class.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
 /// <typeparam name="THandler">The saga or policy class.</typeparam>
 /// <param name="store">The store of the scheduled entries.</param>
 /// <param name="registrations">The subscriptions of the host, to find the handler's.</param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class SchedulerActivation<THandler>(IScheduledStore store, IEnumerable<SubscriptionRegistration> registrations) : SchedulerActivation(store) {
     readonly Lazy<SubscriptionRegistration?> _registration = new(() => registrations.FirstOrDefault(r => r.HandlerType == typeof(THandler)));
 

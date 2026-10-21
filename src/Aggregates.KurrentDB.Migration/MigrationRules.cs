@@ -191,7 +191,10 @@ static class MigrationRules {
         if (checkpoints.TryGetValue(id, out var own) && own is { } ownPosition) {
             // A group under the same id (imported, for example) still tells what 0.x received.
             var eventTypes = CompareEventTypes(registration.EventType, Filter(groups, id), registry);
-            return new SubscriptionPlan(id, registration.HandlerType, Number(ownPosition), "own checkpoint", eventTypes.Text, eventTypes.Differs);
+            return new SubscriptionPlan {
+                SubscriptionId = id, HandlerType = registration.HandlerType, StartsAfter = Number(ownPosition), Source = "own checkpoint",
+                EventTypes = eventTypes.Text, IsWarning = eventTypes.Differs
+            };
         }
 
         if (Source(groups, id) is { } ownGroup)
@@ -200,9 +203,10 @@ static class MigrationRules {
         foreach (var predecessor in registration.Predecessors ?? []) {
             if (checkpoints.TryGetValue(predecessor, out var inherited) && inherited is { } inheritedPosition) {
                 var eventTypes = CompareEventTypes(registration.EventType, Filter(groups, predecessor), registry);
-                return new SubscriptionPlan(
-                    id, registration.HandlerType, Number(inheritedPosition), $"checkpoint of '{predecessor}' (continueFrom)",
-                    eventTypes.Text, eventTypes.Differs);
+                return new SubscriptionPlan {
+                    SubscriptionId = id, HandlerType = registration.HandlerType, StartsAfter = Number(inheritedPosition),
+                    Source = $"checkpoint of '{predecessor}' (continueFrom)", EventTypes = eventTypes.Text, IsWarning = eventTypes.Differs
+                };
             }
 
             if (Source(groups, predecessor) is { } predecessorGroup)
@@ -210,10 +214,12 @@ static class MigrationRules {
                     $"0.x group '{predecessor}' (continueFrom)", $"0.x group '{predecessor}' is blocked");
         }
 
-        return new SubscriptionPlan(
-            id, registration.HandlerType, registration.StartFromEnd ? "end" : "beginning",
-            "no checkpoint, 0.x group or predecessor",
-            CompareEventTypes(registration.EventType, null, registry).Text, true);
+        return new SubscriptionPlan {
+            SubscriptionId = id, HandlerType = registration.HandlerType,
+            StartsAfter = registration.StartFromEnd ? "end" : "beginning",
+            Source = "no checkpoint, 0.x group or predecessor",
+            EventTypes = CompareEventTypes(registration.EventType, null, registry).Text, IsWarning = true
+        };
     }
 
     /// <summary>
@@ -256,8 +262,14 @@ static class MigrationRules {
     static SubscriptionPlan Subscription(SubscriptionRegistration registration, GroupPlan group, EventTypeRegistry? registry, string source, string blockedSource) {
         var eventTypes = CompareEventTypes(registration.EventType, group.EventTypeFilter, registry);
         return group.IsBlocked
-            ? new SubscriptionPlan(registration.SubscriptionId, registration.HandlerType, "-", blockedSource, eventTypes.Text, true)
-            : new SubscriptionPlan(registration.SubscriptionId, registration.HandlerType, Number(group.Position), source, eventTypes.Text, eventTypes.Differs);
+            ? new SubscriptionPlan {
+                SubscriptionId = registration.SubscriptionId, HandlerType = registration.HandlerType, StartsAfter = "-", Source = blockedSource,
+                EventTypes = eventTypes.Text, IsWarning = true
+            }
+            : new SubscriptionPlan {
+                SubscriptionId = registration.SubscriptionId, HandlerType = registration.HandlerType, StartsAfter = Number(group.Position),
+                Source = source, EventTypes = eventTypes.Text, IsWarning = eventTypes.Differs
+            };
     }
 
     static string Number(ulong? value) => value?.ToString(CultureInfo.InvariantCulture) ?? "-";
