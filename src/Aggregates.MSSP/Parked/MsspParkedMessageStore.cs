@@ -1,16 +1,22 @@
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Aggregates.Subscriptions;
 using MSSP;
 
-namespace Aggregates.MSSP;
+namespace Aggregates.MSSP.Internal;
 
 /// <summary>
 /// An <see cref="IParkedMessageStore"/> on MSSP: reads and appends the entries of
 /// <c>parked-{subscriptionId}</c>, reads back the events parked messages refer to, and deserializes
 /// them with <see cref="MsspOptions.Deserialize"/> and <see cref="MsspOptions.DeserializeMetadata"/>.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
 /// <param name="client">The MSSP client.</param>
 /// <param name="options">The serializers of the application.</param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class MsspParkedMessageStore(IMsspClient client, MsspOptions options) : IParkedMessageStore {
     /// <inheritdoc/>
     public async IAsyncEnumerable<ParkedEntry> ReadParkedAsync(string subscriptionId, [EnumeratorCancellation] CancellationToken cancellationToken = default) {

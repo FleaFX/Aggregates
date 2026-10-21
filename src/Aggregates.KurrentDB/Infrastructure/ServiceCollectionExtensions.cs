@@ -1,3 +1,4 @@
+using Aggregates.KurrentDB.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 

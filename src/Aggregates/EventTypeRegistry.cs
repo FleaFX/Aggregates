@@ -94,7 +94,8 @@ public sealed class EventTypeRegistry {
             .ToArray();
 
         // Upgrade edges: an upgrader sits on the type it upgrades from. TryUpgrade takes the upgrader's
-        // first IUpgradeEvent, so anything but exactly one that accepts the type fails here, at startup,
+        // first IUpgradeEvent and creates the upgrader with Activator, so anything but exactly one that
+        // accepts the type, or an upgrader without a parameterless constructor, fails here, at startup,
         // instead of on the first read of an old event.
         var upgradesTo = new Dictionary<Type, Type>();
         var errors = new List<string>();
@@ -107,11 +108,12 @@ public sealed class EventTypeRegistry {
                 upgradesTo[type] = single.GetGenericArguments()[1];
             else
                 errors.Add($"- {type.FullName}: eventUpgrader {upgrader.Name} implements {string.Join(", ", interfaces.Select(i => $"IUpgradeEvent<{i.GetGenericArguments()[0].Name}, {i.GetGenericArguments()[1].Name}>"))}.");
-
+            if (!upgrader.IsValueType && upgrader.GetConstructor(Type.EmptyTypes) is null)
+                errors.Add($"- {type.FullName}: eventUpgrader {upgrader.Name} has no public parameterless constructor.");
         }
 
         if (errors.Count > 0)
-            throw new InvalidOperationException($"Misconfigured event upgraders; each must implement IUpgradeEvent<TOld, TNew> once, with TOld the type it is attached to:{Environment.NewLine}{string.Join(Environment.NewLine, errors)}");
+            throw new InvalidOperationException($"Misconfigured event upgraders; each must implement IUpgradeEvent<TOld, TNew> once, with TOld the type it is attached to, and have a public parameterless constructor:{Environment.NewLine}{string.Join(Environment.NewLine, errors)}");
 
         return new EventTypeRegistry(byName, byType, candidates, upgradesTo);
     }

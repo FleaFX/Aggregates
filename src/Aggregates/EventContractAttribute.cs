@@ -8,11 +8,11 @@ namespace Aggregates;
 /// use this to map between .NET types and event store type names.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
-public class EventContractAttribute : Attribute {
+public sealed class EventContractAttribute : Attribute {
     readonly string _contractName;
     readonly int _contractVersion;
     readonly string? _ns;
-    readonly Func<object, object>? _upgrader;
+    readonly Lazy<Func<object, object>>? _upgrader;
 
     /// <summary>
     /// Initializes a new <see cref="EventContractAttribute"/>.
@@ -22,7 +22,7 @@ public class EventContractAttribute : Attribute {
     /// <param name="eventUpgrader">
     /// An optional type implementing <see cref="IUpgradeEvent{TOldVersion,TNewVersion}"/> that
     /// upgrades this version of the event to the next one: put it on the old version, with the
-    /// attributed type as <c>TOldVersion</c>. See <see cref="Upgrade"/>.
+    /// attributed type as <c>TOldVersion</c>, with a public parameterless constructor. See <see cref="Upgrade"/>.
     /// </param>
     /// <param name="namespace">
     /// An optional namespace prepended to the contract name, separated by a dot.
@@ -30,19 +30,21 @@ public class EventContractAttribute : Attribute {
     public EventContractAttribute(string name, int version = 1, Type? eventUpgrader = null, string? @namespace = null) {
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
 
-        var upgrader = (
+        var upgradeMethod = (
             from @interface in eventUpgrader?.GetInterfaces() ?? Enumerable.Empty<Type>()
             where @interface.IsGenericType && @interface.GetGenericTypeDefinition() == typeof(IUpgradeEvent<,>)
-            let upgradeMethod = @interface.GetMethod("Upgrade")
-            let instance = Activator.CreateInstance(eventUpgrader!)
-            select new Func<object, object>(@event => upgradeMethod!.Invoke(instance, [@event])!)
-        ).ToArray();
-        if (eventUpgrader != null && !upgrader.Any()) throw new ArgumentOutOfRangeException(nameof(eventUpgrader));
+            select @interface.GetMethod("Upgrade")
+        ).FirstOrDefault();
+        if (eventUpgrader != null && upgradeMethod is null) throw new ArgumentOutOfRangeException(nameof(eventUpgrader));
 
         _contractName = name;
         _contractVersion = version;
         _ns = @namespace;
-        _upgrader = upgrader.FirstOrDefault();
+        // Created on first use, so reading the attribute never fails on the upgrader; EventTypeRegistry checks it at startup.
+        _upgrader = upgradeMethod is null ? null : new Lazy<Func<object, object>>(() => {
+            var instance = Activator.CreateInstance(eventUpgrader!);
+            return @event => upgradeMethod.Invoke(instance, [@event])!;
+        });
         EventUpgrader = eventUpgrader;
     }
 
@@ -61,10 +63,10 @@ public class EventContractAttribute : Attribute {
     /// <see langword="true"/> if the event was upgraded; <see langword="false"/> if no upgrader
     /// was configured.
     /// </returns>
-    public bool TryUpgrade(object @event, out object upgradedEvent) {
+    internal bool TryUpgrade(object @event, out object upgradedEvent) {
         upgradedEvent = null!;
         if (_upgrader == null) return false;
-        upgradedEvent = _upgrader(@event);
+        upgradedEvent = _upgrader.Value(@event);
         return true;
     }
 

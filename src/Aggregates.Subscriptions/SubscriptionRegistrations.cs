@@ -1,12 +1,18 @@
+using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Aggregates.Subscriptions;
+namespace Aggregates.Subscriptions.Internal;
 
 /// <summary>
 /// Helpers for the packages that register subscription handlers (projections, policies and sagas):
 /// finding the handler classes, deriving their subscription id and registering them without
 /// duplicate ids.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class SubscriptionRegistrations {
     /// <summary>
     /// Finds the handler classes among <paramref name="types"/>: every concrete, closed type that

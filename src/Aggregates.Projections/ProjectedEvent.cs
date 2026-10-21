@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Aggregates.Projections;
 
 /// <summary>
@@ -55,5 +57,9 @@ public sealed class ProjectedEvent {
     /// transactions for the event is recognized on its own when the event is delivered again.
     /// Every attempt to project the event starts again from 1.
     /// </summary>
+    /// <remarks>
+    /// Used by <c>Aggregates.Projections.Sql</c>. Not covered by semantic versioning; may change in any release.
+    /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public int NextTransaction() => ++_transactions;
 }

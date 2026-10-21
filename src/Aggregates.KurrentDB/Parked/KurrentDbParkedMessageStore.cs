@@ -1,16 +1,22 @@
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using Aggregates.Subscriptions;
 using KurrentDB.Client;
 
-namespace Aggregates.KurrentDB;
+namespace Aggregates.KurrentDB.Internal;
 
 /// <summary>
 /// An <see cref="IParkedMessageStore"/> on KurrentDB: reads and appends the entries of
 /// <c>parked-{subscriptionId}</c>, reads back the events parked messages refer to, and deserializes
 /// them with <see cref="KurrentDbOptions.Deserialize"/> and <see cref="KurrentDbOptions.DeserializeMetadata"/>.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
 /// <param name="client">The KurrentDB client.</param>
 /// <param name="options">The serializers of the application.</param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class KurrentDbParkedMessageStore(KurrentDBClient client, KurrentDbOptions options) : IParkedMessageStore {
     /// <inheritdoc/>
     public async IAsyncEnumerable<ParkedEntry> ReadParkedAsync(string subscriptionId, [EnumeratorCancellation] CancellationToken cancellationToken = default) {

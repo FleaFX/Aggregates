@@ -1,4 +1,5 @@
 using Aggregates.KurrentDB;
+using Aggregates.KurrentDB.Internal;
 using Aggregates.Subscriptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;

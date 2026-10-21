@@ -1,8 +1,9 @@
+using System.ComponentModel;
 using Aggregates.Subscriptions;
 using Grpc.Core;
 using KurrentDB.Client;
 
-namespace Aggregates.KurrentDB;
+namespace Aggregates.KurrentDB.Internal;
 
 /// <summary>
 /// Creates KurrentDB <c>$all</c> subscriptions. Deserialization is handled via
@@ -10,6 +11,10 @@ namespace Aggregates.KurrentDB;
 /// delivered, or every event type except system events.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// <para>
 /// Events whose type starts with <c>$</c> are never delivered; the library's own bookkeeping
 /// (checkpoints, parked messages) uses that prefix.
@@ -20,6 +25,7 @@ namespace Aggregates.KurrentDB;
 /// progress message. The end position is read from <c>$all</c> backwards.
 /// </para>
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class KurrentDbSubscriptionFactory(KurrentDBClient client, KurrentDbOptions options) : ISubscriptionFactory {
     /// <inheritdoc/>
     public ISubscription Subscribe(SubscriptionRequest request, CancellationToken cancellationToken = default) {

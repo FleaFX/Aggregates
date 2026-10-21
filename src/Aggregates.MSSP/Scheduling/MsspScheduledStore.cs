@@ -1,9 +1,10 @@
+using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
 using Aggregates.Subscriptions;
 using MSSP;
 
-namespace Aggregates.MSSP;
+namespace Aggregates.MSSP.Internal;
 
 /// <summary>
 /// An <see cref="IScheduledStore"/> on MSSP: reads the scheduled entries with a subscription filtered
@@ -11,8 +12,13 @@ namespace Aggregates.MSSP;
 /// of policies, and (de)serializes deferred commands and deadline payloads with <see cref="MsspOptions.Serialize"/> and
 /// <see cref="MsspOptions.Deserialize"/>. MSSP does not report progress.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
 /// <param name="client">The MSSP client.</param>
 /// <param name="options">The serializers of the application.</param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class MsspScheduledStore(IMsspClient client, MsspOptions options) : IScheduledStore {
     static readonly SubscriptionFilter ScheduledEntries = SubscriptionFilter.ForEventTypePattern(
         new Regex("^" + Regex.Escape(ScheduledFormat.EventTypePrefix), RegexOptions.Compiled | RegexOptions.CultureInvariant));

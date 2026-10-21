@@ -1,8 +1,15 @@
-namespace Aggregates.Subscriptions;
+using System.ComponentModel;
+
+namespace Aggregates.Subscriptions.Internal;
 
 /// <summary>
 /// Computes exponential backoff delays with ±10% jitter, for retries and resubscribes.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public static class Backoff {
     /// <summary>
     /// Returns the delay before the next attempt, after <paramref name="attempt"/> failed attempts.

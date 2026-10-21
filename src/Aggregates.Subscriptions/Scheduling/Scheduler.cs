@@ -1,7 +1,8 @@
+using System.ComponentModel;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Aggregates.Subscriptions;
+namespace Aggregates.Subscriptions.Internal;
 
 /// <summary>
 /// Executes the commands a saga or policy deferred, and delivers the deadlines a saga requested, at
@@ -13,6 +14,10 @@ namespace Aggregates.Subscriptions;
 /// (<c>scheduled-{id}</c>).
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// Its checkpoint (<c>checkpoint-scheduled-{id}</c>) stays before the oldest open request, so a
 /// restart reads every open request again. It waits at most one minute at a time and reads the
 /// clock from <see cref="TimeProvider"/>. A command that keeps failing is parked under
@@ -35,6 +40,7 @@ namespace Aggregates.Subscriptions;
 /// <param name="timeProvider">The clock.</param>
 /// <param name="loggerFactory">Creates the loggers of the scheduler and of the command dispatch.</param>
 /// <param name="monitor">Receives the state of the scheduler; optional.</param>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class Scheduler(
     IScheduledStore store,
     ICheckpointStore checkpointStore,

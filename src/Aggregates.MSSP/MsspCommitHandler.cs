@@ -1,13 +1,19 @@
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 using MSSP;
 
-namespace Aggregates.MSSP;
+namespace Aggregates.MSSP.Internal;
 
 /// <summary>
 /// Persists aggregate changes to MSSP. Appends uncommitted events from the ambient
 /// <see cref="UnitOfWork"/> to the aggregate's stream, using optimistic concurrency control.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed partial class MsspCommitHandler(
     IMsspClient client, MsspOptions options, ILogger<MsspCommitHandler> logger,
     EventTypeRegistry? eventTypeRegistry = null) {

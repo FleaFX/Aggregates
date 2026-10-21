@@ -1,23 +1,29 @@
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text;
 using KurrentDB.Client;
 using Microsoft.Extensions.Logging;
 
-namespace Aggregates.KurrentDB;
+namespace Aggregates.KurrentDB.Internal;
 
 /// <summary>
 /// Persists aggregate changes to KurrentDB. Appends uncommitted events from the ambient
 /// <see cref="UnitOfWork"/> to the aggregate's stream, using optimistic concurrency control.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// Each event receives a deterministic <see cref="Uuid"/> derived from the stream name,
 /// its expected position in the stream, the serialized payload hash, and the event type name.
 /// This ensures idempotent writes: retrying a failed commit produces identical event IDs,
 /// which KurrentDB uses to deduplicate the events silently.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed partial class KurrentDbCommitHandler(
     KurrentDBClient client, KurrentDbOptions options, ILogger<KurrentDbCommitHandler> logger,
     EventTypeRegistry? eventTypeRegistry = null) {

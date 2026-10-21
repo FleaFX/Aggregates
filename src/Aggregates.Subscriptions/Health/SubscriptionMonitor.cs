@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Aggregates.Subscriptions.Internal;
 
 namespace Aggregates.Subscriptions;
 
@@ -34,7 +35,9 @@ public sealed class SubscriptionMonitor(TimeProvider timeProvider) {
     internal void Report(string id, SubscriptionState state, ulong? position = null, int attempts = 0, Exception? error = null) {
         var now = timeProvider.GetUtcNow();
         _statuses.AddOrUpdate(id,
-            key => new SubscriptionStatus(key, state, now, position, attempts, error),
-            (key, current) => new SubscriptionStatus(key, state, current.State == state ? current.Since : now, position, attempts, error));
+            key => new SubscriptionStatus { Id = key, State = state, Since = now, Position = position, Attempts = attempts, Error = error },
+            (key, current) => new SubscriptionStatus {
+                Id = key, State = state, Since = current.State == state ? current.Since : now, Position = position, Attempts = attempts, Error = error
+            });
     }
 }

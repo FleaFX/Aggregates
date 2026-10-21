@@ -1,18 +1,24 @@
 using System.Buffers.Binary;
+using System.ComponentModel;
 using Aggregates.Subscriptions;
 using MSSP;
 
-namespace Aggregates.MSSP;
+namespace Aggregates.MSSP.Internal;
 
 /// <summary>
 /// An <see cref="ICheckpointStore"/> implementation that stores checkpoint positions in MSSP.
 /// Each subscription gets its own stream in the format <c>checkpoint-{subscriptionId}</c>.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// Checkpoint events use the <c>$aggregates-checkpoint</c> event type. Events whose type starts
 /// with <c>$</c> are never delivered to subscriptions, so storing a checkpoint does not feed
 /// back into the subscriptions that produce them.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class MsspCheckpointStore(IMsspClient client) : ICheckpointStore {
     const string CheckpointEventType = "$aggregates-checkpoint";
 

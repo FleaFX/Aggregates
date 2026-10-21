@@ -26,8 +26,11 @@ public sealed class UnitOfWork {
     /// Attaches <paramref name="aggregate"/> to this unit of work.
     /// </summary>
     /// <param name="aggregate">The aggregate to attach.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="aggregate"/> has no identifier.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the aggregate is already attached.</exception>
     public void Attach(Aggregate aggregate) {
+        if (aggregate.Identifier.Value is null)
+            throw new ArgumentException("The aggregate has no identifier (default(AggregateIdentifier)).", nameof(aggregate));
         if (Get(aggregate.Identifier) is not null) throw new InvalidOperationException($"Aggregate '{aggregate.Identifier.Value}' is already attached to this unit of work.");
         _aggregates.Add(aggregate.Identifier, aggregate);
     }

@@ -133,6 +133,24 @@ public class SagaSubscriptionServiceTests {
     }
 
     [Fact]
+    public async Task GivenCorrelateReturnsAnIdStartingWithDollar_ParksEvent_AndContinues() {
+        A.CallTo(() => _saga.Correlate(new TestEvent(3), A<EventMetadata>._)).ReturnsLazily(() => new[] { new AggregateIdentifier("$saga-3") });
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(5,
+            position => new TestEvent((int)position)));
+        using var service = BuildService(factory);
+
+        await service.StartAsync(Token);
+        await factory.Drained.WaitAsync(Token);
+        await service.StopAsync(Token);
+
+        A.CallTo(() => _parkedMessageSink.ParkAsync(SubscriptionId, A<SubscriptionMessage>.That.Matches(m => m.CommitPosition == 3), A<ArgumentException>.That.Matches(e => e.Message.Contains("'$'")), A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+        HandledFor(SagaId).MustHaveHappened(4, Times.Exactly);
+        A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, new TestEvent(3), A<CancellationToken>._)).MustNotHaveHappened();
+        StoredPositions().Should().Equal(5UL);
+    }
+
+    [Fact]
     public async Task GivenSecondSagaFails_DoesNotRunFirstSagaAgain() {
         _errorOptions = new SubscriptionErrorHandlingOptions { MaxRetries = 3, InitialDelay = TimeSpan.Zero, MaxDelay = TimeSpan.Zero };
         var secondSagaId = new AggregateIdentifier("saga-2");

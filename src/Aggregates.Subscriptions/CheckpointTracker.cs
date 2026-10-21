@@ -1,12 +1,19 @@
-namespace Aggregates.Subscriptions;
+using System.ComponentModel;
+
+namespace Aggregates.Subscriptions.Internal;
 
 /// <summary>
 /// Records the position of each processed message of a subscription and writes it to an
 /// <see cref="ICheckpointStore"/> in batches, as configured by <see cref="SubscriptionCheckpointOptions"/>.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// A tracker belongs to a single subscription loop and is not thread-safe.
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class CheckpointTracker {
     readonly ICheckpointStore _store;
     readonly string _subscriptionId;

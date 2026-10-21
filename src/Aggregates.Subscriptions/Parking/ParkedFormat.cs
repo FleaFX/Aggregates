@@ -90,8 +90,17 @@ public static class ParkedFormat {
             }
         } catch (JsonException) {
         }
-        return new ParkedMessage(subscriptionId, Id(entry.Revision), entry.Created, source, commitPosition, eventType,
-            exceptionType ?? string.Empty, exceptionMessage ?? string.Empty, stackTrace);
+        return new ParkedMessage {
+            SubscriptionId = subscriptionId,
+            Id = Id(entry.Revision),
+            ParkedAt = entry.Created,
+            Source = source,
+            CommitPosition = commitPosition,
+            EventType = eventType,
+            ExceptionType = exceptionType ?? string.Empty,
+            ExceptionMessage = exceptionMessage ?? string.Empty,
+            StackTrace = stackTrace,
+        };
     }
 
     /// <summary>

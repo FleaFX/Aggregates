@@ -1,10 +1,17 @@
-namespace Aggregates.Subscriptions;
+using System.ComponentModel;
+
+namespace Aggregates.Subscriptions.Internal;
 
 /// <summary>
 /// A subscription whose parked messages can be replayed: it handles one message the way it does
 /// while it runs, but once, without retries or parking. Implemented by the hosted services of
 /// projections, policies and sagas, and registered for every subscription they run.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public interface IReplayableSubscription {
     /// <summary>
     /// The subscription.

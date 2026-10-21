@@ -1,12 +1,18 @@
+using System.ComponentModel;
 using Microsoft.Extensions.Logging;
 
-namespace Aggregates.Subscriptions;
+namespace Aggregates.Subscriptions.Internal;
 
 /// <summary>
 /// A no-store <see cref="IParkedMessageSink"/> that logs a warning when a message is parked.
 /// Used as a fallback when no transport-specific sink has been registered; messages are not
 /// persisted and cannot be replayed.
 /// </summary>
+/// <remarks>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class LoggingParkedMessageSink(ILogger<LoggingParkedMessageSink> logger) : IParkedMessageSink {
     /// <inheritdoc/>
     public ValueTask ParkAsync(

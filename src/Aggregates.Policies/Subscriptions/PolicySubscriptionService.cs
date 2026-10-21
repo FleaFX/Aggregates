@@ -1,4 +1,5 @@
 using Aggregates.Subscriptions;
+using Aggregates.Subscriptions.Internal;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 

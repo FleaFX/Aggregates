@@ -1,9 +1,10 @@
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using Aggregates.Subscriptions;
 using KurrentDB.Client;
 
-namespace Aggregates.KurrentDB;
+namespace Aggregates.KurrentDB.Internal;
 
 /// <summary>
 /// Persists subscription checkpoints in KurrentDB. Each subscription gets a dedicated stream
@@ -12,6 +13,10 @@ namespace Aggregates.KurrentDB;
 /// <see cref="GetAsync"/> reads the last event in that stream.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Internal infrastructure of the Aggregates packages. Public only so that those packages can use it;
+/// it is not covered by semantic versioning and may change in any release.
+/// </para>
 /// <para>
 /// Checkpoint events use the <c>$aggregates-checkpoint</c> event type. Events whose type starts
 /// with <c>$</c> are never delivered to subscriptions, so storing a checkpoint does not feed
@@ -22,6 +27,7 @@ namespace Aggregates.KurrentDB;
 /// on the checkpoint stream, so only the latest checkpoint is retained.
 /// </para>
 /// </remarks>
+[EditorBrowsable(EditorBrowsableState.Never)]
 public sealed class KurrentDbCheckpointStore(KurrentDBClient client) : ICheckpointStore {
     const string CheckpointEventType = "$aggregates-checkpoint";
     static readonly StreamMetadata CheckpointStreamMetadata = new(maxCount: 1);
