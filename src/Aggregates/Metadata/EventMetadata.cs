@@ -10,8 +10,9 @@ namespace Aggregates;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Instances are produced by <see cref="MetadataScope.Snapshot"/> and cannot be constructed
-/// directly. Use <see cref="Empty"/> when no metadata is available.
+/// <see cref="MetadataScope.Snapshot"/> produces the metadata of written events. For received
+/// events, the storage integration's <c>DeserializeMetadata</c> delegate creates it with the
+/// public constructor. Use <see cref="Empty"/> when no metadata is available.
 /// </para>
 /// <para>
 /// <strong>Array invariant:</strong> a value that is an <c>object?[]</c> always represents
@@ -28,7 +29,18 @@ public sealed class EventMetadata : IReadOnlyDictionary<string, object?> {
     /// </summary>
     public static EventMetadata Empty { get; } = new(FrozenDictionary<string, object?>.Empty);
 
-    internal EventMetadata(Dictionary<string, object?> entries) =>
+    /// <summary>
+    /// Initializes a new <see cref="EventMetadata"/> with the given entries.
+    /// </summary>
+    /// <param name="entries">
+    /// The key/value pairs. Keys are compared ordinally; when a key occurs more than once, the
+    /// last value wins. The pairs are copied, the values are not: an array or dictionary value
+    /// is shared with the caller. Represent multiple values as <c>object?[]</c> (see remarks).
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="entries"/> is <see langword="null"/>, or contains a <see langword="null"/> key.
+    /// </exception>
+    public EventMetadata(IEnumerable<KeyValuePair<string, object?>> entries) =>
         _entries = entries.ToFrozenDictionary();
 
     EventMetadata(FrozenDictionary<string, object?> entries) =>

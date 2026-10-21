@@ -62,21 +62,27 @@ sealed class SerializationSetup {
         JsonSerializer.SerializeToUtf8Bytes(metadata.ToDictionary(entry => entry.Key, entry => entry.Value));
 
     /// <summary>
-    /// Deserializes a JSON object written by <see cref="SerializeMetadata"/>. Arrays become
-    /// <c>object?[]</c>, which is how <see cref="EventMetadata"/> represents multiple values.
+    /// Deserializes a JSON object written by <see cref="SerializeMetadata"/>, like the
+    /// <c>JsonMetadata</c> example in the docs: nested objects become dictionaries, and arrays
+    /// become <c>object?[]</c>, which is how <see cref="EventMetadata"/> represents multiple values.
     /// </summary>
     public EventMetadata DeserializeMetadata(ReadOnlyMemory<byte> data) {
         using var document = JsonDocument.Parse(data);
-        return new EventMetadata(document.RootElement.EnumerateObject().ToDictionary(property => property.Name, property => ToValue(property.Value)));
+        return document.RootElement.ValueKind == JsonValueKind.Object
+            ? new EventMetadata(document.RootElement.EnumerateObject()
+                .Select(property => KeyValuePair.Create(property.Name, ToValue(property.Value))))
+            : EventMetadata.Empty;
     }
 
     static object? ToValue(JsonElement element) => element.ValueKind switch {
+        JsonValueKind.Object => element.EnumerateObject()
+            .ToDictionary(property => property.Name, property => ToValue(property.Value)),
+        JsonValueKind.Array => element.EnumerateArray().Select(ToValue).ToArray(),
         JsonValueKind.String => element.GetString(),
         JsonValueKind.Number when element.TryGetInt64(out var integer) => integer,
         JsonValueKind.Number => element.GetDouble(),
         JsonValueKind.True => true,
         JsonValueKind.False => false,
-        JsonValueKind.Array => element.EnumerateArray().Select(ToValue).ToArray(),
-        _ => null
+        _ => null,
     };
 }
