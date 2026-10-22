@@ -81,6 +81,8 @@ public sealed partial class SubscriptionLoop(
     // From this many consecutive failures on, a resubscribe is logged as an error instead of a warning.
     const int ErrorLevelFailures = 5;
 
+    readonly SubscriptionResubscribeOptions _resubscribeOptions = resubscribeOptions.Validate();
+
     /// <summary>
     /// Runs the subscription until <paramref name="stoppingToken"/> is cancelled or a failure
     /// that is not transient occurs.
@@ -233,7 +235,7 @@ public sealed partial class SubscriptionLoop(
     }
 
     TimeSpan NextDelay(int failures) =>
-        Backoff.Delay(failures, resubscribeOptions.InitialDelay, resubscribeOptions.MaxDelay, resubscribeOptions.BackoffMultiplier);
+        Backoff.Delay(failures, _resubscribeOptions.InitialDelay, _resubscribeOptions.MaxDelay, _resubscribeOptions.BackoffMultiplier);
 
     async ValueTask FlushFinalCheckpointAsync(CheckpointTracker tracker, string subscriptionId) {
         try {

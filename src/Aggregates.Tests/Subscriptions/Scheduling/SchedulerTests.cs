@@ -3,6 +3,7 @@ using Aggregates.Sagas;
 using Aggregates.Testing;
 using FakeItEasy;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
@@ -33,13 +34,20 @@ public class SchedulerTests {
         return new(_store, [Registration]);
     }
 
-    // The tests deliver through their own delegate, so the dispatch dependencies are never used.
-    Scheduler Scheduler(ISubscriptionFactory? factory = null, FakeLogger<Scheduler>? logger = null) =>
+    // The tests deliver through their own delegate, so the dispatch dependencies are unused
+    // unless a test passes its own scope factory or retry policy.
+    Scheduler Scheduler(
+        ISubscriptionFactory? factory = null,
+        FakeLogger<Scheduler>? logger = null,
+        SubscriptionResubscribeOptions? resubscribeOptions = null,
+        IServiceScopeFactory? scopeFactory = null,
+        SubscriptionRetryPolicy? retryPolicy = null
+    ) =>
         new(_store, _checkpointStore, factory ?? _factory,
             new SubscriptionCheckpointOptions { MaxBatchSize = 1 },
-            new SubscriptionResubscribeOptions { InitialDelay = TimeSpan.FromSeconds(1) },
-            A.Fake<Microsoft.Extensions.DependencyInjection.IServiceScopeFactory>(),
-            new SubscriptionRetryPolicy(_parked, new SubscriptionErrorHandlingOptions()),
+            resubscribeOptions ?? new SubscriptionResubscribeOptions { InitialDelay = TimeSpan.FromSeconds(1) },
+            scopeFactory ?? A.Fake<IServiceScopeFactory>(),
+            retryPolicy ?? new SubscriptionRetryPolicy(_parked, new SubscriptionErrorHandlingOptions()),
             _parked,
             _time, LoggerFactory(logger ?? _logger), _monitor);
 
@@ -60,6 +68,13 @@ public class SchedulerTests {
     Task CaughtUpAsync(FakeLogger<Scheduler> logger) =>
         Eventually.UntilAsync(() => logger.Collector.GetSnapshot().Any(record => record.Message.Contains("caught up")),
             "the scheduler caught up");
+
+    [Fact]
+    public void GivenInvalidResubscribeOptions_Throws() {
+        var act = () => Scheduler(resubscribeOptions: new SubscriptionResubscribeOptions { BackoffMultiplier = 0.5 });
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
 
     [Fact]
     public async Task DeliversARequest_OnlyWhenTheClockPassesIt() {
@@ -505,6 +520,33 @@ public class SchedulerTests {
         A.CallTo(() => _parked.ParkAsync(ScheduledFormat.SchedulerStream(Owner), A<SubscriptionMessage>._,
             A<InvalidOperationException>.That.Matches(error => error.Message.Contains("doesn't deliver deadlines")),
             A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        await cts.CancelAsync();
+        await run;
+    }
+
+    [Fact]
+    public async Task DeferredCommand_TimingOutWithoutCancellation_IsParked_AndTheSchedulerContinues() {
+        var activation = Activated();
+        _store.AppendRequest("saga-1", Owner, Start.AddDays(-1));
+        _store.AppendRequest("saga-1", Owner, Start.AddDays(-1));
+        var commandDispatcher = A.Fake<ICommandDispatcher>();
+        A.CallTo(() => commandDispatcher.DispatchAsync(A<ICommand>._, A<CancellationToken>._))
+            .Throws(new TaskCanceledException()).Once();
+        var provider = new ServiceCollection()
+            .AddScoped<ICommandDispatcher>(_ => commandDispatcher)
+            .BuildServiceProvider();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        var run = Scheduler(
+            scopeFactory: provider.GetRequiredService<IServiceScopeFactory>(),
+            retryPolicy: new SubscriptionRetryPolicy(_parked, new SubscriptionErrorHandlingOptions { MaxRetries = 1, InitialDelay = TimeSpan.Zero, MaxDelay = TimeSpan.Zero })
+        ).RunAsync(Registration, activation, cts.Token);
+
+        await Eventually.UntilAsync(() => _store.Entries.Count(entry => entry.EventType == ScheduledFormat.DeliveryEventType) == 2,
+            "the timed-out command is parked and the next one runs");
+        A.CallTo(() => _parked.ParkAsync(ScheduledFormat.SchedulerStream(Owner), A<SubscriptionMessage>._,
+            A<TaskCanceledException>._, A<CancellationToken>._)).MustHaveHappenedOnceExactly();
+        A.CallTo(() => commandDispatcher.DispatchAsync(A<ICommand>._, A<CancellationToken>._)).MustHaveHappened(2, Times.Exactly);
         await cts.CancelAsync();
         await run;
     }

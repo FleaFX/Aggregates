@@ -229,7 +229,7 @@ public class SubscriptionLoopTests {
 
         [Fact]
         public async Task GivenCancellationDuringBackoff_EndsWithoutException_AndWritesLastPosition() {
-            _resubscribeOptions = new SubscriptionResubscribeOptions { InitialDelay = TimeSpan.FromMinutes(1) };
+            _resubscribeOptions = new SubscriptionResubscribeOptions { InitialDelay = TimeSpan.FromMinutes(1), MaxDelay = TimeSpan.FromMinutes(1) };
             var factory = new ScriptedSubscriptionFactory().ThenFail(new IOException("connection lost"), Message(1));
             using var stopping = CancellationTokenSource.CreateLinkedTokenSource(Token);
 
@@ -1008,6 +1008,18 @@ public class SubscriptionLoopTests {
             status.State.Should().Be(SubscriptionState.Stopped);
             status.Position.Should().BeNull();
             status.Error.Should().BeAssignableTo<InvalidOperationException>().Which.Message.Should().Contain("RequireCheckpoint");
+        }
+    }
+
+    public class Constructor : SubscriptionLoopTests {
+        [Fact]
+        public void GivenInvalidResubscribeOptions_Throws() {
+            _resubscribeOptions = new SubscriptionResubscribeOptions { BackoffMultiplier = 0.5 };
+            var factory = new ScriptedSubscriptionFactory();
+
+            var act = () => BuildLoop(factory);
+
+            act.Should().Throw<ArgumentOutOfRangeException>();
         }
     }
 

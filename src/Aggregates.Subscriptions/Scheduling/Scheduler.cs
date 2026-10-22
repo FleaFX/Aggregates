@@ -65,6 +65,7 @@ public sealed class Scheduler(
 
     readonly ILogger _logger = loggerFactory.CreateLogger<Scheduler>();
     readonly DeferredCommandDispatcher _dispatcher = new(scopeFactory, retryPolicy, parkedMessageSink, loggerFactory.CreateLogger<DeferredCommandDispatcher>());
+    readonly SubscriptionResubscribeOptions _resubscribeOptions = resubscribeOptions.Validate();
 
     /// <summary>
     /// Runs the scheduler of the policy of <paramref name="registration"/> until
@@ -117,7 +118,7 @@ public sealed class Scheduler(
     internal async Task RunCoreAsync(SubscriptionRegistration registration, SchedulerActivation activation,
         Func<ScheduledRequest, CancellationToken, ValueTask> deliver, CancellationToken stoppingToken) {
         var subscriptionId = ScheduledFormat.SchedulerStream(registration.SubscriptionId);
-        var retry = new SchedulerRetry(subscriptionFactory, resubscribeOptions, timeProvider, _logger, subscriptionId, monitor);
+        var retry = new SchedulerRetry(subscriptionFactory, _resubscribeOptions, timeProvider, _logger, subscriptionId, monitor);
         Exception? failure = null;
         monitor?.Report(subscriptionId, SubscriptionState.Waiting);
         try {

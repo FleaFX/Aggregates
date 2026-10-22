@@ -113,7 +113,7 @@ sealed class SchedulerRun(
                 retry.Recovered();
                 _deliveryFailures = 0;
             }
-        } catch (Exception exception) when (exception is not OperationCanceledException && retry.IsTransient(exception)) {
+        } catch (Exception exception) when (!cancellationToken.IsCancellationRequested && retry.IsTransient(exception)) {
             var delay = retry.Failed(++_deliveryFailures, exception);
             logger.LogDeliveryFailed(exception, subscriptionId, due.Request, delay, _deliveryFailures);
             await Task.Delay(delay, timeProvider, cancellationToken);
