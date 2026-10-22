@@ -16,7 +16,9 @@ public abstract class BaseRepository<TState, TEvent> : IRepository<TState, TEven
 
         // Return already-tracked instance (identity map).
         if (unitOfWork.Get(identifier) is { } existing)
-            return (EntityRoot<TState, TEvent>)existing.AggregateRoot;
+            return existing.AggregateRoot as EntityRoot<TState, TEvent>
+                ?? throw new InvalidOperationException(
+                    $"'{identifier}' is already loaded in this unit of work as {existing.AggregateRoot.GetType()}, not as {typeof(EntityRoot<TState, TEvent>)}: two aggregate types can't share an id.");
         
         try {
             var events = await ReadEventsAsync(identifier, cancellationToken).ToArrayAsync(cancellationToken: cancellationToken);

@@ -68,6 +68,7 @@ public sealed class UnitOfWorkScope : IAsyncDisposable {
     readonly UnitOfWork _unitOfWork;
     readonly CommitDelegate _onCommit;
     bool _completed;
+    bool _disposed;
 
     /// <summary>
     /// Initializes a new <see cref="UnitOfWorkScope"/> and pushes it onto the ambient scope stack.
@@ -96,15 +97,24 @@ public sealed class UnitOfWorkScope : IAsyncDisposable {
     public static UnitOfWorkScope? Current => Scopes.IsEmpty ? null : Scopes.Peek();
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">
+    /// The scope is not the current one: it is disposed before a scope created inside it, or in another asynchronous flow.
+    /// </exception>
     public ValueTask DisposeAsync() {
+        if (_disposed)
+            return ValueTask.CompletedTask;
+        if (Scopes.IsEmpty || !ReferenceEquals(Scopes.Peek(), this))
+            throw new InvalidOperationException(
+                "A UnitOfWorkScope is disposed in the asynchronous flow that created it, after the scopes created inside it.");
+        _disposed = true;
         // Pop synchronously in the caller's execution context so the AsyncLocal change
         // is visible to the outer scope. An async DisposeAsync would isolate the change.
-        Scopes = Scopes.Pop(out var scope);
-        if (!scope._completed) {
-            scope._unitOfWork.Clear();
+        Scopes = Scopes.Pop();
+        if (!_completed) {
+            _unitOfWork.Clear();
             return ValueTask.CompletedTask;
         }
-        return CommitAndClearAsync(scope);
+        return CommitAndClearAsync(this);
     }
 
     static async ValueTask CommitAndClearAsync(UnitOfWorkScope scope) {

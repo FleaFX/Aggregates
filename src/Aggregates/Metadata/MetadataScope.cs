@@ -35,6 +35,7 @@ public sealed class MetadataScope : IAsyncDisposable {
 
     // Value is List<object?> when IsMultiple == true, otherwise the scalar value.
     readonly Dictionary<string, (object? Value, bool IsMultiple)> _entries = new();
+    bool _disposed;
 
     /// <summary>
     /// Initializes a new <see cref="MetadataScope"/> with no initial entries and pushes it onto
@@ -109,9 +110,17 @@ public sealed class MetadataScope : IAsyncDisposable {
     }
 
     /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">
+    /// The scope is not the current one: it is disposed before a scope created inside it, or in another asynchronous flow.
+    /// </exception>
     public ValueTask DisposeAsync() {
-        if (!Scopes.IsEmpty)
-            Scopes = Scopes.Pop();
+        if (_disposed)
+            return ValueTask.CompletedTask;
+        if (Scopes.IsEmpty || !ReferenceEquals(Scopes.Peek(), this))
+            throw new InvalidOperationException(
+                "A MetadataScope is disposed in the asynchronous flow that created it, after the scopes created inside it.");
+        _disposed = true;
+        Scopes = Scopes.Pop();
         return ValueTask.CompletedTask;
     }
 }

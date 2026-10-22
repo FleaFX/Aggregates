@@ -68,6 +68,24 @@ public class BaseSagaRepositoryTests {
         root.Version.Should().Be(new AggregateVersion(2));
     }
 
+    record OtherSagaState() : IState<OtherSagaState, TestEvent> {
+        public static OtherSagaState Initial => new();
+        public OtherSagaState Apply(TestEvent @event) => this;
+    }
+
+    [Fact]
+    public async Task TryGetAsync_GivenAnotherAggregateTypeUnderTheSameId_Throws() {
+        var repository = new ScriptedSagaRepository(("link", 0, 1));
+        var uow = new UnitOfWork();
+        await using var _ = new UnitOfWorkScope(uow, _ => ValueTask.CompletedTask);
+        uow.Attach(new Aggregate("saga-1", new SagaRoot<OtherSagaState, TestEvent>(OtherSagaState.Initial, AggregateVersion.None)));
+
+        var act = () => ((ISagaRepository<TestSagaState, TestEvent>)repository).TryGetAsync("saga-1", TestContext.Current.CancellationToken).AsTask();
+
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should().Contain("two aggregate types can't share an id");
+    }
+
     sealed class ScriptedSagaRepository(params (string Kind, ulong Revision, int? Value)[] entries) : BaseSagaRepository<TestSagaState, TestEvent> {
         protected override async IAsyncEnumerable<SagaStreamEntry> ReadStreamAsync(AggregateIdentifier sagaId, [EnumeratorCancellation] CancellationToken cancellationToken) {
             await Task.CompletedTask;

@@ -20,13 +20,17 @@ public interface IRepository<TState, TEvent> where TState : IState<TState, TEven
     }
 
     /// <summary>
-    /// Attempts to retrieve the <see cref="EntityRoot{TState,TEvent}"/> for <paramref name="identifier"/>.
-    /// Returns <see langword="null"/> when not found.
+    /// Returns the root tracked by the ambient <see cref="UnitOfWork"/> for <paramref name="identifier"/>, or reads and attaches it;
+    /// <see langword="null"/> when the aggregate doesn't exist.
     /// </summary>
-    internal ValueTask<EntityRoot<TState, TEvent>?> TryGetEntityRootAsync(AggregateIdentifier identifier, CancellationToken cancellationToken = default);
+    /// <param name="identifier">The identifier of the aggregate to retrieve.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    ValueTask<EntityRoot<TState, TEvent>?> TryGetEntityRootAsync(AggregateIdentifier identifier, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Attaches a new <paramref name="entityRoot"/> to the repository under <paramref name="identifier"/>.
+    /// Attaches a new <paramref name="entityRoot"/> under <paramref name="identifier"/> to the ambient <see cref="UnitOfWork"/>, which commits its changes.
     /// </summary>
-    internal void Add(AggregateIdentifier identifier, EntityRoot<TState, TEvent> entityRoot);
+    /// <param name="identifier">The identifier to attach the root under.</param>
+    /// <param name="entityRoot">The root of the new aggregate.</param>
+    void Add(AggregateIdentifier identifier, EntityRoot<TState, TEvent> entityRoot);
 }

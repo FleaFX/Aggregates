@@ -64,7 +64,9 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
 
         // Return already-tracked instance (identity map).
         if (unitOfWork.Get(sagaId) is { } existing)
-            return (SagaRoot<TSagaState, TEvent>)existing.AggregateRoot;
+            return existing.AggregateRoot as SagaRoot<TSagaState, TEvent>
+                ?? throw new InvalidOperationException(
+                    $"'{sagaId}' is already loaded in this unit of work as {existing.AggregateRoot.GetType()}, not as {typeof(SagaRoot<TSagaState, TEvent>)}: two aggregate types can't share an id.");
 
         try {
             var entries = await ReadStreamAsync(sagaId, cancellationToken).ToArrayAsync(cancellationToken);

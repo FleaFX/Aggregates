@@ -33,6 +33,24 @@ public class LoggingCommandHandlerTests {
             .Should().Contain(r => r.Level == LogLevel.Error);
     }
 
+    [Fact]
+    public async Task HandleAsync_WhenCancelled_LogsNoError() {
+        var logger = new FakeLogger<LoggingCommandHandler<NoopCommand>>();
+        var inner = A.Fake<CommandHandler<NoopCommand>>();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        A.CallTo(() => inner.HandleAsync(A<NoopCommand>._, A<CancellationToken>._))
+            .Throws(new OperationCanceledException(cts.Token));
+        var handler = BuildHandler(inner, logger);
+
+        var act = () => handler.HandleAsync(new NoopCommand(), cts.Token).AsTask();
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        logger.Collector.GetSnapshot()
+            .Should().NotContain(r => r.Level == LogLevel.Error)
+            .And.Contain(r => r.Level == LogLevel.Debug && r.Message.Contains("Cancelled"));
+    }
+
     static LoggingCommandHandler<NoopCommand> BuildHandler(
         CommandHandler<NoopCommand> inner,
         FakeLogger<LoggingCommandHandler<NoopCommand>> logger) {
