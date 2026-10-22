@@ -40,5 +40,9 @@ public abstract class BaseRepository<TState, TEvent> : IRepository<TState, TEven
     /// <exception cref="AggregateRootNotFoundException">
     /// Thrown when no aggregate exists for <paramref name="identifier"/>.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when an event can't be read back as a <typeparamref name="TEvent"/>, or the stream misses events
+    /// (it doesn't start at revision 0, or has a gap): an implementation fails instead of skipping the event.
+    /// </exception>
     protected abstract IAsyncEnumerable<TEvent> ReadEventsAsync(AggregateIdentifier identifier, CancellationToken cancellationToken = default);
 }

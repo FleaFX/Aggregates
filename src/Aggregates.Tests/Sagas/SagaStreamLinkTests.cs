@@ -133,6 +133,26 @@ public class SagaStreamLinkTests(ITestOutputHelper output) {
         host.Probe.Count<CountingSaga>().Should().Be(1, "the redelivered source does not trigger a reaction");
     }
 
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task Load_FailsOnALinkToAnEventThatCanNotBeRead(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        await using var host = await TestHost.StartAsync(store, output, o => o
+            .Events(Orders.EventTypes)
+            .Sagas(s => s.ScanTypes(typeof(FixedIdSaga))));
+
+        // A link to an event the application doesn't know: the target exists, but can't be read.
+        await store.AppendRawAsync("old-1", "IntegrationTests.OrderPlaced@v0", "{}"u8.ToArray());
+        await store.AppendRawAsync("saga-1", "$>", "0@old-1"u8.ToArray());
+        await AppendAsync(store, host, new OrderPlaced("order-1", "alice"));
+
+        await Eventually.UntilAsync(
+            async ValueTask<bool> () => (await store.ReadAllAsync()).Any(e => e.Stream.StartsWith("parked-")),
+            "the event is parked after the retries");
+        await Eventually.QuietAsync();
+        host.Probe.Count<FixedIdSaga>().Should().Be(0, "the saga never reacts: its stream can't be read");
+        (await store.ReadAllAsync()).Count(e => e.Stream == "saga-1").Should().Be(1, "the failed load commits no link");
+    }
+
     static async Task<EventReference> AppendAsync(IStoreFixture store, TestHost host, IOrderEvent @event) {
         var revision = (ulong)(await store.ReadAllAsync()).Count(e => e.Stream == @event.OrderId);
         await store.AppendAsync(host.Serialization, @event.OrderId, @event);
@@ -180,6 +200,17 @@ public class SagaStreamLinkTests(ITestOutputHelper output) {
     sealed class AggregateIdSaga(HandlerProbe probe) : ISaga<CountingState, IOrderEvent> {
         public IEnumerable<AggregateIdentifier> Correlate(IOrderEvent @event, EventMetadata metadata) =>
             [new AggregateIdentifier(@event.OrderId)];
+
+        public async IAsyncEnumerable<ICommand> ReactAsync(CountingState state, IOrderEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            probe.Record(this, @event);
+            yield break;
+        }
+    }
+
+    [SagaContract("FixedIdCounting", @namespace: "IntegrationTests")]
+    sealed class FixedIdSaga(HandlerProbe probe) : ISaga<CountingState, IOrderEvent> {
+        public IEnumerable<AggregateIdentifier> Correlate(IOrderEvent @event, EventMetadata metadata) =>
+            [new AggregateIdentifier("saga-1")];
 
         public async IAsyncEnumerable<ICommand> ReactAsync(CountingState state, IOrderEvent @event, [EnumeratorCancellation] CancellationToken cancellationToken = default) {
             probe.Record(this, @event);

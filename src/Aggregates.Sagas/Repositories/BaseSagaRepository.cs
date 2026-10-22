@@ -98,5 +98,9 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
     /// <exception cref="AggregateRootNotFoundException">
     /// Thrown when no saga exists for <paramref name="sagaId"/>.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when a link whose target exists can't be read back as a <typeparamref name="TEvent"/>, or the stream misses entries
+    /// (it doesn't start at revision 0, or has a gap): an implementation fails instead of skipping the entry.
+    /// </exception>
     protected abstract IAsyncEnumerable<SagaStreamEntry> ReadStreamAsync(AggregateIdentifier sagaId, CancellationToken cancellationToken = default);
 }

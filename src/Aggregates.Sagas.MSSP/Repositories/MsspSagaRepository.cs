@@ -10,7 +10,7 @@ namespace Aggregates.Sagas.MSSP;
 /// <see cref="AggregateIdentifier.ToString"/> of the saga identifier. MSSP has no native link
 /// events, so the <c>$&gt;</c> links a saga stream holds are resolved client-side: one bounded
 /// parallel read per link, preserving the order of the stream. Unresolved links count for the
-/// version but leave the state untouched.
+/// version but leave the state untouched; a link whose target exists but can't be read fails the load.
 /// </summary>
 /// <typeparam name="TSagaState">The saga state type.</typeparam>
 /// <typeparam name="TEvent">The event type.</typeparam>
@@ -26,8 +26,15 @@ sealed class MsspSagaRepository<TSagaState, TEvent>(IMsspClient client, MsspOpti
 
         var entries = new SagaStreamEntry[recordedEvents.Length];
         var links = new List<int>();
+        var expected = 0UL;
         for (var i = 0; i < recordedEvents.Length; i++) {
             var recorded = recordedEvents[i];
+            // The version of the saga counts the entries read, so every entry must be there.
+            if (recorded.Revision != expected)
+                throw new InvalidOperationException(
+                    $"Saga stream '{sagaId}' can't be read: the event at revision {expected} is missing (the next one is at {recorded.Revision}). " +
+                    "Events were deleted or the stream was truncated, so the state would miss them.");
+            expected++;
             if (recorded.EventType is ScheduledFormat.CommandRequestEventType or ScheduledFormat.DeadlineRequestEventType) {
                 // The cause marks a deadline whose reaction is stored; an unreadable request has none.
                 var cause = ScheduledFormat.TryReadRequest(recorded.Data, out var envelope) ? envelope.Cause : null;
@@ -48,8 +55,17 @@ sealed class MsspSagaRepository<TSagaState, TEvent>(IMsspClient client, MsspOpti
         await Parallel.ForEachAsync(links, new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = cancellationToken }, async (i, token) => {
             var link = entries[i].Link;
             await foreach (var target in client.ReadAsync(link.StreamId, link.Revision, maxCount: 1, cancellationToken: token)) {
-                if (target.Revision == link.Revision && options.Deserialize!(target.EventType, target.Data) is TEvent typedEvent)
+                if (target.Revision == link.Revision) {
+                    var domainEvent = options.Deserialize!(target.EventType, target.Data);
+                    if (domainEvent is not TEvent typedEvent)
+                        throw new InvalidOperationException(
+                            $"Saga stream '{sagaId}' can't be read: its link at revision {recordedEvents[i].Revision} points to {link}, stored as '{target.EventType}', " +
+                            (domainEvent is null
+                                ? "which Deserialize doesn't know. "
+                                : $"which deserializes to a {domainEvent.GetType().Name}, not a {typeof(TEvent).Name}. ") +
+                            "Every event a saga reacted to must stay readable: keep old event versions in the code, with an upgrader to the current one.");
                     entries[i] = new SagaStreamEntry(link, typedEvent);
+                }
                 break;
             }
         });
