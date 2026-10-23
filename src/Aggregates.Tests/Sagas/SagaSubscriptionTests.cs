@@ -2,8 +2,10 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using Aggregates.Policies;
 using Aggregates.Projections;
+using Aggregates.Subscriptions;
 using Aggregates.Testing;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates.Sagas;
 
@@ -52,6 +54,25 @@ public class SagaSubscriptionTests(ITestOutputHelper output) {
         var link = stored.Single(e => e.Stream == "legacy-saga-1");
         link.EventType.Should().Be("$>");
         Encoding.UTF8.GetString(link.Data.Span).Should().Be("0@order-1");
+    }
+
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task SagaCommit_GivenACancelledToken_Throws(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        await using var host = await TestHost.StartAsync(store, output, o => o
+            .Events(Orders.EventTypes)
+            .Sagas(s => s.ScanTypes(typeof(PlacedSaga))));
+        var root = new SagaRoot<PlacedState, OrderPlaced>(PlacedState.Initial, AggregateVersion.None);
+        await root.AcceptAsync(new OrderPlaced("order-1", "alice"), new EventReference("order-1", 0), new PlacedSaga(host.Probe), TestContext.Current.CancellationToken);
+        var unitOfWork = new UnitOfWork();
+        unitOfWork.Attach(new Aggregate("saga-order-1", root));
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        var act = () => host.Services.GetRequiredService<SagaCommitDelegate>()(unitOfWork, cancelled.Token).AsTask();
+
+        // Both transports report an append with an already cancelled token as a cancellation, not as a transport error.
+        await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     sealed record PlacedState(int Seen) : IState<PlacedState, OrderPlaced> {

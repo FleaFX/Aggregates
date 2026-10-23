@@ -5,7 +5,7 @@ namespace Aggregates;
 /// management. Creates a fresh <see cref="UnitOfWork"/> and <see cref="UnitOfWorkScope"/> for each
 /// command, making them available to repositories via the ambient scope. Calls
 /// <see cref="UnitOfWorkScope.Complete"/> after the inner handler returns successfully, triggering
-/// the <paramref name="commitDelegate"/> on disposal.
+/// the <paramref name="commitDelegate"/> on disposal, with the command's cancellation token.
 /// </summary>
 /// <remarks>
 /// Place this decorator inside <see cref="RetryCommandHandler{TCommand}"/> so that each retry
@@ -17,7 +17,7 @@ sealed class UnitOfWorkAwareCommandHandler<TCommand>(CommandHandler<TCommand> in
 
     /// <inheritdoc/>
     public async ValueTask HandleAsync(TCommand command, CancellationToken cancellationToken = default) {
-        await using var scope = new UnitOfWorkScope(new UnitOfWork(), commitDelegate);
+        await using var scope = new UnitOfWorkScope(new UnitOfWork(), commitDelegate, cancellationToken);
         await inner.HandleAsync(command, cancellationToken);
         scope.Complete();
     }

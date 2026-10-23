@@ -77,7 +77,7 @@ public class BaseSagaRepositoryTests {
     public async Task TryGetAsync_GivenAnotherAggregateTypeUnderTheSameId_Throws() {
         var repository = new ScriptedSagaRepository(("link", 0, 1));
         var uow = new UnitOfWork();
-        await using var _ = new UnitOfWorkScope(uow, _ => ValueTask.CompletedTask);
+        await using var _ = new UnitOfWorkScope(uow, (_, _) => ValueTask.CompletedTask);
         uow.Attach(new Aggregate("saga-1", new SagaRoot<OtherSagaState, TestEvent>(OtherSagaState.Initial, AggregateVersion.None)));
 
         var act = () => ((ISagaRepository<TestSagaState, TestEvent>)repository).TryGetAsync("saga-1", TestContext.Current.CancellationToken).AsTask();

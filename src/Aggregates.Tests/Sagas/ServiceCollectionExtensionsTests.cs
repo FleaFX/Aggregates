@@ -184,7 +184,7 @@ public class ServiceCollectionExtensionsTests {
                 .AddSingleton<HandlerProbe>()
                 .AddSingleton<ISubscriptionFactory>(factory)
                 .AddSingleton(A.Fake<ICheckpointStore>())
-                .AddSingleton<SagaCommitDelegate>(_ => ValueTask.CompletedTask)
+                .AddSingleton<SagaCommitDelegate>((_, _) => ValueTask.CompletedTask)
                 .AddSingleton(A.Fake<IScheduledStore>())
                 .AddSingleton(typeof(SchedulerActivation<>))
                 .AddSingleton(firstRepository)
@@ -218,7 +218,7 @@ public class ServiceCollectionExtensionsTests {
                 .AddScoped<ScopedPrefix>()
                 .AddSingleton<ISubscriptionFactory>(factory)
                 .AddSingleton(A.Fake<ICheckpointStore>())
-                .AddSingleton<SagaCommitDelegate>(_ => ValueTask.CompletedTask)
+                .AddSingleton<SagaCommitDelegate>((_, _) => ValueTask.CompletedTask)
                 .AddSingleton(A.Fake<IScheduledStore>())
                 .AddSingleton(typeof(SchedulerActivation<>))
                 .AddSingleton(repository);

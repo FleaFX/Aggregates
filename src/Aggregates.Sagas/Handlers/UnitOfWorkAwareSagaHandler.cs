@@ -25,7 +25,7 @@ sealed class UnitOfWorkAwareSagaHandler<TSaga, TSagaState, TEvent>(SagaHandler<T
     /// <param name="source">Identifies the stored event that triggered the saga.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     public async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, EventReference source, CancellationToken cancellationToken = default) {
-        await using var scope = new UnitOfWorkScope(new UnitOfWork(), uow => commitDelegate(uow));
+        await using var scope = new UnitOfWorkScope(new UnitOfWork(), (uow, ct) => commitDelegate(uow, ct), cancellationToken);
         await inner.HandleAsync(sagaId, @event, source, cancellationToken);
         scope.Complete();
     }
@@ -40,7 +40,7 @@ sealed class UnitOfWorkAwareSagaHandler<TSaga, TSagaState, TEvent>(SagaHandler<T
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns><see langword="false"/> when the saga doesn't exist.</returns>
     public async ValueTask<bool> HandleDeadlineAsync(AggregateIdentifier sagaId, object deadline, EventReference request, CancellationToken cancellationToken = default) {
-        await using var scope = new UnitOfWorkScope(new UnitOfWork(), uow => commitDelegate(uow));
+        await using var scope = new UnitOfWorkScope(new UnitOfWork(), (uow, ct) => commitDelegate(uow, ct), cancellationToken);
         var found = await inner.HandleDeadlineAsync(sagaId, deadline, request, cancellationToken);
         scope.Complete();
         return found;

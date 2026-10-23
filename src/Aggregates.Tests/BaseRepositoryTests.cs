@@ -61,7 +61,7 @@ public class BaseRepositoryTests {
         public async Task GivenAggregateAlreadyInUnitOfWork_ReturnsSameInstance() {
             IRepository<TestState, TestEvent> repo = new FakeRepository(new TestEvent("hello"));
             var uow = new UnitOfWork();
-            await using var _ = new UnitOfWorkScope(uow, _ => ValueTask.CompletedTask);
+            await using var _ = new UnitOfWorkScope(uow, (_, _) => ValueTask.CompletedTask);
 
             var first = await repo.TryGetEntityRootAsync("agg/1", TestContext.Current.CancellationToken);
             var second = await repo.TryGetEntityRootAsync("agg/1", TestContext.Current.CancellationToken);
@@ -73,7 +73,7 @@ public class BaseRepositoryTests {
         public async Task GivenAnotherAggregateTypeUnderTheSameId_Throws() {
             IRepository<TestState, TestEvent> repo = new FakeRepository(new TestEvent("a"));
             var uow = new UnitOfWork();
-            await using var _ = new UnitOfWorkScope(uow, _ => ValueTask.CompletedTask);
+            await using var _ = new UnitOfWorkScope(uow, (_, _) => ValueTask.CompletedTask);
             uow.Attach(new Aggregate("agg/1", new EntityRoot<OtherState, TestEvent>(OtherState.Initial, AggregateVersion.None)));
 
             var act = () => repo.TryGetEntityRootAsync("agg/1", TestContext.Current.CancellationToken).AsTask();
@@ -88,7 +88,7 @@ public class BaseRepositoryTests {
         public async Task GivenAmbientScope_AttachesRootToUnitOfWork() {
             IRepository<TestState, TestEvent> repo = new FakeRepository();
             var uow = new UnitOfWork();
-            await using var _ = new UnitOfWorkScope(uow, _ => ValueTask.CompletedTask);
+            await using var _ = new UnitOfWorkScope(uow, (_, _) => ValueTask.CompletedTask);
             var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
 
             repo.Add("agg/1", root);

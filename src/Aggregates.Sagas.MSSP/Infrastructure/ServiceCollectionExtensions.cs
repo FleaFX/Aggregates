@@ -47,7 +47,7 @@ public static class ServiceCollectionExtensions {
         builder.Services.TryAddSingleton<SagaCommitDelegate>(sp => {
             var handler = sp.GetRequiredService<MsspCommitHandler>();
             var options = sp.GetRequiredService<MsspOptions>();
-            return uow => handler.CommitAsync(uow, change => SerializeChange(change, options));
+            return (uow, cancellationToken) => handler.CommitAsync(uow, change => SerializeChange(change, options), cancellationToken);
         });
 
         // Parked-message sink — Replace overrides the LoggingParkedMessageSink fallback registered

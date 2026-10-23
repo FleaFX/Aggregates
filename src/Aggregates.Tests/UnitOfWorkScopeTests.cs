@@ -8,7 +8,7 @@ public class UnitOfWorkScopeTests {
         var uow = new UnitOfWork();
         var committed = false;
 
-        await using (var scope = new UnitOfWorkScope(uow, _ => { committed = true; return ValueTask.CompletedTask; })) {
+        await using (var scope = new UnitOfWorkScope(uow, (_, _) => { committed = true; return ValueTask.CompletedTask; })) {
             scope.Complete();
         }
 
@@ -20,7 +20,7 @@ public class UnitOfWorkScopeTests {
         var uow = new UnitOfWork();
         var committed = false;
 
-        await using (new UnitOfWorkScope(uow, _ => { committed = true; return ValueTask.CompletedTask; })) {
+        await using (new UnitOfWorkScope(uow, (_, _) => { committed = true; return ValueTask.CompletedTask; })) {
             // no Complete()
         }
 
@@ -32,7 +32,7 @@ public class UnitOfWorkScopeTests {
         var uow = new UnitOfWork();
         uow.Attach(new Aggregate("aggregate/1", new EntityRoot<TestState, string>(default, AggregateVersion.None)));
 
-        await using (new UnitOfWorkScope(uow, _ => ValueTask.CompletedTask)) {
+        await using (new UnitOfWorkScope(uow, (_, _) => ValueTask.CompletedTask)) {
             // no Complete()
         }
 
@@ -45,8 +45,8 @@ public class UnitOfWorkScopeTests {
         var outerCommitted = false;
         var innerCommitted = false;
 
-        await using (var outer = new UnitOfWorkScope(uow, _ => { outerCommitted = true; return ValueTask.CompletedTask; })) {
-            await using (var inner = new UnitOfWorkScope(uow, _ => { innerCommitted = true; return ValueTask.CompletedTask; })) {
+        await using (var outer = new UnitOfWorkScope(uow, (_, _) => { outerCommitted = true; return ValueTask.CompletedTask; })) {
+            await using (var inner = new UnitOfWorkScope(uow, (_, _) => { innerCommitted = true; return ValueTask.CompletedTask; })) {
                 inner.Complete();
             }
             outer.Complete();
@@ -62,8 +62,8 @@ public class UnitOfWorkScopeTests {
         var outerCommitted = false;
         var innerCommitted = false;
 
-        await using (new UnitOfWorkScope(uow, _ => { outerCommitted = true; return ValueTask.CompletedTask; })) {
-            await using (var inner = new UnitOfWorkScope(uow, _ => { innerCommitted = true; return ValueTask.CompletedTask; })) {
+        await using (new UnitOfWorkScope(uow, (_, _) => { outerCommitted = true; return ValueTask.CompletedTask; })) {
+            await using (var inner = new UnitOfWorkScope(uow, (_, _) => { innerCommitted = true; return ValueTask.CompletedTask; })) {
                 inner.Complete();
             }
             // outer not completed
@@ -76,9 +76,9 @@ public class UnitOfWorkScopeTests {
     [Fact]
     public async Task DisposingTwice_DoesNotTouchTheParent() {
         var commitCount = 0;
-        await using (var outer = new UnitOfWorkScope(new UnitOfWork(), _ => { commitCount++; return ValueTask.CompletedTask; })) {
+        await using (var outer = new UnitOfWorkScope(new UnitOfWork(), (_, _) => { commitCount++; return ValueTask.CompletedTask; })) {
             outer.Complete();
-            var inner = new UnitOfWorkScope(new UnitOfWork(), _ => ValueTask.CompletedTask);
+            var inner = new UnitOfWorkScope(new UnitOfWork(), (_, _) => ValueTask.CompletedTask);
             await inner.DisposeAsync();
             await inner.DisposeAsync();
             UnitOfWorkScope.Current.Should().BeSameAs(outer);
@@ -89,14 +89,36 @@ public class UnitOfWorkScopeTests {
 
     [Fact]
     public async Task DisposingOutOfOrder_Throws() {
-        var outer = new UnitOfWorkScope(new UnitOfWork(), _ => ValueTask.CompletedTask);
-        var inner = new UnitOfWorkScope(new UnitOfWork(), _ => ValueTask.CompletedTask);
+        var outer = new UnitOfWorkScope(new UnitOfWork(), (_, _) => ValueTask.CompletedTask);
+        var inner = new UnitOfWorkScope(new UnitOfWork(), (_, _) => ValueTask.CompletedTask);
 
         var act = () => outer.DisposeAsync().AsTask();
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         await inner.DisposeAsync();
         await outer.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task GivenCompleted_PassesItsCancellationTokenToTheCommitDelegate() {
+        using var cts = new CancellationTokenSource();
+        var captured = CancellationToken.None;
+        await using (var scope = new UnitOfWorkScope(new UnitOfWork(), (_, cancellationToken) => { captured = cancellationToken; return ValueTask.CompletedTask; }, cts.Token)) {
+            scope.Complete();
+        }
+
+        captured.Should().Be(cts.Token);
+    }
+
+    [Fact]
+    public async Task GivenNoCancellationToken_PassesNone() {
+        using var other = new CancellationTokenSource();
+        var captured = other.Token;
+        await using (var scope = new UnitOfWorkScope(new UnitOfWork(), (_, cancellationToken) => { captured = cancellationToken; return ValueTask.CompletedTask; })) {
+            scope.Complete();
+        }
+
+        captured.Should().Be(CancellationToken.None);
     }
 
     record struct TestState(string Value) : IState<TestState, string> {
