@@ -32,40 +32,5 @@ public sealed class ProjectionContractAttribute(
     string? @namespace = null,
     string? continueFrom = null,
     bool startFromEnd = false,
-    SubscriptionErrorMode onError = SubscriptionErrorMode.Park) : Attribute {
-
-    readonly string[] _predecessors = continueFrom switch {
-        "" => [],
-        { } explicitId => [explicitId],
-        null => [.. Enumerable.Range(1, Math.Max(version - 1, 0)).Reverse()
-            .Select(previous => new ProjectionContractAttribute(name, previous, @namespace).ToString())],
-    };
-
-    /// <summary>
-    /// The subscription ids whose checkpoint this projection continues from when it has none of
-    /// its own, nearest first: <c>continueFrom</c> when given; when omitted, every
-    /// previous version from <c>version</c> - 1 down to 1; empty for
-    /// <c>""</c> or for version 1.
-    /// </summary>
-    public IReadOnlyList<string> Predecessors => _predecessors;
-
-    /// <summary>
-    /// The nearest predecessor (the first of <see cref="Predecessors"/>), or
-    /// <see langword="null"/>.
-    /// </summary>
-    public string? ContinueFrom => _predecessors.Length > 0 ? _predecessors[0] : null;
-
-    /// <summary>
-    /// Indicates whether the projection should start from the end of the stream on first run.
-    /// </summary>
-    public bool StartFromEnd => startFromEnd;
-
-    /// <summary>
-    /// What the subscription does with an event the projection still fails on after all retries.
-    /// </summary>
-    public SubscriptionErrorMode OnError => onError;
-
-    /// <inheritdoc/>
-    public override string ToString() =>
-        $"{(!string.IsNullOrWhiteSpace(@namespace) ? $"{@namespace}." : string.Empty)}{name}@v{version}";
-}
+    SubscriptionErrorMode onError = SubscriptionErrorMode.Park
+) : SubscriptionContractAttribute(name, version, @namespace, continueFrom, startFromEnd, onError);

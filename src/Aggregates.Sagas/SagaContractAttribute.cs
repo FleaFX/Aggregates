@@ -24,6 +24,8 @@ namespace Aggregates.Sagas;
 /// What the subscription does with an event the saga still fails on after all retries:
 /// <see cref="SubscriptionErrorMode.Park"/> (the default) parks it and continues;
 /// <see cref="SubscriptionErrorMode.Block"/> retries it until it succeeds.
+/// It applies to events only; deferred commands and deadlines are always parked
+/// (see <see cref="SubscriptionContractAttribute.OnError"/>).
 /// </param>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct, Inherited = false)]
 public sealed class SagaContractAttribute(
@@ -32,42 +34,5 @@ public sealed class SagaContractAttribute(
     string? @namespace = null,
     string? continueFrom = null,
     bool startFromEnd = false,
-    SubscriptionErrorMode onError = SubscriptionErrorMode.Park) : Attribute {
-
-    readonly string[] _predecessors = continueFrom switch {
-        "" => [],
-        { } explicitId => [explicitId],
-        null => [.. Enumerable.Range(1, Math.Max(version - 1, 0)).Reverse()
-            .Select(previous => new SagaContractAttribute(name, previous, @namespace).ToString())],
-    };
-
-    /// <summary>
-    /// The subscription ids whose checkpoint this saga continues from when it has none of
-    /// its own, nearest first: <c>continueFrom</c> when given; when omitted, every
-    /// previous version from <c>version</c> - 1 down to 1; empty for
-    /// <c>""</c> or for version 1.
-    /// </summary>
-    public IReadOnlyList<string> Predecessors => _predecessors;
-
-    /// <summary>
-    /// The nearest predecessor (the first of <see cref="Predecessors"/>), or
-    /// <see langword="null"/>.
-    /// </summary>
-    public string? ContinueFrom => _predecessors.Length > 0 ? _predecessors[0] : null;
-
-    /// <summary>
-    /// Indicates whether the saga should start from the end of the stream.
-    /// </summary>
-    public bool StartFromEnd => startFromEnd;
-
-    /// <summary>
-    /// What the subscription does with an event the saga still fails on after all retries.
-    /// </summary>
-    public SubscriptionErrorMode OnError => onError;
-
-    /// <summary>
-    /// Returns the fully qualified saga name, e.g. <c>MyNamespace.OrderFulfillment@v2</c>.
-    /// </summary>
-    public override string ToString() =>
-        $"{(!string.IsNullOrWhiteSpace(@namespace) ? $"{@namespace}." : string.Empty)}{name}@v{version}";
-}
+    SubscriptionErrorMode onError = SubscriptionErrorMode.Park
+) : SubscriptionContractAttribute(name, version, @namespace, continueFrom, startFromEnd, onError);
