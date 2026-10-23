@@ -10,6 +10,7 @@
   <Project Path="Aggregates.Sagas/Aggregates.Sagas.csproj" />
   <Project Path="Aggregates.Policies/Aggregates.Policies.csproj" />
   <Project Path="Aggregates.Projections/Aggregates.Projections.csproj" />
+  <Project Path="Aggregates.Analyzers/Aggregates.Analyzers.csproj" />
   <Folder Name="/Integrations/">
     <Project Path="Aggregates.KurrentDB/Aggregates.KurrentDB.csproj" />
     <Project Path="Aggregates.KurrentDB.Migration/Aggregates.KurrentDB.Migration.csproj" />

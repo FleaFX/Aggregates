@@ -13,6 +13,8 @@
   <ItemGroup>
     <PackageReference Include="FakeItEasy" Version="9.0.1" />
     <PackageReference Include="FluentAssertions" Version="8.11.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.2" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.0" />
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.1.1" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.Testing" Version="10.11.0" />
@@ -38,6 +40,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Aggregates.Analyzers\Aggregates.Analyzers.csproj" />
     <ProjectReference Include="..\Aggregates.KurrentDB\Aggregates.KurrentDB.csproj" />
     <ProjectReference Include="..\Aggregates.KurrentDB.Migration\Aggregates.KurrentDB.Migration.csproj" />
     <ProjectReference Include="..\Aggregates.MSSP\Aggregates.MSSP.csproj" />
