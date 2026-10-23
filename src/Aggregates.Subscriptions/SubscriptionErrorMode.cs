@@ -16,7 +16,9 @@ public enum SubscriptionErrorMode {
     /// <see cref="SubscriptionErrorHandlingOptions"/>, until it succeeds, and handles no later message
     /// until then. Its checkpoint stays before the message, so a restart retries it too. For handlers
     /// whose order matters, such as an outbox to an external system. A message that can't be
-    /// deserialized blocks the subscription as well, until a fix is deployed.
+    /// deserialized blocks the subscription as well, until a fix is deployed. It applies to events:
+    /// deferred commands and saga deadlines are always parked (see
+    /// <see cref="SubscriptionContractAttribute.OnError"/>).
     /// </summary>
     Block
 }

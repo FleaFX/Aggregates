@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates;
@@ -10,11 +11,24 @@ namespace Aggregates;
 sealed class CommandDispatcher(IServiceProvider serviceProvider) : ICommandDispatcher {
     /// <inheritdoc/>
     public ValueTask DispatchAsync(ICommand command, CancellationToken cancellationToken = default) {
+        ArgumentNullException.ThrowIfNull(command);
         var commandType = command.GetType();
         var handlerType = typeof(ICommandHandler<>).MakeGenericType(commandType);
-        var handler = serviceProvider.GetRequiredService(handlerType);
+        object handler;
+        try {
+            handler = serviceProvider.GetRequiredService(handlerType);
+        } catch (InvalidOperationException exception) when (!HasHandler(commandType)) {
+            throw new InvalidOperationException(command is DeferredCommand
+                ? "A DeferredCommand is executed by the scheduler of a saga or policy: yield it from ReactAsync instead of dispatching it."
+                : $"No handler for {commandType.Name}: it implements no ICommand<TState, TEvent>, or it was not passed to AddAggregates with ScanAssemblies or ScanTypes.",
+                exception);
+        }
         return (ValueTask)handlerType
             .GetMethod(nameof(ICommandHandler<ICommand>.HandleAsync))!
-            .Invoke(handler, [command, cancellationToken])!;
+            .Invoke(handler, BindingFlags.DoNotWrapExceptions, binder: null, [command, cancellationToken], culture: null)!;
     }
+
+    // Whether AddAggregates registered the handler of the command; without it the decorator chain can't be built.
+    bool HasHandler(Type commandType) =>
+        serviceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(CommandHandler<>).MakeGenericType(commandType)) ?? true;
 }

@@ -19,7 +19,8 @@ public sealed class LoggingParkedMessageSink(ILogger<LoggingParkedMessageSink> l
         string subscriptionId,
         SubscriptionMessage message,
         Exception exception,
-        CancellationToken cancellationToken = default) {
+        CancellationToken cancellationToken = default
+    ) {
         logger.LogWarning(
             exception,
             "Message at position {CommitPosition} could not be processed by subscription '{SubscriptionId}' " +

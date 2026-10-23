@@ -185,7 +185,8 @@ static class MigrationRules {
         SubscriptionRegistration registration,
         IReadOnlyDictionary<string, ulong?> checkpoints,
         IReadOnlyDictionary<string, GroupPlan> groups,
-        EventTypeRegistry? registry) {
+        EventTypeRegistry? registry
+    ) {
         var id = registration.SubscriptionId;
 
         if (checkpoints.TryGetValue(id, out var own) && own is { } ownPosition) {

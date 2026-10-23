@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Reflection.Emit;
 using FluentAssertions;
 
 namespace Aggregates;
@@ -120,6 +121,24 @@ abstract record AbstractShipment(string OrderId) : IShipmentEvent;
 /// An open generic shipment event, which is never stored.
 sealed class GenericShipment<T> : IShipmentEvent { }
 
+/// A generic event type whose contract is shared by every closing, which a registry refuses.
+[EventContract("Envelope", @namespace: "Tests.Registry")]
+public sealed record Envelope<T>(T Value);
+
+/// An envelope without a contract, which a registry refuses once closed over its type argument.
+public sealed record SomeEnvelope<T>(T Value);
+
+/// An event whose upgrader always throws.
+[EventContract("Broken", @namespace: "Tests.Registry", eventUpgrader: typeof(BrokenToShipped))]
+public sealed record BrokenEvent(string OrderId);
+
+/// <summary>
+/// Upgrades a <see cref="BrokenEvent"/> to a <see cref="Shipped"/>, and always throws.
+/// </summary>
+public sealed class BrokenToShipped : IUpgradeEvent<BrokenEvent, Shipped> {
+    public Shipped Upgrade(BrokenEvent @event) => throw new FormatException("broken on purpose");
+}
+
 public class EventTypeRegistryTests {
     public class EventContract {
         [Fact]
@@ -173,6 +192,27 @@ public class EventTypeRegistryTests {
 
             attribute!.EventUpgrader.Should().Be(typeof(DependentV1ToShipped));
         }
+
+        [Fact]
+        public void GivenAWhitespaceName_ThrowsArgumentException() {
+            var act = () => new EventContractAttribute("  ", @namespace: "Tests.Registry");
+
+            act.Should().Throw<ArgumentException>().Which.Should().NotBeOfType<ArgumentNullException>();
+        }
+
+        [Fact]
+        public void GivenVersionZero_Throws() {
+            var act = () => new EventContractAttribute("Shipped", version: 0, @namespace: "Tests.Registry");
+
+            act.Should().Throw<ArgumentOutOfRangeException>();
+        }
+
+        [Fact]
+        public void Upgrade_LetsTheUpgradersExceptionThrough() {
+            var act = () => EventContractAttribute.Upgrade(new BrokenEvent("o-1"));
+
+            act.Should().Throw<FormatException>();
+        }
     }
 
     public class GetTypeNames {
@@ -181,14 +221,15 @@ public class EventTypeRegistryTests {
             var registry = EventTypeRegistry.FromTypes([typeof(Shipped), typeof(Packed), typeof(OtherEvent)]);
 
             registry.GetTypeNames(typeof(IShipmentEvent))
-                .Should().Equal("Packed", "Tests.Registry.Shipped@v2");
+                .Should().Equal(typeof(Packed).FullName, "Tests.Registry.Shipped@v2");
         }
 
         [Fact]
-        public void GivenTwoTypesWithTheSameShortName_ReturnsItOnce() {
+        public void GivenTwoTypesWithTheSameShortName_ReturnsBothFullNames() {
             var registry = EventTypeRegistry.FromTypes([typeof(One.Duplicate), typeof(Two.Duplicate)]);
 
-            registry.GetTypeNames(typeof(IShipmentEvent)).Should().Equal("Duplicate");
+            registry.GetTypeNames(typeof(IShipmentEvent))
+                .Should().Equal(typeof(One.Duplicate).FullName, typeof(Two.Duplicate).FullName);
         }
 
         [Fact]
@@ -215,11 +256,19 @@ public class EventTypeRegistryTests {
         }
 
         [Fact]
-        public void GivenATypeWithoutAnEventContract_ReturnsItsShortName() {
+        public void GivenATypeWithoutAnEventContract_ReturnsItsFullName() {
             var registry = EventTypeRegistry.FromTypes([typeof(Packed)]);
 
-            registry.GetTypeNames(typeof(IShipmentEvent)).Should().Equal("Packed");
+            registry.GetTypeNames(typeof(IShipmentEvent)).Should().Equal(typeof(Packed).FullName);
             registry.TryGetType("Packed", out _).Should().BeFalse();
+        }
+
+        [Fact]
+        public void TryGetType_FindsATypeWithoutContract_ByItsFullName() {
+            var registry = EventTypeRegistry.FromTypes([typeof(Packed)]);
+
+            registry.TryGetType(registry.GetTypeName(typeof(Packed)), out var type).Should().BeTrue();
+            type.Should().Be(typeof(Packed));
         }
 
         [Fact]
@@ -239,6 +288,24 @@ public class EventTypeRegistryTests {
 
         static class One { public sealed record Duplicate(string OrderId) : IShipmentEvent; }
         static class Two { public sealed record Duplicate(string OrderId) : IShipmentEvent; }
+    }
+
+    public class GetTypeName {
+        [Fact]
+        public void OfAnUnscannedTypeWithContract_ReturnsTheContractName() {
+            var registry = EventTypeRegistry.FromTypes([typeof(Shipped)]);
+
+            registry.GetTypeName(typeof(ShippedV1)).Should().Be("Tests.Registry.ShippedV1@v1");
+        }
+
+        [Fact]
+        public void OfAnUnscannedGenericTypeWithoutContract_Throws() {
+            var registry = EventTypeRegistry.FromTypes([typeof(Shipped)]);
+
+            var act = () => registry.GetTypeName(typeof(SomeEnvelope<int>));
+
+            act.Should().Throw<InvalidOperationException>();
+        }
     }
 
     public class Validation {
@@ -292,6 +359,42 @@ public class EventTypeRegistryTests {
 
             act.Should().NotThrow();
         }
+
+        [Fact]
+        public void GivenTwoTypesWithTheSameContract_Throws() {
+            var act = () => EventTypeRegistry.FromTypes([typeof(Envelope<int>), typeof(Envelope<string>)]);
+
+            var message = act.Should().Throw<InvalidOperationException>().Which.Message;
+            message.Should().Contain("Tests.Registry.Envelope@v1");
+            message.Should().Contain(typeof(Envelope<int>).FullName);
+            message.Should().Contain(typeof(Envelope<string>).FullName);
+        }
+
+        [Fact]
+        public void GivenAGenericTypeWithoutContract_Throws() {
+            var act = () => EventTypeRegistry.FromTypes([typeof(SomeEnvelope<int>)]);
+
+            act.Should().Throw<InvalidOperationException>().Which.Message.Should()
+                .Contain("a generic event type needs an EventContractAttribute");
+        }
+
+        [Fact]
+        public void GivenTwoTypesWithoutContractWithTheSameFullName_LeavesTheNameOut() {
+            var first = DynamicType("FirstDynamic", "Shared.Name");
+            var second = DynamicType("SecondDynamic", "Shared.Name");
+
+            var registry = EventTypeRegistry.FromTypes(first, second);
+
+            registry.TryGetType("Shared.Name", out _).Should().BeFalse();
+            registry.GetTypeName(first).Should().Be("Shared.Name");
+        }
+
+        // Two types with the same full name, like generated classes in two assemblies.
+        static Type DynamicType(string assembly, string fullName) =>
+            AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(assembly), AssemblyBuilderAccess.Run)
+                .DefineDynamicModule(assembly)
+                .DefineType(fullName, TypeAttributes.Public | TypeAttributes.Sealed)
+                .CreateType();
 
         [Fact]
         public void FromAssemblies_ChecksTheScannedTypes() {

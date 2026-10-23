@@ -79,10 +79,46 @@ public class MsspSubscriptionFactoryTests {
             await handler.CommitAsync(await ChangedUnitOfWork());
             await handler.CommitAsync(await ChangedUnitOfWork());
 
-            var warning = logger.Collector.GetSnapshot().Single(record => record.Level == LogLevel.Warning);
+            var warning = logger.Collector.GetSnapshot().Single(record => record.Level == LogLevel.Warning && record.Message.Contains("names it"));
             State(warning, "Type").Should().Be(typeof(OrderPlaced).FullName);
             State(warning, "StoredName").Should().Be("Wrong.Name@v1");
             State(warning, "RegistryName").Should().Be("IntegrationTests.OrderPlaced@v1");
+        }
+
+        [Fact]
+        public async Task GivenAnEventTypeOutsideTheRegistry_WarnsOnceThatItCanNotBeReadBack() {
+            var logger = new FakeLogger<MsspCommitHandler>();
+            var registry = EventTypeRegistry.FromTypes([typeof(Shipped)]);
+            var options = new MsspOptions { Serialize = @event => new MsspEventData(registry.GetTypeName(@event.GetType()), new byte[] { 1 }) };
+            var handler = new MsspCommitHandler(NewClient(), options, logger, registry);
+
+            await handler.CommitAsync(await ChangedUnitOfWork());
+            await handler.CommitAsync(await ChangedUnitOfWork());
+
+            var warning = logger.Collector.GetSnapshot().Single(record => record.Level == LogLevel.Warning && record.Message.Contains("can't be read back"));
+            State(warning, "Type").Should().Be(typeof(OrderPlaced).FullName);
+            State(warning, "StoredName").Should().Be("IntegrationTests.OrderPlaced@v1");
+        }
+
+        [Fact]
+        public async Task GivenAConcurrencyConflict_ReportsNoActualVersion() {
+            var client = A.Fake<IMsspClient>();
+            A.CallTo(() => client.AppendAsync(A<MsspStreamId>._, A<MsspStreamRevision>._, A<IEnumerable<MsspEventData>>._, A<CancellationToken>._))
+                .Throws(new global::MSSP.OptimisticConcurrencyException("order-1", 0UL));
+            var handler = new MsspCommitHandler(client, new MsspOptions {
+                Serialize = @event => new MsspEventData("IntegrationTests.OrderPlaced@v1", new byte[] { 1 })
+            }, new FakeLogger<MsspCommitHandler>());
+            var unitOfWork = new UnitOfWork();
+            var root = new EntityRoot<OrderState, IOrderEvent>(OrderState.Initial, new AggregateVersion(3));
+            unitOfWork.Attach(new Aggregate("order-1", root));
+            await root.AcceptAsync(new PlaceOrder("order-1", "alice"), TestContext.Current.CancellationToken);
+
+            var act = () => handler.CommitAsync(unitOfWork).AsTask();
+
+            var failure = (await act.Should().ThrowAsync<ConcurrencyException>()).Which;
+            failure.Identifier.Value.Should().Be("order-1");
+            failure.ExpectedVersion.Should().Be(new AggregateVersion(3));
+            failure.ActualVersion.Should().Be(AggregateVersion.None);
         }
 
         [Fact]

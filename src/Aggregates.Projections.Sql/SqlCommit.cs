@@ -20,7 +20,8 @@ sealed class SqlCommit(
     ICommit parentCommit,
     IDbConnectionFactory connectionFactory,
     IsolationLevel isolationLevel,
-    ImmutableQueue<Query> queries) : ISqlCommit {
+    ImmutableQueue<Query> queries
+) : ISqlCommit {
 
     internal SqlCommit(ICommit parentCommit, IDbConnectionFactory connectionFactory, IsolationLevel isolationLevel)
         : this(parentCommit, connectionFactory, isolationLevel, ImmutableQueue<Query>.Empty) { }
@@ -42,24 +43,20 @@ sealed class SqlCommit(
         await using var connection = await connectionFactory.CreateAsync(cancellationToken);
         await connection.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(isolationLevel, cancellationToken);
-        try {
-            // Claimed in the same transaction as the statements, so both commit or neither does.
-            // Not claimed: committed before; disposing the transaction rolls the claim back.
-            if (positions is not null && !await positions.ClaimAsync(connection, transaction, projected!, cancellationToken))
-                return;
 
-            var current = queries;
-            while (!current.IsEmpty) {
-                current = current.Dequeue(out var query);
-                await using var command = CreateCommand(connection, transaction, query);
-                await command.ExecuteNonQueryAsync(cancellationToken);
-            }
+        // Claimed in the same transaction as the statements, so both commit or neither does.
+        // Not claimed (committed before), or a statement failed: disposing the transaction rolls it back.
+        if (positions is not null && !await positions.ClaimAsync(connection, transaction, projected!, cancellationToken))
+            return;
 
-            await transaction.CommitAsync(cancellationToken);
-        } catch {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+        var current = queries;
+        while (!current.IsEmpty) {
+            current = current.Dequeue(out var query);
+            await using var command = CreateCommand(connection, transaction, query);
+            await command.ExecuteNonQueryAsync(cancellationToken);
         }
+
+        await transaction.CommitAsync(cancellationToken);
     }
 
     /// <summary>

@@ -36,7 +36,8 @@ namespace Aggregates.KurrentDB.Migration;
 /// </remarks>
 public sealed class PersistentSubscriptionMigration(
     KurrentDBClient client,
-    KurrentDBPersistentSubscriptionsClient persistentSubscriptions) {
+    KurrentDBPersistentSubscriptionsClient persistentSubscriptions
+) {
     readonly KurrentDbCheckpointStore _checkpoints = new(client);
 
     /// <summary>
@@ -176,7 +177,8 @@ public sealed class PersistentSubscriptionMigration(
         IReadOnlyCollection<SubscriptionRegistration> registrations,
         IReadOnlyList<GroupPlan> groups,
         EventTypeRegistry? registry,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken
+    ) {
         var checkpoints = new Dictionary<string, ulong?>();
         foreach (var id in registrations.Select(registration => registration.SubscriptionId)
             .Concat(registrations.SelectMany(registration => registration.Predecessors ?? []))

@@ -195,4 +195,28 @@ public class MetadataScopeTests {
             inner.Snapshot()["key"].Should().Be("overwritten");
         }
     }
+
+    public class Disposal {
+        [Fact]
+        public async Task DisposingTwice_DoesNotTouchTheParent() {
+            await using var outer = new MetadataScope();
+            var inner = new MetadataScope();
+            await inner.DisposeAsync();
+            await inner.DisposeAsync();
+
+            MetadataScope.Current.Should().BeSameAs(outer);
+        }
+
+        [Fact]
+        public async Task DisposingOutOfOrder_Throws() {
+            var outer = new MetadataScope();
+            var inner = new MetadataScope();
+
+            var act = () => outer.DisposeAsync().AsTask();
+
+            await act.Should().ThrowAsync<InvalidOperationException>();
+            await inner.DisposeAsync();
+            await outer.DisposeAsync();
+        }
+    }
 }

@@ -106,7 +106,7 @@ sealed class SchedulerIndex(IReadOnlySet<string> owners, ulong? start, Func<stri
                 var other when kind == ScheduledKind.Deadline => (other, null),
                 var other => (null, new InvalidOperationException($"'{envelope.Type}' deserializes to a {other.GetType().Name}, which is not a command.")),
             };
-        } catch (Exception exception) when (exception is not OperationCanceledException) {
+        } catch (Exception exception) {
             return (null, exception);
         }
     }

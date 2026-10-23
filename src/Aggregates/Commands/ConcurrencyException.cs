@@ -23,5 +23,8 @@ public class ConcurrencyException(
     /// <summary>
     /// The version the aggregate was actually at in the store.
     /// </summary>
+    /// <remarks>
+    /// <see cref="AggregateVersion.None"/> when the store doesn't report it (MSSP).
+    /// </remarks>
     public AggregateVersion ActualVersion { get; } = actualVersion;
 }

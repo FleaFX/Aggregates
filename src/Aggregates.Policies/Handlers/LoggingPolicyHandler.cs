@@ -6,7 +6,8 @@ namespace Aggregates.Policies;
 /// <summary>
 /// Decorates a <see cref="PolicyHandler{TPolicy,TEvent}"/> with structured logging. Logs at
 /// <see cref="LogLevel.Debug"/> when handling starts and succeeds, and at
-/// <see cref="LogLevel.Error"/> when the inner handler throws.
+/// <see cref="LogLevel.Warning"/> when the inner handler throws (the retry policy logs the message
+/// it parks); a cancellation by the caller is not logged.
 /// </summary>
 /// <typeparam name="TPolicy">The policy class.</typeparam>
 /// <typeparam name="TEvent">The event type the policy reacts to.</typeparam>
@@ -28,6 +29,8 @@ sealed partial class LoggingPolicyHandler<TPolicy, TEvent>(
         try {
             await inner.HandleAsync(@event, source, cancellationToken);
             LogHandled(logger, eventType, policy);
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+            throw;
         } catch (Exception ex) {
             LogFailed(logger, ex, eventType, policy);
             throw;
@@ -40,6 +43,6 @@ sealed partial class LoggingPolicyHandler<TPolicy, TEvent>(
     [LoggerMessage(Level = LogLevel.Debug, Message = "Handled {EventType} in {Policy}")]
     static partial void LogHandled(ILogger logger, string eventType, string policy);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to handle {EventType} in {Policy}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to handle {EventType} in {Policy}; the subscription retries or parks it")]
     static partial void LogFailed(ILogger logger, Exception exception, string eventType, string policy);
 }

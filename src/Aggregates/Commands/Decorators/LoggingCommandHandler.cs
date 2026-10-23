@@ -4,8 +4,8 @@ namespace Aggregates;
 
 /// <summary>
 /// Decorates an <see cref="ICommandHandler{TCommand}"/> with structured logging. Logs at
-/// <see cref="LogLevel.Debug"/> when handling starts and succeeds, and at
-/// <see cref="LogLevel.Error"/> when the inner handler throws.
+/// <see cref="LogLevel.Debug"/> when handling starts, succeeds, or is cancelled by the
+/// caller, and at <see cref="LogLevel.Error"/> when the inner handler throws.
 /// </summary>
 /// <typeparam name="TCommand">The type of command being handled.</typeparam>
 sealed partial class LoggingCommandHandler<TCommand>(RetryCommandHandler<TCommand> inner, ILogger<LoggingCommandHandler<TCommand>> logger): ICommandHandler<TCommand>
@@ -18,6 +18,9 @@ sealed partial class LoggingCommandHandler<TCommand>(RetryCommandHandler<TComman
         try {
             await inner.HandleAsync(command, cancellationToken);
             LogHandled(logger, commandType);
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+            LogCancelled(logger, commandType);
+            throw;
         } catch (Exception ex) {
             LogFailed(logger, ex, commandType);
             throw;
@@ -32,4 +35,7 @@ sealed partial class LoggingCommandHandler<TCommand>(RetryCommandHandler<TComman
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to handle {CommandType}")]
     static partial void LogFailed(ILogger logger, Exception exception, string commandType);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Cancelled {CommandType}")]
+    static partial void LogCancelled(ILogger logger, string commandType);
 }

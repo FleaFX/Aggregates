@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.ComponentModel;
@@ -38,19 +39,28 @@ public sealed partial class KurrentDbCommitHandler(
     public ValueTask CommitAsync(UnitOfWork unitOfWork) =>
         CommitAsync(unitOfWork, eventTypeRegistry is null ? options.Serialize! : SerializeAndCheck);
 
-    // Wraps Serialize to warn, once per CLR type per process, when the stored name differs from
-    // the registry's: subscriptions filter on the registry's names and would miss the events.
+    // Wraps Serialize to warn, once per CLR type per process, when the stored name differs from the
+    // registry's, or the registry maps no type back to the stored name: subscriptions filter on the
+    // registry's names and would miss the events, and a name the registry can't read back leaves them
+    // unreadable for aggregates and sagas.
     SerializedEvent SerializeAndCheck(object @event) {
         var serialized = options.Serialize!(@event);
         var type = @event.GetType();
-        if (eventTypeRegistry is not null && _checkedTypes.TryAdd(type, 0)
-            && !string.Equals(eventTypeRegistry.GetTypeName(type), serialized.EventType, StringComparison.Ordinal))
-            LogTypeNameMismatch(logger, type.FullName, serialized.EventType, eventTypeRegistry.GetTypeName(type));
+        if (eventTypeRegistry is not null && _checkedTypes.TryAdd(type, 0)) {
+            var registryName = eventTypeRegistry.GetTypeName(type);
+            if (!string.Equals(registryName, serialized.EventType, StringComparison.Ordinal))
+                LogTypeNameMismatch(logger, type.FullName, serialized.EventType, registryName);
+            if (!eventTypeRegistry.TryGetType(serialized.EventType, out var stored) || stored != type)
+                LogNotReadable(logger, type.FullName, serialized.EventType);
+        }
         return serialized;
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Event type {Type} is stored as '{StoredName}', but the EventTypeRegistry names it '{RegistryName}'. Subscriptions filter on the registry's names and will not receive these events. Serialize with the registry's names, or remove the registry from the service collection to disable filtering.")]
     static partial void LogTypeNameMismatch(ILogger logger, string? type, string storedName, string registryName);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Event type {Type} is stored as '{StoredName}', which the EventTypeRegistry doesn't map back to this type: the events are written, but can't be read back. Add the type's assembly to the registry, or serialize with the registry's names.")]
+    static partial void LogNotReadable(ILogger logger, string? type, string storedName);
 
     /// <summary>
     /// Appends the single changed aggregate's events to its KurrentDB stream, serialized with
@@ -101,16 +111,22 @@ public sealed partial class KurrentDbCommitHandler(
     /// position, the serialized payload hash, and the event type name.
     /// </summary>
     internal static Uuid CreateEventId(AggregateIdentifier identifier, long expectedPosition, SerializedEvent serialized) {
-        Span<byte> buffer = stackalloc byte[512];
-        var written = 0;
-
-        written += Encoding.UTF8.GetBytes(identifier.Value, buffer[written..]);
-        BinaryPrimitives.WriteInt64LittleEndian(buffer[written..], expectedPosition);
-        written += sizeof(long);
-        BinaryPrimitives.WriteUInt64LittleEndian(buffer[written..], XxHash64.HashToUInt64(serialized.Data.Span));
-        written += sizeof(ulong);
-        written += Encoding.UTF8.GetBytes(serialized.EventType, buffer[written..]);
-
-        return Uuid.FromGuid(new Guid(MD5.HashData(buffer[..written])));
+        var length = Encoding.UTF8.GetByteCount(identifier.Value) + sizeof(long) + sizeof(ulong) + Encoding.UTF8.GetByteCount(serialized.EventType);
+        // Usual names fit on the stack; longer ones get a pooled buffer, with the same bytes.
+        byte[]? rented = null;
+        Span<byte> buffer = length <= 512 ? stackalloc byte[512] : rented = ArrayPool<byte>.Shared.Rent(length);
+        try {
+            var written = 0;
+            written += Encoding.UTF8.GetBytes(identifier.Value, buffer[written..]);
+            BinaryPrimitives.WriteInt64LittleEndian(buffer[written..], expectedPosition);
+            written += sizeof(long);
+            BinaryPrimitives.WriteUInt64LittleEndian(buffer[written..], XxHash64.HashToUInt64(serialized.Data.Span));
+            written += sizeof(ulong);
+            written += Encoding.UTF8.GetBytes(serialized.EventType, buffer[written..]);
+            return Uuid.FromGuid(new Guid(MD5.HashData(buffer[..written])));
+        } finally {
+            if (rented is not null)
+                ArrayPool<byte>.Shared.Return(rented);
+        }
     }
 }

@@ -15,9 +15,9 @@ public class LoggingProjectionHandlerTests {
         LoggingProjectionHandler<IProjection<ProjectionTestEvent>, ProjectionTestEvent> BuildHandler() =>
             new(new ProjectionHandler<IProjection<ProjectionTestEvent>, ProjectionTestEvent>(_projection), _logger);
 
-        void ProjectionThrows() =>
+        void ProjectionThrows(Exception? exception = null) =>
             A.CallTo(() => _projection.ProjectAsync(A<ProjectionTestEvent>._, A<EventMetadata>._, A<CancellationToken>._))
-                .Throws<InvalidOperationException>();
+                .Throws(exception ?? new InvalidOperationException());
 
         [Fact]
         public async Task GivenSuccess_LogsProjectingAndProjected() {
@@ -55,7 +55,20 @@ public class LoggingProjectionHandlerTests {
 
             await act.Should().ThrowAsync<InvalidOperationException>();
             _logger.Collector.GetSnapshot()
-                .Should().Contain(r => r.Level == LogLevel.Error);
+                .Should().Contain(r => r.Level == LogLevel.Warning);
+        }
+
+        [Fact]
+        public async Task HandleAsync_WhenCancelled_LogsNoWarning() {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            ProjectionThrows(new OperationCanceledException(cts.Token));
+
+            var act = () => BuildHandler().HandleAsync(new ProjectionTestEvent(1), EventMetadata.Empty, cts.Token).AsTask();
+
+            await act.Should().ThrowAsync<OperationCanceledException>();
+            _logger.Collector.GetSnapshot()
+                .Should().NotContain(r => r.Level == LogLevel.Warning);
         }
 
         [Fact]

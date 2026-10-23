@@ -1,5 +1,6 @@
 using FakeItEasy;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates;
 
@@ -45,5 +46,42 @@ public class CommandDispatcherTests {
         var act = () => dispatcher.DispatchAsync(new NoopCommand(), TestContext.Current.CancellationToken).AsTask();
 
         await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task DispatchAsync_GivenADeferredCommand_ExplainsThatOnlySagasAndPoliciesDeferCommands() {
+        using var provider = new ServiceCollection().BuildServiceProvider();
+        var dispatcher = new CommandDispatcher(provider);
+
+        var act = () => dispatcher.DispatchAsync(new DeferredCommand(due: DateTimeOffset.UtcNow, command: new NoopCommand()), TestContext.Current.CancellationToken).AsTask();
+
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should().Contain("A DeferredCommand is executed by the scheduler of a saga or policy");
+    }
+
+    [Fact]
+    public async Task DispatchAsync_GivenAnUnscannedCommand_NamesTheCommandAndScanAssemblies() {
+        using var provider = new ServiceCollection().BuildServiceProvider();
+        var dispatcher = new CommandDispatcher(provider);
+
+        var act = () => dispatcher.DispatchAsync(new NoopCommand(), TestContext.Current.CancellationToken).AsTask();
+
+        var message = (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message;
+        message.Should().Contain(nameof(NoopCommand));
+        message.Should().Contain("ScanAssemblies").And.Contain("ScanTypes");
+    }
+
+    [Fact]
+    public async Task DispatchAsync_GivenAScannedCommandWithoutCommitDelegate_KeepsTheOriginalError() {
+        var services = new ServiceCollection();
+        services.AddAggregates(o => o.ScanTypes(typeof(ScanTestCommand)));
+        using var provider = services.BuildServiceProvider();
+        var dispatcher = new CommandDispatcher(provider);
+
+        var act = () => dispatcher.DispatchAsync(new ScanTestCommand("agg/1"), TestContext.Current.CancellationToken).AsTask();
+
+        var message = (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Message;
+        message.Should().Contain("Unable to resolve");
+        message.Should().NotContain("No handler for");
     }
 }

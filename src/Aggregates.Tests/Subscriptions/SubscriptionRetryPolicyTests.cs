@@ -123,6 +123,83 @@ public class SubscriptionRetryPolicyTests {
                     A<CancellationToken>._))
                 .MustHaveHappenedOnceExactly();
         }
+
+        [Fact]
+        public async Task ExecuteAsync_HandlerTimesOutWithoutCancellation_RetriesAndParks() {
+            var sink = A.Fake<IParkedMessageSink>();
+            var timeout = new TaskCanceledException();
+            var callCount = 0;
+            var policy = BuildPolicy(sink, maxRetries: 3);
+
+            await policy.ExecuteAsync(
+                _ => { callCount++; throw timeout; },
+                "sub-1", AnyMessage, TestContext.Current.CancellationToken);
+
+            callCount.Should().Be(3);
+            A.CallTo(() => sink.ParkAsync("sub-1", AnyMessage, timeout, A<CancellationToken>._))
+                .MustHaveHappenedOnceExactly();
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_WaitsOnTheTimeProvider() {
+            var sink = A.Fake<IParkedMessageSink>();
+            var time = new FakeTimeProvider();
+            var policy = new SubscriptionRetryPolicy(sink, new SubscriptionErrorHandlingOptions {
+                MaxRetries = 3,
+                InitialDelay = TimeSpan.FromSeconds(1),
+                MaxDelay = TimeSpan.FromSeconds(1)
+            }, timeProvider: time);
+            var calls = 0;
+
+            var run = policy.ExecuteAsync(
+                _ => {
+                    calls++;
+                    if (calls == 1) throw new InvalidOperationException("transient");
+                    return ValueTask.CompletedTask;
+                },
+                "sub-1", AnyMessage, TestContext.Current.CancellationToken).AsTask();
+
+            calls.Should().Be(1, "the policy waits on the clock before the second attempt");
+            time.Advance(TimeSpan.FromMilliseconds(1200));
+            await run;
+
+            calls.Should().Be(2);
+            A.CallTo(() => sink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._))
+                .MustNotHaveHappened();
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_Parking_LogsAnError() {
+            var sink = A.Fake<IParkedMessageSink>();
+            var logger = new FakeLogger<SubscriptionRetryPolicy>();
+            var policy = new SubscriptionRetryPolicy(sink, new SubscriptionErrorHandlingOptions {
+                MaxRetries = 2,
+                InitialDelay = TimeSpan.Zero,
+                MaxDelay = TimeSpan.Zero
+            }, logger);
+
+            await policy.ExecuteAsync(
+                _ => throw new InvalidOperationException("permanent"),
+                "sub-1", AnyMessage, TestContext.Current.CancellationToken);
+
+            var error = logger.Collector.GetSnapshot().Should().ContainSingle(record => record.Level == LogLevel.Error).Which;
+            error.Message.Should().Contain("sub-1").And.Contain("parking it");
+        }
+
+        [Fact]
+        public async Task MaxRetriesZero_HandlesOnce_ThenParks() {
+            var sink = A.Fake<IParkedMessageSink>();
+            var callCount = 0;
+            var policy = BuildPolicy(sink, maxRetries: 0);
+
+            await policy.ExecuteAsync(
+                _ => { callCount++; throw new InvalidOperationException("permanent"); },
+                "sub-1", AnyMessage, TestContext.Current.CancellationToken);
+
+            callCount.Should().Be(1);
+            A.CallTo(() => sink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._))
+                .MustHaveHappenedOnceExactly();
+        }
     }
 
     public class Block {
@@ -152,6 +229,25 @@ public class SubscriptionRetryPolicyTests {
                 "sub-1", AnyMessage, SubscriptionErrorMode.Block, TestContext.Current.CancellationToken);
 
             callCount.Should().Be(6);
+            A.CallTo(() => sink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._))
+                .MustNotHaveHappened();
+        }
+
+        [Fact]
+        public async Task ExecuteAsync_Block_HandlerTimesOutWithoutCancellation_KeepsRetrying() {
+            var sink = A.Fake<IParkedMessageSink>();
+            var callCount = 0;
+            var policy = BuildPolicy(sink, maxRetries: 2);
+
+            await policy.ExecuteAsync(
+                _ => {
+                    callCount++;
+                    if (callCount < 5) throw new TaskCanceledException();
+                    return ValueTask.CompletedTask;
+                },
+                "sub-1", AnyMessage, SubscriptionErrorMode.Block, TestContext.Current.CancellationToken);
+
+            callCount.Should().Be(5);
             A.CallTo(() => sink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._))
                 .MustNotHaveHappened();
         }
@@ -348,5 +444,36 @@ public class SubscriptionRetryPolicyTests {
             A.CallTo(() => sink.ParkAsync(A<string>._, A<SubscriptionMessage>._, A<Exception>._, A<CancellationToken>._))
                 .MustNotHaveHappened();
         }
+
+        [Fact]
+        public async Task TryExecuteAsync_HandlerTimesOutWithoutCancellation_ReturnsTheException() {
+            var sink = A.Fake<IParkedMessageSink>();
+            var timeout = new TaskCanceledException();
+            var callCount = 0;
+            var policy = BuildPolicy(sink, maxRetries: 3);
+
+            var error = await policy.TryExecuteAsync(
+                _ => { callCount++; throw timeout; },
+                TestContext.Current.CancellationToken);
+
+            callCount.Should().Be(3);
+            error.Should().BeSameAs(timeout);
+        }
+    }
+
+    [Theory]
+    [InlineData(-1, 0, 0, 1.0)]
+    [InlineData(0, -1, 0, 1.0)]
+    [InlineData(0, 0, -1, 1.0)]
+    [InlineData(0, 0, 0, 0.5)]
+    public void Constructor_GivenInvalidOptions_Throws(int maxRetries, int initialDelayMs, int maxDelayMs, double backoffMultiplier) {
+        var act = () => new SubscriptionRetryPolicy(A.Fake<IParkedMessageSink>(), new SubscriptionErrorHandlingOptions {
+            MaxRetries = maxRetries,
+            InitialDelay = TimeSpan.FromMilliseconds(initialDelayMs),
+            MaxDelay = TimeSpan.FromMilliseconds(maxDelayMs),
+            BackoffMultiplier = backoffMultiplier
+        });
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
     }
 }

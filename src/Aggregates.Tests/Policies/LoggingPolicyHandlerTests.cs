@@ -41,7 +41,21 @@ public class LoggingPolicyHandlerTests {
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         _logger.Collector.GetSnapshot()
-            .Should().Contain(r => r.Level == LogLevel.Error);
+            .Should().Contain(r => r.Level == LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenCancelled_LogsNoWarning() {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        A.CallTo(() => _policy.ReactAsync(A<PolicyTestEvent>._, A<CancellationToken>._))
+            .Throws(new OperationCanceledException(cts.Token));
+
+        var act = () => BuildHandler().HandleAsync(new PolicyTestEvent(1), new EventReference("src-1", 0), cts.Token).AsTask();
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _logger.Collector.GetSnapshot()
+            .Should().NotContain(r => r.Level == LogLevel.Warning);
     }
 
     // The interface itself as TPolicy, so the policy can be faked.

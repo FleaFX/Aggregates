@@ -23,13 +23,26 @@ sealed class KurrentDbRepository<TState, TEvent>(KurrentDBClient client, Kurrent
         if (await result.ReadState == ReadState.StreamNotFound)
             throw new AggregateRootNotFoundException(identifier);
 
+        var expected = 0UL;
         await foreach (var resolvedEvent in result.WithCancellation(cancellationToken)) {
-            var domainEvent = options.Deserialize!(
-                resolvedEvent.OriginalEvent.EventType,
-                resolvedEvent.OriginalEvent.Data);
+            var record = resolvedEvent.OriginalEvent;
+            var revision = record.EventNumber.ToUInt64();
+            // The version of the aggregate counts the events read, so every event must be there.
+            if (revision != expected)
+                throw new InvalidOperationException(
+                    $"Stream '{identifier}' can't be read: the event at revision {expected} is missing (the next one is at {revision}). " +
+                    "Events were deleted or the stream was truncated, so the state would miss them.");
+            expected++;
 
-            if (domainEvent is TEvent typedEvent)
-                yield return typedEvent;
+            var domainEvent = options.Deserialize!(record.EventType, record.Data);
+            if (domainEvent is not TEvent typedEvent)
+                throw new InvalidOperationException(
+                    $"Stream '{identifier}' can't be read: the event at revision {revision} is stored as '{record.EventType}', " +
+                    (domainEvent is null
+                        ? "which Deserialize doesn't know. "
+                        : $"which deserializes to a {domainEvent.GetType().Name}, not a {typeof(TEvent).Name}. ") +
+                    "Every event of an aggregate must stay readable: keep old event versions in the code, with an upgrader to the current one.");
+            yield return typedEvent;
         }
     }
 }

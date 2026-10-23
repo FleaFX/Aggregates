@@ -11,6 +11,11 @@ public class BaseRepositoryTests {
         public TestState Apply(TestEvent @event) => new(@event.Value);
     }
 
+    record OtherState() : IState<OtherState, TestEvent> {
+        public static OtherState Initial => new();
+        public OtherState Apply(TestEvent @event) => this;
+    }
+
     sealed class FakeRepository(params TestEvent[] events) : BaseRepository<TestState, TestEvent> {
         protected override async IAsyncEnumerable<TestEvent> ReadEventsAsync(
             AggregateIdentifier identifier,
@@ -62,6 +67,19 @@ public class BaseRepositoryTests {
             var second = await repo.TryGetEntityRootAsync("agg/1", TestContext.Current.CancellationToken);
 
             second.Should().BeSameAs(first);
+        }
+
+        [Fact]
+        public async Task GivenAnotherAggregateTypeUnderTheSameId_Throws() {
+            IRepository<TestState, TestEvent> repo = new FakeRepository(new TestEvent("a"));
+            var uow = new UnitOfWork();
+            await using var _ = new UnitOfWorkScope(uow, _ => ValueTask.CompletedTask);
+            uow.Attach(new Aggregate("agg/1", new EntityRoot<OtherState, TestEvent>(OtherState.Initial, AggregateVersion.None)));
+
+            var act = () => repo.TryGetEntityRootAsync("agg/1", TestContext.Current.CancellationToken).AsTask();
+
+            (await act.Should().ThrowAsync<InvalidOperationException>())
+                .Which.Message.Should().Contain("two aggregate types can't share an id");
         }
     }
 

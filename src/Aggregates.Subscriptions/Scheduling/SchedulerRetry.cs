@@ -59,7 +59,7 @@ sealed class SchedulerRetry(
                 if (attempt > 1)
                     Recovered();
                 return result;
-            } catch (Exception exception) when (exception is not OperationCanceledException && IsTransient(exception)) {
+            } catch (Exception exception) when (!cancellationToken.IsCancellationRequested && IsTransient(exception)) {
                 await BackOffAsync(exception, what, attempt, cancellationToken);
             }
         }
@@ -78,7 +78,7 @@ sealed class SchedulerRetry(
                 if (attempt > 1)
                     Recovered();
                 return;
-            } catch (Exception exception) when (exception is not OperationCanceledException && IsTransient(exception)) {
+            } catch (Exception exception) when (!cancellationToken.IsCancellationRequested && IsTransient(exception)) {
                 await BackOffAsync(exception, what, attempt, cancellationToken);
             }
         }

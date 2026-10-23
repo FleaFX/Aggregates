@@ -12,7 +12,9 @@ namespace Aggregates;
 /// <para>
 /// For each type decorated with <see cref="EventContractAttribute"/>, the stored name is taken
 /// from <see cref="EventContractAttribute.ToString()"/> (e.g. <c>Orders.ItemAdded@v2</c>).
-/// Types without the attribute fall back to their short CLR type name.
+/// Types without the attribute are stored under their full type name (<c>Orders.Events.ItemAdded</c>):
+/// the class name is then the contract, so renaming or moving the class makes its stored events
+/// unreadable; use <see cref="EventContractAttribute"/> for events that are kept.
 /// </para>
 /// <para>
 /// Register all event type versions — current and historical — in the same registry so that
@@ -64,7 +66,7 @@ public sealed class EventTypeRegistry {
     /// <see cref="EventContractAttribute"/> and builds a registry from the results.
     /// </summary>
     /// <param name="assemblies">The assemblies to scan.</param>
-    /// <exception cref="InvalidOperationException">An upgrader does not implement IUpgradeEvent&lt;TOld, TNew&gt; once, with TOld the type it is attached to.</exception>
+    /// <exception cref="InvalidOperationException">Two event types with an EventContractAttribute share a stored name, a closed generic event type has no EventContractAttribute, or an upgrader does not implement IUpgradeEvent&lt;TOld, TNew&gt; once, with TOld the type it is attached to.</exception>
     public static EventTypeRegistry FromAssemblies(params Assembly[] assemblies) =>
         FromTypes([.. assemblies.SelectMany(a => a.GetTypes())]);
 
@@ -74,24 +76,47 @@ public sealed class EventTypeRegistry {
     /// <see cref="GetTypeNames"/> uses to decide which stored events a subscription can receive.
     /// </summary>
     /// <param name="types">The event types, current and historical.</param>
-    /// <exception cref="InvalidOperationException">An upgrader does not implement IUpgradeEvent&lt;TOld, TNew&gt; once, with TOld the type it is attached to.</exception>
+    /// <exception cref="InvalidOperationException">Two event types with an EventContractAttribute share a stored name, a closed generic event type has no EventContractAttribute, or an upgrader does not implement IUpgradeEvent&lt;TOld, TNew&gt; once, with TOld the type it is attached to.</exception>
     public static EventTypeRegistry FromTypes(params Type[] types) {
-        var byName = new Dictionary<string, Type>();
-        var byType = new Dictionary<Type, string>();
-
-        foreach (var type in types.Where(t => !t.IsAbstract)) {
-            var attr = type.GetCustomAttribute<EventContractAttribute>();
-            if (attr is null) continue;
-
-            var name = attr.ToString();
-            byName[name] = type;
-            byType[type] = name;
-        }
-
         var candidates = types
             .Where(t => !t.IsAbstract && !t.ContainsGenericParameters && !t.IsDefined(typeof(CompilerGeneratedAttribute), false))
             .Distinct()
             .ToArray();
+
+        // The stored name of every candidate: its contract, or its full type name when it has none — the class
+        // name is the contract then, so renaming or moving the class makes its stored events unreadable. A
+        // closed generic type without a contract is refused: its full name holds the assembly versions of its
+        // type arguments. Two types may not share a contract name, or old events could come back as the wrong
+        // type; types without a contract that share a full name are left out: the name is ambiguous, and the
+        // warning at commit reports an event among them.
+        var byName = new Dictionary<string, Type>();
+        var byType = new Dictionary<Type, string>();
+        var typesByName = new Dictionary<string, List<Type>>();
+        var nameErrors = new List<string>();
+        foreach (var type in candidates) {
+            var attr = type.GetCustomAttribute<EventContractAttribute>();
+            if (attr is null && type.IsGenericType) {
+                nameErrors.Add($"- {type}: a generic event type needs an EventContractAttribute; its full name holds the versions of its type arguments.");
+                continue;
+            }
+            var name = attr?.ToString() ?? type.FullName!;
+            if (!typesByName.TryGetValue(name, out var named))
+                typesByName[name] = named = [];
+            named.Add(type);
+        }
+        foreach (var (name, named) in typesByName.OrderBy(entry => entry.Key, StringComparer.Ordinal)) {
+            // A contract name and a full type name can't collide: a contract ends on @v{version}, a full name holds no @.
+            if (named.Count > 1 && named[0].GetCustomAttribute<EventContractAttribute>() is not null) {
+                nameErrors.Add($"- '{name}': {string.Join(", ", named.Select(type => type.FullName))}");
+                continue;
+            }
+            if (named.Count > 1)
+                continue;
+            byName[name] = named[0];
+            byType[named[0]] = name;
+        }
+        if (nameErrors.Count > 0)
+            throw new InvalidOperationException($"Event types can't share a contract name, and a generic event type needs an EventContractAttribute:{Environment.NewLine}{string.Join(Environment.NewLine, nameErrors)}");
 
         // Upgrade edges: an upgrader sits on the type it upgrades from. TryUpgrade takes the upgrader's
         // first IUpgradeEvent and creates the upgrader with Activator, so anything but exactly one that
@@ -125,7 +150,7 @@ public sealed class EventTypeRegistry {
     /// Sorted ordinally, without duplicates. Used by subscriptions to filter on the server.
     /// </summary>
     /// <remarks>
-    /// Types without <see cref="EventContractAttribute"/> count with their short CLR type name,
+    /// Types without <see cref="EventContractAttribute"/> count with their full type name,
     /// and <c>typeof(object)</c> gives every candidate.
     /// </remarks>
     /// <param name="eventType">The event type a subscription is registered on.</param>
@@ -156,12 +181,25 @@ public sealed class EventTypeRegistry {
     /// <summary>
     /// Returns the stored type name for <paramref name="type"/>. When <paramref name="type"/>
     /// is decorated with <see cref="EventContractAttribute"/>, its
-    /// <see cref="EventContractAttribute.ToString()"/> value is returned; otherwise the CLR
-    /// type's short name is used as a fallback.
+    /// <see cref="EventContractAttribute.ToString()"/> value is returned; otherwise its full
+    /// type name is used, which makes renaming or moving the class break its stored events.
     /// </summary>
     /// <param name="type">The CLR event type.</param>
-    public string GetTypeName(Type type) =>
-        _byType.TryGetValue(type, out var name) ? name : type.Name;
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="type"/> is a generic type without <see cref="EventContractAttribute"/>:
+    /// its full name holds the versions of its type arguments.
+    /// </exception>
+    public string GetTypeName(Type type) {
+        if (_byType.TryGetValue(type, out var name))
+            return name;
+        var attr = type.GetCustomAttribute<EventContractAttribute>();
+        if (attr is not null)
+            return attr.ToString();
+        if (type.IsGenericType)
+            throw new InvalidOperationException(
+                $"{type}: a generic event type needs an EventContractAttribute; its full name holds the versions of its type arguments.");
+        return type.FullName!;
+    }
 
     /// <summary>
     /// Returns the stored type name for the runtime type of <paramref name="event"/>.
@@ -173,7 +211,8 @@ public sealed class EventTypeRegistry {
         GetTypeName(@event!.GetType());
 
     /// <summary>
-    /// Looks up the CLR type for the given stored <paramref name="typeName"/>.
+    /// Looks up the CLR type for the given stored <paramref name="typeName"/>: the type with
+    /// <see cref="EventContractAttribute"/> for that name, or the type whose full type name it is.
     /// </summary>
     /// <param name="typeName">The type name as stored in the event store.</param>
     /// <param name="type">

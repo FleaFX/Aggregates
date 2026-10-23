@@ -23,23 +23,28 @@ namespace Aggregates.Subscriptions.Internal;
 ///   succeeds. From the failure of the last regular attempt on, it reports the subscription as
 ///   <see cref="SubscriptionState.Blocked"/> to the <see cref="SubscriptionMonitor"/>, and as running
 ///   again once an attempt succeeds.</item>
-///   <item><see cref="OperationCanceledException"/> is always propagated — it is never swallowed
-///   or counted as a retry attempt.</item>
+///   <item>An <see cref="OperationCanceledException"/> while <c>cancellationToken</c> is cancelled is always
+///   propagated — it is never swallowed or counted as a retry attempt; any other
+///   <see cref="OperationCanceledException"/> (a timeout in the handler) is a failure like any other.</item>
 /// </list>
 /// </remarks>
 /// <param name="parkedMessageSink">Parks a message after its final failure.</param>
 /// <param name="options">The number of attempts and the backoff.</param>
-/// <param name="logger">Logs when a blocking subscription starts and stops retrying; optional.</param>
+/// <param name="logger">Logs a parked message, and when a blocking subscription starts and stops retrying; optional.</param>
 /// <param name="monitor">Receives the state of a blocking subscription; optional.</param>
+/// <param name="timeProvider">The clock of the backoff delays; the system clock when null.</param>
 [EditorBrowsable(EditorBrowsableState.Never)]
 public sealed partial class SubscriptionRetryPolicy(
     IParkedMessageSink parkedMessageSink,
     SubscriptionErrorHandlingOptions options,
     ILogger<SubscriptionRetryPolicy>? logger = null,
-    SubscriptionMonitor? monitor = null
+    SubscriptionMonitor? monitor = null,
+    TimeProvider? timeProvider = null
 ) {
 
     readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
+    readonly SubscriptionErrorHandlingOptions _options = options.Validate();
+    readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
 
     /// <summary>
     /// Executes <paramref name="handler"/> with retry and park-on-failure semantics.
@@ -67,7 +72,7 @@ public sealed partial class SubscriptionRetryPolicy(
         SubscriptionErrorMode errorMode,
         CancellationToken cancellationToken
     ) {
-        var maxRetries = Math.Max(options.MaxRetries, 1);
+        var maxRetries = Math.Max(_options.MaxRetries, 1);
         for (var attempt = 1; ; attempt++) {
             try {
                 await handler(cancellationToken);
@@ -76,7 +81,7 @@ public sealed partial class SubscriptionRetryPolicy(
                     monitor?.Report(subscriptionId, SubscriptionState.Running, message.CommitPosition);
                 }
                 return;
-            } catch (OperationCanceledException) {
+            } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
                 throw;
             } catch (Exception exception) when (attempt < maxRetries || errorMode == SubscriptionErrorMode.Block) {
                 if (attempt == maxRetries)
@@ -84,9 +89,11 @@ public sealed partial class SubscriptionRetryPolicy(
                 if (attempt >= maxRetries)
                     monitor?.Report(subscriptionId, SubscriptionState.Blocked, message.CommitPosition, attempt, exception);
                 await Task.Delay(
-                    Backoff.Delay(attempt, options.InitialDelay, options.MaxDelay, options.BackoffMultiplier),
+                    Backoff.Delay(attempt, _options.InitialDelay, _options.MaxDelay, _options.BackoffMultiplier),
+                    _timeProvider,
                     cancellationToken);
             } catch (Exception ex) {
+                LogParking(_logger, ex, subscriptionId, message.CommitPosition, attempt);
                 await parkedMessageSink.ParkAsync(subscriptionId, message, ex, cancellationToken);
                 return;
             }
@@ -101,16 +108,17 @@ public sealed partial class SubscriptionRetryPolicy(
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The exception of the final attempt, or <see langword="null"/> when an attempt succeeded.</returns>
     public async ValueTask<Exception?> TryExecuteAsync(Func<CancellationToken, ValueTask> handler, CancellationToken cancellationToken) {
-        var maxRetries = Math.Max(options.MaxRetries, 1);
+        var maxRetries = Math.Max(_options.MaxRetries, 1);
         for (var attempt = 1; ; attempt++) {
             try {
                 await handler(cancellationToken);
                 return null;
-            } catch (OperationCanceledException) {
+            } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
                 throw;
             } catch (Exception) when (attempt < maxRetries) {
                 await Task.Delay(
-                    Backoff.Delay(attempt, options.InitialDelay, options.MaxDelay, options.BackoffMultiplier),
+                    Backoff.Delay(attempt, _options.InitialDelay, _options.MaxDelay, _options.BackoffMultiplier),
+                    _timeProvider,
                     cancellationToken);
             } catch (Exception ex) {
                 return ex;
@@ -123,4 +131,7 @@ public sealed partial class SubscriptionRetryPolicy(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Subscription '{SubscriptionId}' handled the message at position {Position} after {Attempts} attempts; it no longer blocks")]
     static partial void LogUnblocked(ILogger logger, string subscriptionId, ulong position, int attempts);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Subscription '{SubscriptionId}' failed {Attempts} times on the message at position {Position}; parking it")]
+    static partial void LogParking(ILogger logger, Exception exception, string subscriptionId, ulong position, int attempts);
 }

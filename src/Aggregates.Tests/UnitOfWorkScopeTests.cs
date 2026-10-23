@@ -73,6 +73,32 @@ public class UnitOfWorkScopeTests {
         outerCommitted.Should().BeFalse();
     }
 
+    [Fact]
+    public async Task DisposingTwice_DoesNotTouchTheParent() {
+        var commitCount = 0;
+        await using (var outer = new UnitOfWorkScope(new UnitOfWork(), _ => { commitCount++; return ValueTask.CompletedTask; })) {
+            outer.Complete();
+            var inner = new UnitOfWorkScope(new UnitOfWork(), _ => ValueTask.CompletedTask);
+            await inner.DisposeAsync();
+            await inner.DisposeAsync();
+            UnitOfWorkScope.Current.Should().BeSameAs(outer);
+        }
+
+        commitCount.Should().Be(1, "the parent scope commits once, on its own disposal");
+    }
+
+    [Fact]
+    public async Task DisposingOutOfOrder_Throws() {
+        var outer = new UnitOfWorkScope(new UnitOfWork(), _ => ValueTask.CompletedTask);
+        var inner = new UnitOfWorkScope(new UnitOfWork(), _ => ValueTask.CompletedTask);
+
+        var act = () => outer.DisposeAsync().AsTask();
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        await inner.DisposeAsync();
+        await outer.DisposeAsync();
+    }
+
     record struct TestState(string Value) : IState<TestState, string> {
         public static TestState Initial => new();
         public TestState Apply(string @event) => new(Value: @event);

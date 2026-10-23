@@ -46,7 +46,21 @@ public class LoggingSagaHandlerTests {
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         _logger.Collector.GetSnapshot()
-            .Should().Contain(r => r.Level == LogLevel.Error);
+            .Should().Contain(r => r.Level == LogLevel.Warning);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenCancelled_LogsNoWarning() {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        A.CallTo(() => _saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Throws(new OperationCanceledException(cts.Token));
+
+        var act = () => BuildHandler().HandleAsync("saga-1", new TestEvent(1), new EventReference("stream-1", 0), cts.Token).AsTask();
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        _logger.Collector.GetSnapshot()
+            .Should().NotContain(r => r.Level == LogLevel.Warning);
     }
 
     [Fact]

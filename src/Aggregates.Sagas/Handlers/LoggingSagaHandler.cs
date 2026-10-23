@@ -7,7 +7,8 @@ namespace Aggregates.Sagas;
 /// Decorates a <see cref="RetrySagaHandler{TSaga,TSagaState,TEvent}"/> with structured logging.
 /// It logs the delivery of deadlines the same way, and a saga that no longer exists as a warning.
 /// Logs at <see cref="LogLevel.Debug"/> when handling starts and succeeds, and at
-/// <see cref="LogLevel.Error"/> when the inner handler throws.
+/// <see cref="LogLevel.Warning"/> when the inner handler throws (the retry policy logs the message
+/// it parks); a cancellation by the caller is not logged.
 /// </summary>
 /// <typeparam name="TSaga">The saga class.</typeparam>
 /// <typeparam name="TSagaState">The saga state type.</typeparam>
@@ -33,6 +34,8 @@ sealed partial class LoggingSagaHandler<TSaga, TSagaState, TEvent>(
         try {
             await inner.HandleAsync(sagaId, @event, source, cancellationToken);
             LogHandled(logger, eventType, source, saga, sagaId);
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+            throw;
         } catch (Exception ex) {
             LogFailed(logger, ex, eventType, source, saga, sagaId);
             throw;
@@ -45,7 +48,7 @@ sealed partial class LoggingSagaHandler<TSaga, TSagaState, TEvent>(
     [LoggerMessage(Level = LogLevel.Debug, Message = "Handled {EventType} ({Source}) in {Saga} for saga {SagaId}")]
     static partial void LogHandled(ILogger logger, string eventType, EventReference source, string saga, AggregateIdentifier sagaId);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to handle {EventType} ({Source}) in {Saga} for saga {SagaId}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to handle {EventType} ({Source}) in {Saga} for saga {SagaId}; the subscription retries or parks it")]
     static partial void LogFailed(ILogger logger, Exception exception, string eventType, EventReference source, string saga, AggregateIdentifier sagaId);
 
     /// <summary>
@@ -65,6 +68,8 @@ sealed partial class LoggingSagaHandler<TSaga, TSagaState, TEvent>(
                 LogHandledDeadline(logger, deadlineType, request, saga, sagaId);
             else
                 LogSagaGone(logger, deadlineType, request, saga, sagaId);
+        } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+            throw;
         } catch (Exception ex) {
             LogDeadlineFailed(logger, ex, deadlineType, request, saga, sagaId);
             throw;
@@ -80,6 +85,6 @@ sealed partial class LoggingSagaHandler<TSaga, TSagaState, TEvent>(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Skipped deadline {DeadlineType} ({Request}) in {Saga}: saga {SagaId} doesn't exist anymore")]
     static partial void LogSagaGone(ILogger logger, string deadlineType, EventReference request, string saga, AggregateIdentifier sagaId);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to handle deadline {DeadlineType} ({Request}) in {Saga} for saga {SagaId}")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to handle deadline {DeadlineType} ({Request}) in {Saga} for saga {SagaId}; the scheduler retries or parks it")]
     static partial void LogDeadlineFailed(ILogger logger, Exception exception, string deadlineType, EventReference request, string saga, AggregateIdentifier sagaId);
 }

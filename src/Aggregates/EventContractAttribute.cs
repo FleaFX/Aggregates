@@ -18,7 +18,7 @@ public sealed class EventContractAttribute : Attribute {
     /// Initializes a new <see cref="EventContractAttribute"/>.
     /// </summary>
     /// <param name="name">The name of the event contract.</param>
-    /// <param name="version">The version of the event contract. Defaults to 1.</param>
+    /// <param name="version">The version of the event contract. Defaults to 1. At least 1.</param>
     /// <param name="eventUpgrader">
     /// An optional type implementing <see cref="IUpgradeEvent{TOldVersion,TNewVersion}"/> that
     /// upgrades this version of the event to the next one: put it on the old version, with the
@@ -27,15 +27,22 @@ public sealed class EventContractAttribute : Attribute {
     /// <param name="namespace">
     /// An optional namespace prepended to the contract name, separated by a dot.
     /// </param>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is null, empty or whitespace.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="version"/> is less than 1, or <paramref name="eventUpgrader"/> implements no
+    /// <see cref="IUpgradeEvent{TOldVersion,TNewVersion}"/>.
+    /// </exception>
     public EventContractAttribute(string name, int version = 1, Type? eventUpgrader = null, string? @namespace = null) {
-        if (string.IsNullOrWhiteSpace(name)) throw new ArgumentNullException(nameof(name));
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        ArgumentOutOfRangeException.ThrowIfLessThan(version, 1);
 
         var upgradeMethod = (
             from @interface in eventUpgrader?.GetInterfaces() ?? Enumerable.Empty<Type>()
             where @interface.IsGenericType && @interface.GetGenericTypeDefinition() == typeof(IUpgradeEvent<,>)
             select @interface.GetMethod("Upgrade")
         ).FirstOrDefault();
-        if (eventUpgrader != null && upgradeMethod is null) throw new ArgumentOutOfRangeException(nameof(eventUpgrader));
+        if (eventUpgrader != null && upgradeMethod is null)
+            throw new ArgumentOutOfRangeException(nameof(eventUpgrader), eventUpgrader, $"{eventUpgrader.Name} doesn't implement IUpgradeEvent<TOldVersion, TNewVersion>.");
 
         _contractName = name;
         _contractVersion = version;
@@ -43,7 +50,7 @@ public sealed class EventContractAttribute : Attribute {
         // Created on first use, so reading the attribute never fails on the upgrader; EventTypeRegistry checks it at startup.
         _upgrader = upgradeMethod is null ? null : new Lazy<Func<object, object>>(() => {
             var instance = Activator.CreateInstance(eventUpgrader!);
-            return @event => upgradeMethod.Invoke(instance, [@event])!;
+            return @event => upgradeMethod.Invoke(instance, BindingFlags.DoNotWrapExceptions, binder: null, [@event], culture: null)!;
         });
         EventUpgrader = eventUpgrader;
     }

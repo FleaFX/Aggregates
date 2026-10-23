@@ -64,7 +64,9 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
 
         // Return already-tracked instance (identity map).
         if (unitOfWork.Get(sagaId) is { } existing)
-            return (SagaRoot<TSagaState, TEvent>)existing.AggregateRoot;
+            return existing.AggregateRoot as SagaRoot<TSagaState, TEvent>
+                ?? throw new InvalidOperationException(
+                    $"'{sagaId}' is already loaded in this unit of work as {existing.AggregateRoot.GetType()}, not as {typeof(SagaRoot<TSagaState, TEvent>)}: two aggregate types can't share an id.");
 
         try {
             var entries = await ReadStreamAsync(sagaId, cancellationToken).ToArrayAsync(cancellationToken);
@@ -97,6 +99,10 @@ public abstract class BaseSagaRepository<TSagaState, TEvent> : ISagaRepository<T
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <exception cref="AggregateRootNotFoundException">
     /// Thrown when no saga exists for <paramref name="sagaId"/>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when a link whose target exists can't be read back as a <typeparamref name="TEvent"/>, or the stream misses entries
+    /// (it doesn't start at revision 0, or has a gap): an implementation fails instead of skipping the entry.
     /// </exception>
     protected abstract IAsyncEnumerable<SagaStreamEntry> ReadStreamAsync(AggregateIdentifier sagaId, CancellationToken cancellationToken = default);
 }

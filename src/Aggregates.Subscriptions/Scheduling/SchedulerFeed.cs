@@ -124,7 +124,8 @@ sealed class SchedulerFeed : IAsyncDisposable {
                     }
                     delay = _retry.Failed(++failures, exception: null);
                     _logger.LogFeedEnded(_subscriptionId, from, delay, failures);
-                } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+                } catch (Exception) when (cancellationToken.IsCancellationRequested) {
+                    // Not only OperationCanceledException: a transport may report the cancellation as its own exception.
                     return;
                 } catch (Exception exception) when (_retry.IsTransient(exception)) {
                     delay = _retry.Failed(++failures, exception);
