@@ -131,7 +131,8 @@ public sealed class Scheduler(
             }
             monitor?.Report(subscriptionId, SubscriptionState.Running);
             await RunActiveAsync(registration, subscriptionId, retry, deliver, stoppingToken);
-        } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
+        } catch (Exception) when (stoppingToken.IsCancellationRequested) {
+            // Not only OperationCanceledException: a transport may report the cancellation as its own exception.
         } catch (Exception exception) {
             failure = exception;
             _logger.LogStopped(exception, subscriptionId);

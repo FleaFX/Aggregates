@@ -660,6 +660,22 @@ public class SchedulerTests {
         Status().Attempts.Should().Be(0);
     }
 
+    [Fact]
+    public async Task StoppingWhileTheStoreReportsTheCancellationAsItsOwnException_IsAStop() {
+        var activation = Activated();
+        _store.CancellationException = new InvalidOperationException("cancelled by the client");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var delivered = new ConcurrentQueue<ScheduledRequest>();
+
+        var run = Scheduler().RunCoreAsync(Registration, activation, (timeout, _) => DeliverAsync(delivered, timeout, _), cts.Token);
+        await Eventually.UntilAsync(() => _store.Subscriptions == 1, "the scheduler subscribes");
+        await cts.CancelAsync();
+        await run;
+
+        Status().State.Should().Be(SubscriptionState.Stopped);
+        Status().Error.Should().BeNull();
+    }
+
     sealed class InMemoryCheckpointStore : ICheckpointStore {
         readonly object _lock = new();
         readonly Dictionary<string, ulong> _checkpoints = [];

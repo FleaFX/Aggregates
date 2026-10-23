@@ -216,7 +216,11 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
         time.Advance(TimeSpan.FromDays(3));
 
         await Eventually.UntilAsync(
-            async ValueTask<bool> () => (await store.ReadAllAsync()).Count(e => e.Stream == "parked-scheduled-IntegrationTests.FailingBillReminders@v1") == 1,
+            async ValueTask<bool> () => {
+                // The retries wait on the host's clock.
+                time.Advance(TimeSpan.FromSeconds(1));
+                return (await store.ReadAllAsync()).Count(e => e.Stream == "parked-scheduled-IntegrationTests.FailingBillReminders@v1") == 1;
+            },
             "the failing deferred command is parked");
         // The deferred command after the failing one still runs, once the failing one is parked.
         await Eventually.UntilAsync(

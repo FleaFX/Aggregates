@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Reflection.Emit;
 using FluentAssertions;
 
 namespace Aggregates;
@@ -376,6 +377,24 @@ public class EventTypeRegistryTests {
             act.Should().Throw<InvalidOperationException>().Which.Message.Should()
                 .Contain("a generic event type needs an EventContractAttribute");
         }
+
+        [Fact]
+        public void GivenTwoTypesWithoutContractWithTheSameFullName_LeavesTheNameOut() {
+            var first = DynamicType("FirstDynamic", "Shared.Name");
+            var second = DynamicType("SecondDynamic", "Shared.Name");
+
+            var registry = EventTypeRegistry.FromTypes(first, second);
+
+            registry.TryGetType("Shared.Name", out _).Should().BeFalse();
+            registry.GetTypeName(first).Should().Be("Shared.Name");
+        }
+
+        // Two types with the same full name, like generated classes in two assemblies.
+        static Type DynamicType(string assembly, string fullName) =>
+            AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(assembly), AssemblyBuilderAccess.Run)
+                .DefineDynamicModule(assembly)
+                .DefineType(fullName, TypeAttributes.Public | TypeAttributes.Sealed)
+                .CreateType();
 
         [Fact]
         public void FromAssemblies_ChecksTheScannedTypes() {

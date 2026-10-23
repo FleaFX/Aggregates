@@ -133,7 +133,11 @@ public class DeferredCommandPolicyTests(ITestOutputHelper output) {
 
         await host.SendAsync(new PlanBill("bill-1", Now.AddDays(-1)));
         await Eventually.UntilAsync(
-            async ValueTask<bool> () => (await store.ReadAllAsync()).Any(e => e.Stream == "parked-IntegrationTests.FailingFollowUp@v1"),
+            async ValueTask<bool> () => {
+                // The retries wait on the host's clock.
+                time.Advance(TimeSpan.FromSeconds(1));
+                return (await store.ReadAllAsync()).Any(e => e.Stream == "parked-IntegrationTests.FailingFollowUp@v1");
+            },
             "the event is parked");
         await Eventually.QuietAsync();
 

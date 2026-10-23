@@ -24,6 +24,12 @@ public sealed class FakeScheduledStore : IScheduledStore {
     public Exception? FailNextSubscribe { get; set; }
 
     /// <summary>
+    /// The exception <see cref="SubscribeAsync"/> throws instead of an <see cref="OperationCanceledException"/>
+    /// once its token is cancelled, like a transport that reports a cancellation as its own exception.
+    /// </summary>
+    public Exception? CancellationException { get; set; }
+
+    /// <summary>
     /// Deserializes a command or deadline payload; returns null for an unknown type by default.
     /// </summary>
     public Func<string, ReadOnlyMemory<byte>, object?> Deserializer { get; set; } = (_, _) => null;
@@ -90,8 +96,17 @@ public sealed class FakeScheduledStore : IScheduledStore {
 
         foreach (var entry in snapshot)
             yield return entry;
-        await foreach (var entry in channel.Reader.ReadAllAsync(cancellationToken))
-            yield return entry;
+        while (true) {
+            bool readable;
+            try {
+                readable = await channel.Reader.WaitToReadAsync(cancellationToken);
+            } catch (OperationCanceledException) when (CancellationException is { } cancellation && cancellationToken.IsCancellationRequested) {
+                throw cancellation;
+            }
+            if (!readable)
+                yield break;
+            yield return await channel.Reader.ReadAsync();
+        }
     }
 
     /// <inheritdoc/>

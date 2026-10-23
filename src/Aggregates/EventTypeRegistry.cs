@@ -66,7 +66,7 @@ public sealed class EventTypeRegistry {
     /// <see cref="EventContractAttribute"/> and builds a registry from the results.
     /// </summary>
     /// <param name="assemblies">The assemblies to scan.</param>
-    /// <exception cref="InvalidOperationException">Two event types share a stored name, a closed generic event type has no EventContractAttribute, or an upgrader does not implement IUpgradeEvent&lt;TOld, TNew&gt; once, with TOld the type it is attached to.</exception>
+    /// <exception cref="InvalidOperationException">Two event types with an EventContractAttribute share a stored name, a closed generic event type has no EventContractAttribute, or an upgrader does not implement IUpgradeEvent&lt;TOld, TNew&gt; once, with TOld the type it is attached to.</exception>
     public static EventTypeRegistry FromAssemblies(params Assembly[] assemblies) =>
         FromTypes([.. assemblies.SelectMany(a => a.GetTypes())]);
 
@@ -76,7 +76,7 @@ public sealed class EventTypeRegistry {
     /// <see cref="GetTypeNames"/> uses to decide which stored events a subscription can receive.
     /// </summary>
     /// <param name="types">The event types, current and historical.</param>
-    /// <exception cref="InvalidOperationException">Two event types share a stored name, a closed generic event type has no EventContractAttribute, or an upgrader does not implement IUpgradeEvent&lt;TOld, TNew&gt; once, with TOld the type it is attached to.</exception>
+    /// <exception cref="InvalidOperationException">Two event types with an EventContractAttribute share a stored name, a closed generic event type has no EventContractAttribute, or an upgrader does not implement IUpgradeEvent&lt;TOld, TNew&gt; once, with TOld the type it is attached to.</exception>
     public static EventTypeRegistry FromTypes(params Type[] types) {
         var candidates = types
             .Where(t => !t.IsAbstract && !t.ContainsGenericParameters && !t.IsDefined(typeof(CompilerGeneratedAttribute), false))
@@ -86,7 +86,9 @@ public sealed class EventTypeRegistry {
         // The stored name of every candidate: its contract, or its full type name when it has none — the class
         // name is the contract then, so renaming or moving the class makes its stored events unreadable. A
         // closed generic type without a contract is refused: its full name holds the assembly versions of its
-        // type arguments. Two types may not share a stored name, or old events could come back as the wrong type.
+        // type arguments. Two types may not share a contract name, or old events could come back as the wrong
+        // type; types without a contract that share a full name are left out: the name is ambiguous, and the
+        // warning at commit reports an event among them.
         var byName = new Dictionary<string, Type>();
         var byType = new Dictionary<Type, string>();
         var typesByName = new Dictionary<string, List<Type>>();
@@ -103,15 +105,18 @@ public sealed class EventTypeRegistry {
             named.Add(type);
         }
         foreach (var (name, named) in typesByName.OrderBy(entry => entry.Key, StringComparer.Ordinal)) {
-            if (named.Count > 1) {
+            // A contract name and a full type name can't collide: a contract ends on @v{version}, a full name holds no @.
+            if (named.Count > 1 && named[0].GetCustomAttribute<EventContractAttribute>() is not null) {
                 nameErrors.Add($"- '{name}': {string.Join(", ", named.Select(type => type.FullName))}");
                 continue;
             }
+            if (named.Count > 1)
+                continue;
             byName[name] = named[0];
             byType[named[0]] = name;
         }
         if (nameErrors.Count > 0)
-            throw new InvalidOperationException($"Event types can't share a stored name, and a generic event type needs an EventContractAttribute:{Environment.NewLine}{string.Join(Environment.NewLine, nameErrors)}");
+            throw new InvalidOperationException($"Event types can't share a contract name, and a generic event type needs an EventContractAttribute:{Environment.NewLine}{string.Join(Environment.NewLine, nameErrors)}");
 
         // Upgrade edges: an upgrader sits on the type it upgrades from. TryUpgrade takes the upgrader's
         // first IUpgradeEvent and creates the upgrader with Activator, so anything but exactly one that
