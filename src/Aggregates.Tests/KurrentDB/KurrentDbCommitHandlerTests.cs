@@ -110,8 +110,8 @@ public class KurrentDbCommitHandlerTests {
                 host.Services.GetRequiredService<KurrentDBClient>(), WrongNamingOptions, logger,
                 EventTypeRegistry.FromTypes([typeof(OrderPlaced)]));
 
-            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"));
-            await handler.CommitAsync(await ChangedUnitOfWork("orders-2"));
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"), TestContext.Current.CancellationToken);
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-2"), TestContext.Current.CancellationToken);
 
             var warning = logger.Collector.GetSnapshot().Single(record => record.Level == LogLevel.Warning && record.Message.Contains("names it"));
             State(warning, "Type").Should().Be(typeof(OrderPlaced).FullName);
@@ -128,8 +128,8 @@ public class KurrentDbCommitHandlerTests {
             var options = new KurrentDbOptions { Serialize = @event => new SerializedEvent(registry.GetTypeName(@event.GetType()), new byte[] { 1 }) };
             var handler = new KurrentDbCommitHandler(host.Services.GetRequiredService<KurrentDBClient>(), options, logger, registry);
 
-            await handler.CommitAsync(await ChangedUnitOfWork("orders-3"));
-            await handler.CommitAsync(await ChangedUnitOfWork("orders-4"));
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-3"), TestContext.Current.CancellationToken);
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-4"), TestContext.Current.CancellationToken);
 
             var warning = logger.Collector.GetSnapshot().Single(record => record.Level == LogLevel.Warning && record.Message.Contains("can't be read back"));
             State(warning, "Type").Should().Be(typeof(OrderPlaced).FullName);
@@ -145,7 +145,7 @@ public class KurrentDbCommitHandlerTests {
             var options = new KurrentDbOptions { Serialize = @event => new SerializedEvent(registry.GetTypeName(@event.GetType()), new byte[] { 1 }) };
             var handler = new KurrentDbCommitHandler(host.Services.GetRequiredService<KurrentDBClient>(), options, logger, registry);
 
-            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"));
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"), TestContext.Current.CancellationToken);
 
             logger.Collector.GetSnapshot().Should().NotContain(record => record.Level == LogLevel.Warning);
         }
@@ -157,7 +157,7 @@ public class KurrentDbCommitHandlerTests {
             var logger = new FakeLogger<KurrentDbCommitHandler>();
             var handler = new KurrentDbCommitHandler(host.Services.GetRequiredService<KurrentDBClient>(), WrongNamingOptions, logger);
 
-            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"));
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"), TestContext.Current.CancellationToken);
 
             logger.Collector.GetSnapshot().Should().NotContain(record => record.Level == LogLevel.Warning);
         }
@@ -172,7 +172,7 @@ public class KurrentDbCommitHandlerTests {
                 host.Services.GetRequiredService<KurrentDBClient>(), options, logger,
                 EventTypeRegistry.FromTypes([typeof(OrderPlaced)]));
 
-            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"), _ => new SerializedEvent("Wrong.Name@v1", new byte[] { 1 }));
+            await handler.CommitAsync(await ChangedUnitOfWork("orders-1"), _ => new SerializedEvent("Wrong.Name@v1", new byte[] { 1 }), TestContext.Current.CancellationToken);
 
             logger.Collector.GetSnapshot().Should().NotContain(record => record.Level == LogLevel.Warning);
         }

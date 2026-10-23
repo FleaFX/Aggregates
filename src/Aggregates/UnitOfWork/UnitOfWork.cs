@@ -6,7 +6,11 @@ namespace Aggregates;
 /// Asynchronously persists the changes tracked by the given <see cref="UnitOfWork"/>.
 /// </summary>
 /// <param name="unitOfWork">The unit of work containing the changes to commit.</param>
-public delegate ValueTask CommitDelegate(UnitOfWork unitOfWork);
+/// <param name="cancellationToken">
+/// Cancels the commit; pass it to the store's append. When it is cancelled while the append is in
+/// flight, the outcome is unknown: the changes may have been stored.
+/// </param>
+public delegate ValueTask CommitDelegate(UnitOfWork unitOfWork, CancellationToken cancellationToken);
 
 /// <summary>
 /// Tracks aggregates loaded within a single operation and identifies which one has pending changes.
@@ -67,6 +71,7 @@ public sealed class UnitOfWorkScope : IAsyncDisposable {
 
     readonly UnitOfWork _unitOfWork;
     readonly CommitDelegate _onCommit;
+    readonly CancellationToken _cancellationToken;
     bool _completed;
     bool _disposed;
 
@@ -75,9 +80,14 @@ public sealed class UnitOfWorkScope : IAsyncDisposable {
     /// </summary>
     /// <param name="unitOfWork">The unit of work to scope.</param>
     /// <param name="onCommit">The delegate to call when committing.</param>
-    public UnitOfWorkScope(UnitOfWork unitOfWork, CommitDelegate onCommit) {
+    /// <param name="cancellationToken">
+    /// Passed to <paramref name="onCommit"/> when the scope commits on disposal: usually the token of
+    /// the operation that opens the scope.
+    /// </param>
+    public UnitOfWorkScope(UnitOfWork unitOfWork, CommitDelegate onCommit, CancellationToken cancellationToken = default) {
         _unitOfWork = unitOfWork;
         _onCommit = onCommit;
+        _cancellationToken = cancellationToken;
         Scopes = Scopes.Push(this);
     }
 
@@ -119,7 +129,7 @@ public sealed class UnitOfWorkScope : IAsyncDisposable {
 
     static async ValueTask CommitAndClearAsync(UnitOfWorkScope scope) {
         try {
-            await scope._onCommit(scope._unitOfWork);
+            await scope._onCommit(scope._unitOfWork, scope._cancellationToken);
         } finally {
             // Always clear — even when the commit delegate throws — so a retry
             // attempt starts with a clean unit of work rather than stale state.

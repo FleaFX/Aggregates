@@ -90,7 +90,7 @@ public class MetadataAwareCommandHandlerTests {
             .Then.Invokes(() => scopes.Add(MetadataScope.Current))
             .Returns(ValueTask.CompletedTask);
 
-        var uow = new UnitOfWorkAwareCommandHandler<NoopCommand>(inner, _ => ValueTask.CompletedTask);
+        var uow = new UnitOfWorkAwareCommandHandler<NoopCommand>(inner, (_, _) => ValueTask.CompletedTask);
         var metadata = new MetadataAwareCommandHandler<NoopCommand>(uow);
         var retry = new RetryCommandHandler<NoopCommand>(metadata, maxAttempts: 3);
 
@@ -102,5 +102,5 @@ public class MetadataAwareCommandHandlerTests {
     }
 
     static MetadataAwareCommandHandler<NoopCommand> BuildHandler(CommandHandler<NoopCommand> inner) =>
-        new(new UnitOfWorkAwareCommandHandler<NoopCommand>(inner, _ => ValueTask.CompletedTask));
+        new(new UnitOfWorkAwareCommandHandler<NoopCommand>(inner, (_, _) => ValueTask.CompletedTask));
 }

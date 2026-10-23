@@ -36,8 +36,9 @@ public sealed partial class KurrentDbCommitHandler(
     /// <see cref="KurrentDbOptions.Serialize"/>.
     /// </summary>
     /// <param name="unitOfWork">The unit of work holding the aggregate to commit.</param>
-    public ValueTask CommitAsync(UnitOfWork unitOfWork) =>
-        CommitAsync(unitOfWork, eventTypeRegistry is null ? options.Serialize! : SerializeAndCheck);
+    /// <param name="cancellationToken">Cancels the append.</param>
+    public ValueTask CommitAsync(UnitOfWork unitOfWork, CancellationToken cancellationToken = default) =>
+        CommitAsync(unitOfWork, eventTypeRegistry is null ? options.Serialize! : SerializeAndCheck, cancellationToken);
 
     // Wraps Serialize to warn, once per CLR type per process, when the stored name differs from the
     // registry's, or the registry maps no type back to the stored name: subscriptions filter on the
@@ -70,7 +71,8 @@ public sealed partial class KurrentDbCommitHandler(
     /// </summary>
     /// <param name="unitOfWork">The unit of work holding the aggregate to commit.</param>
     /// <param name="serialize">Serializes a change into the event to store.</param>
-    public async ValueTask CommitAsync(UnitOfWork unitOfWork, Func<object, SerializedEvent> serialize) {
+    /// <param name="cancellationToken">Cancels the append.</param>
+    public async ValueTask CommitAsync(UnitOfWork unitOfWork, Func<object, SerializedEvent> serialize, CancellationToken cancellationToken = default) {
         if (unitOfWork.GetChanged() is not { } aggregate)
             return;
 
@@ -97,7 +99,7 @@ public sealed partial class KurrentDbCommitHandler(
             var expectedState = version < 0
                 ? StreamState.NoStream
                 : StreamState.StreamRevision((ulong)version);
-            await client.AppendToStreamAsync(identifier.ToString(), expectedState, eventData);
+            await client.AppendToStreamAsync(identifier.ToString(), expectedState, eventData, cancellationToken: cancellationToken);
         } catch (WrongExpectedVersionException ex) {
             throw new ConcurrencyException(
                 aggregate.Identifier,

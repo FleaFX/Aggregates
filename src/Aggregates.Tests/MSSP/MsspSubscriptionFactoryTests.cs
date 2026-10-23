@@ -76,8 +76,8 @@ public class MsspSubscriptionFactoryTests {
             var options = new MsspOptions { Serialize = _ => new MsspEventData("Wrong.Name@v1", new byte[] { 1 }) };
             var handler = new MsspCommitHandler(NewClient(), options, logger, EventTypeRegistry.FromTypes([typeof(OrderPlaced)]));
 
-            await handler.CommitAsync(await ChangedUnitOfWork());
-            await handler.CommitAsync(await ChangedUnitOfWork());
+            await handler.CommitAsync(await ChangedUnitOfWork(), TestContext.Current.CancellationToken);
+            await handler.CommitAsync(await ChangedUnitOfWork(), TestContext.Current.CancellationToken);
 
             var warning = logger.Collector.GetSnapshot().Single(record => record.Level == LogLevel.Warning && record.Message.Contains("names it"));
             State(warning, "Type").Should().Be(typeof(OrderPlaced).FullName);
@@ -92,8 +92,8 @@ public class MsspSubscriptionFactoryTests {
             var options = new MsspOptions { Serialize = @event => new MsspEventData(registry.GetTypeName(@event.GetType()), new byte[] { 1 }) };
             var handler = new MsspCommitHandler(NewClient(), options, logger, registry);
 
-            await handler.CommitAsync(await ChangedUnitOfWork());
-            await handler.CommitAsync(await ChangedUnitOfWork());
+            await handler.CommitAsync(await ChangedUnitOfWork(), TestContext.Current.CancellationToken);
+            await handler.CommitAsync(await ChangedUnitOfWork(), TestContext.Current.CancellationToken);
 
             var warning = logger.Collector.GetSnapshot().Single(record => record.Level == LogLevel.Warning && record.Message.Contains("can't be read back"));
             State(warning, "Type").Should().Be(typeof(OrderPlaced).FullName);
@@ -113,7 +113,7 @@ public class MsspSubscriptionFactoryTests {
             unitOfWork.Attach(new Aggregate("order-1", root));
             await root.AcceptAsync(new PlaceOrder("order-1", "alice"), TestContext.Current.CancellationToken);
 
-            var act = () => handler.CommitAsync(unitOfWork).AsTask();
+            var act = () => handler.CommitAsync(unitOfWork, TestContext.Current.CancellationToken).AsTask();
 
             var failure = (await act.Should().ThrowAsync<ConcurrencyException>()).Which;
             failure.Identifier.Value.Should().Be("order-1");
@@ -128,7 +128,7 @@ public class MsspSubscriptionFactoryTests {
             var options = new MsspOptions { Serialize = @event => new MsspEventData(registry.GetTypeName(@event.GetType()), new byte[] { 1 }) };
             var handler = new MsspCommitHandler(NewClient(), options, logger, registry);
 
-            await handler.CommitAsync(await ChangedUnitOfWork());
+            await handler.CommitAsync(await ChangedUnitOfWork(), TestContext.Current.CancellationToken);
 
             logger.Collector.GetSnapshot().Should().NotContain(record => record.Level == LogLevel.Warning);
         }
@@ -139,7 +139,7 @@ public class MsspSubscriptionFactoryTests {
             var options = new MsspOptions { Serialize = _ => new MsspEventData("Wrong.Name@v1", new byte[] { 1 }) };
             var handler = new MsspCommitHandler(NewClient(), options, logger);
 
-            await handler.CommitAsync(await ChangedUnitOfWork());
+            await handler.CommitAsync(await ChangedUnitOfWork(), TestContext.Current.CancellationToken);
 
             logger.Collector.GetSnapshot().Should().NotContain(record => record.Level == LogLevel.Warning);
         }
@@ -150,9 +150,35 @@ public class MsspSubscriptionFactoryTests {
             var options = new MsspOptions { Serialize = _ => new MsspEventData("IntegrationTests.OrderPlaced@v1", new byte[] { 1 }) };
             var handler = new MsspCommitHandler(NewClient(), options, logger, EventTypeRegistry.FromTypes([typeof(OrderPlaced)]));
 
-            await handler.CommitAsync(await ChangedUnitOfWork(), _ => new MsspEventData("Wrong.Name@v1", new byte[] { 1 }));
+            await handler.CommitAsync(await ChangedUnitOfWork(), _ => new MsspEventData("Wrong.Name@v1", new byte[] { 1 }), TestContext.Current.CancellationToken);
 
             logger.Collector.GetSnapshot().Should().NotContain(record => record.Level == LogLevel.Warning);
+        }
+
+        [Fact]
+        public async Task PassesTheCancellationTokenToTheAppend() {
+            var client = NewClient();
+            using var cts = new CancellationTokenSource();
+            var logger = new FakeLogger<MsspCommitHandler>();
+            var options = new MsspOptions { Serialize = _ => new MsspEventData("IntegrationTests.OrderPlaced@v1", new byte[] { 1 }) };
+            var handler = new MsspCommitHandler(client, options, logger);
+
+            await handler.CommitAsync(await ChangedUnitOfWork(), cts.Token);
+
+            A.CallTo(() => client.AppendAsync(A<MsspStreamId>._, A<MsspStreamRevision>._, A<IEnumerable<MsspEventData>>._, cts.Token)).MustHaveHappenedOnceExactly();
+        }
+
+        [Fact]
+        public async Task GivenASagaCommit_PassesTheCancellationTokenToTheAppend() {
+            var client = NewClient();
+            using var cts = new CancellationTokenSource();
+            var logger = new FakeLogger<MsspCommitHandler>();
+            var options = new MsspOptions { Serialize = _ => new MsspEventData("IntegrationTests.OrderPlaced@v1", new byte[] { 1 }) };
+            var handler = new MsspCommitHandler(client, options, logger);
+
+            await handler.CommitAsync(await ChangedUnitOfWork(), _ => new MsspEventData("$>", new byte[] { 1 }), cts.Token);
+
+            A.CallTo(() => client.AppendAsync(A<MsspStreamId>._, A<MsspStreamRevision>._, A<IEnumerable<MsspEventData>>._, cts.Token)).MustHaveHappenedOnceExactly();
         }
     }
 

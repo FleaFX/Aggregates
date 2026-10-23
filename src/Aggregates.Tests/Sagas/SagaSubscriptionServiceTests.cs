@@ -41,7 +41,7 @@ public class SagaSubscriptionServiceTests {
             .AddSingleton<ISaga<TestSagaState, TestEvent>>(_saga)
             .AddSingleton(_repository)
             .AddSingleton(_commandDispatcher)
-            .AddSingleton<SagaCommitDelegate>(_ => ValueTask.CompletedTask)
+            .AddSingleton<SagaCommitDelegate>((_, _) => ValueTask.CompletedTask)
             .AddSingleton<IScheduledStore>(_scheduled)
             .AddSingleton(typeof(SchedulerActivation<>))
             .AddScoped(typeof(LoggingSagaHandler<,,>))

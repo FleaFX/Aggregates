@@ -1,6 +1,7 @@
 using Aggregates.Testing;
 using FluentAssertions;
 using KurrentDB.Client;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Aggregates;
 
@@ -88,5 +89,24 @@ public class RepositoryIntegrationTests(ITestOutputHelper output) {
         Func<Task> act = () => host.SendAsync(new ShipOrder("order-1"));
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*order-1*revision 0*");
+    }
+
+    [Theory, MemberData(nameof(Stores.All), MemberType = typeof(Stores))]
+    public async Task Commit_GivenACancelledToken_Throws(Transport transport) {
+        await using var store = await Stores.StartAsync(transport);
+        await using var host = await TestHost.StartAsync(store, output, o => o
+            .Events(Orders.EventTypes)
+            .Commands(typeof(PlaceOrder)));
+        var unitOfWork = new UnitOfWork();
+        var root = new EntityRoot<OrderState, IOrderEvent>(OrderState.Initial, AggregateVersion.None);
+        unitOfWork.Attach(new Aggregate("order-1", root));
+        await root.AcceptAsync(new PlaceOrder("order-1", "alice"), TestContext.Current.CancellationToken);
+        using var cancelled = new CancellationTokenSource();
+        await cancelled.CancelAsync();
+
+        var act = () => host.Services.GetRequiredService<CommitDelegate>()(unitOfWork, cancelled.Token).AsTask();
+
+        // Both transports report an append with an already cancelled token as a cancellation, not as a transport error.
+        await act.Should().ThrowAsync<OperationCanceledException>();
     }
 }

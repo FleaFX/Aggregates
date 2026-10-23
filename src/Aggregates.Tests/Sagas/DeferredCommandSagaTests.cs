@@ -141,7 +141,7 @@ public class DeferredCommandSagaTests(ITestOutputHelper output) {
         var unitOfWork = new UnitOfWork();
         unitOfWork.Attach(new Aggregate("bill-reminders-bill-1", root));
 
-        var act = () => scope.ServiceProvider.GetRequiredService<SagaCommitDelegate>()(unitOfWork).AsTask();
+        var act = () => scope.ServiceProvider.GetRequiredService<SagaCommitDelegate>()(unitOfWork, TestContext.Current.CancellationToken).AsTask();
         await act.Should().ThrowAsync<ConcurrencyException>();
 
         var sagaStream = await store.ReadAllAsync();
