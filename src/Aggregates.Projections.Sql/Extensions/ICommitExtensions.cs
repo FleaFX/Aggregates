@@ -18,6 +18,7 @@ public static class ICommitExtensions {
     public static ISqlCommit UseSql(
         this ICommit commit,
         IDbConnectionFactory connectionFactory,
-        IsolationLevel isolationLevel = IsolationLevel.ReadCommitted) =>
+        IsolationLevel isolationLevel = IsolationLevel.ReadCommitted
+    ) =>
         new SqlCommit(commit, connectionFactory, isolationLevel);
 }

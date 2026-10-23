@@ -99,7 +99,8 @@ public sealed partial class SubscriptionLoop(
     public async Task RunAsync(
         SubscriptionRegistration registration,
         Func<SubscriptionMessage, CancellationToken, ValueTask> process,
-        CancellationToken stoppingToken) {
+        CancellationToken stoppingToken
+    ) {
 
         var subscriptionId = registration.SubscriptionId;
         var tracker = new CheckpointTracker(checkpointStore, subscriptionId, checkpointOptions, timeProvider);

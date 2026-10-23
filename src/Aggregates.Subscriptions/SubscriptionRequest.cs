@@ -25,7 +25,8 @@ public sealed record SubscriptionRequest(
     ulong? FromPosition,
     bool StartFromEnd,
     IReadOnlyList<string>? EventTypes = null,
-    int ProgressInterval = SubscriptionCheckpointOptions.DefaultMaxFilteredEvents) {
+    int ProgressInterval = SubscriptionCheckpointOptions.DefaultMaxFilteredEvents
+) {
 
     /// <summary>
     /// <c>"^(?:a|b|c)$"</c> with every name escaped, or <see langword="null"/> when

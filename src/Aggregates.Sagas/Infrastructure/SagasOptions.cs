@@ -27,5 +27,4 @@ public sealed class SagasOptions {
         Types.AddRange(types);
         return this;
     }
-
 }

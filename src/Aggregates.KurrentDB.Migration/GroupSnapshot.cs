@@ -16,7 +16,8 @@ readonly record struct GroupSnapshot(
     long LiveBuffer,
     long RetryBuffer,
     long InFlightMessages,
-    long ParkedMessages) {
+    long ParkedMessages
+) {
 
     /// <summary>
     /// Whether no event waits to be delivered, to be delivered again, or to be acknowledged.
