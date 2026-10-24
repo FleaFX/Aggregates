@@ -12,6 +12,8 @@
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
     <DevelopmentDependency>true</DevelopmentDependency>
+    <!-- No build output in the package, so no symbols to ship. -->
+    <IncludeSymbols>false</IncludeSymbols>
     <!-- One rule, documented in the wiki; no AnalyzerReleases.*.md release tracking. -->
     <NoWarn>$(NoWarn);RS2008</NoWarn>
   </PropertyGroup>

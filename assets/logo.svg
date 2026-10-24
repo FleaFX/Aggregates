@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 372 120" width="372" height="120" role="img" aria-labelledby="aggregates-logo-title">
+  <title id="aggregates-logo-title">Aggregates</title>
+  <style>
+    .ink-fill   { fill: #1f2933; }
+    .ink-stroke { stroke: #1f2933; }
+    .accent-fill { fill: #d97757; }
+    .muted-fill { fill: #9aa5b1; }
+    .word { fill: #1f2933; font-family: "Segoe UI", Arial, sans-serif; font-weight: 600; letter-spacing: 5px; }
+    @media (prefers-color-scheme: dark) {
+      .ink-fill   { fill: #f5f7fa; }
+      .ink-stroke { stroke: #f5f7fa; }
+      .accent-fill { fill: #f0b429; }
+      .muted-fill { fill: #7b8794; }
+      .word { fill: #f5f7fa; }
+    }
+  </style>
+
+  <!-- the mark at 80 %, centred on y 60 -->
+  <g transform="translate(4,12) scale(0.8)">
+    <!-- events of uneven size; the newest one in the accent colour -->
+    <g class="muted-fill">
+      <rect x="10" y="53" width="7" height="14" rx="1.5"/>
+      <rect x="21" y="45" width="7" height="30" rx="1.5"/>
+      <rect x="32" y="49" width="7" height="22" rx="1.5"/>
+    </g>
+    <rect x="43" y="41" width="7" height="38" rx="1.5" class="accent-fill"/>
+
+    <!-- the aggregate: the events folded into one block of state -->
+    <rect x="61.5" y="37.5" width="45" height="45" rx="6" fill="none" stroke-width="7" class="ink-stroke"/>
+    <rect x="74" y="50" width="20" height="20" rx="2" class="ink-fill"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="112" y="71" font-size="32" class="word">AGGREGATES</text>
+</svg>

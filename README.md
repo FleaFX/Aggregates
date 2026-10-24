@@ -1,12 +1,10 @@
-# Aggregates
+<img src="https://raw.githubusercontent.com/FleaFX/Aggregates/main/assets/logo.svg" alt="Aggregates" width="372">
 
 [![Build & test](https://github.com/FleaFX/aggregates/actions/workflows/build.yml/badge.svg)](https://github.com/FleaFX/aggregates/actions/workflows/build.yml)
 
-> **⚠️ Preview:** This is a pre-release version (`1.0.0-preview.25`). The API is stabilising but may still change before 1.0.0. For the previous stable version, see the [`legacy`](https://github.com/FleaFX/aggregates/tree/legacy) branch.
-
 This library provides all the boilerplate code needed to do event sourcing, leaving you with just the core functionality of your domain to write.
 
-> **Note:** This is a ground-up rewrite of the [existing Aggregates library](https://github.com/FleaFX/aggregates/tree/legacy). Both versions will continue to exist alongside each other for the time being.
+> **Note:** This is a ground-up rewrite of the [existing Aggregates library](https://github.com/FleaFX/aggregates/tree/legacy) (0.x), which stays on the `legacy` branch. To move from 0.x to 1.0, see [Migrating from 0.x](https://github.com/FleaFX/Aggregates/wiki/Migrating-from-0.x).
 
 ## Packages
 
