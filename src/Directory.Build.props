@@ -1,7 +1,6 @@
 <Project>
   <PropertyGroup>
     <VersionPrefix>1.0.0</VersionPrefix>
-    <VersionSuffix>preview.25</VersionSuffix>
     <GenerateDocumentationFile Condition="'$(IsPackable)' != 'false'">true</GenerateDocumentationFile>
     <Authors>Wouter Naessens</Authors>
     <Copyright>Copyright © 2026 Wouter Naessens</Copyright>
@@ -10,9 +9,19 @@
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile Condition="'$(IsPackable)' != 'false'">README.md</PackageReadmeFile>
+    <PackageIcon Condition="'$(IsPackable)' != 'false'">icon.png</PackageIcon>
+    <PackageTags>event-sourcing;cqrs;ddd;aggregates;sagas;projections;kurrentdb;eventstore;mssp</PackageTags>
+    <PackageReleaseNotes>https://github.com/FleaFX/Aggregates/releases/tag/v$(VersionPrefix)</PackageReleaseNotes>
+    <IncludeSymbols Condition="'$(IsPackable)' != 'false'">true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(IsPackable)' != 'false'">
     <None Include="$(MSBuildThisFileDirectory)..\README.md" Pack="true" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)..\assets\icon.png" Pack="true" PackagePath="/" Visible="false" />
   </ItemGroup>
 </Project>
