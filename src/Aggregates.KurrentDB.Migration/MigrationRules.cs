@@ -226,17 +226,19 @@ static class MigrationRules {
     /// <summary>
     /// Compares the stored event type names a 1.0 subscription receives with the ones its 0.x
     /// group received: "same (n)" when they match, otherwise the added and removed names.
-    /// A subscription on <see langword="object"/> receives "all"; without a registry, a filter
-    /// or a parsable filter, the comparison is "-".
+    /// A subscription on <see langword="object"/> receives "all", a difference when the 0.x group
+    /// had a parsable filter ("all (0.x: n)"); without a registry, a filter or a parsable filter,
+    /// the comparison is "-".
     /// </summary>
     /// <param name="eventType">The event type the 1.0 subscription is registered on.</param>
     /// <param name="filter">The 0.x group's event-type regular expression, or null.</param>
     /// <param name="registry">The registry of the 1.0 hosts, or null.</param>
     public static (string Text, bool Differs) CompareEventTypes(Type eventType, string? filter, EventTypeRegistry? registry) {
+        var filterNames = filter is null ? null : ZeroXGroupConfig.ParseFilterNames(filter);
         if (eventType == typeof(object))
-            return ("all", false);
+            return filterNames is null ? ("all", false) : ($"all (0.x: {filterNames.Count})", true);
 
-        if (registry is null || filter is null || ZeroXGroupConfig.ParseFilterNames(filter) is not { } filterNames)
+        if (registry is null || filterNames is null)
             return ("-", false);
 
         var names = registry.GetTypeNames(eventType);
