@@ -28,7 +28,11 @@ public class EntityRootMetadataCollectionTests {
     /// </summary>
     sealed class StateValueMetadataAttribute(string key) : MetadataAttribute(key) {
         public override ValueTask<object?> GetValueAsync(object context, CancellationToken cancellationToken) =>
-            ValueTask.FromResult<object?>(((TestState)context).Value);
+            ValueTask.FromResult<object?>(context switch {
+                TestState state => state.Value,
+                TrackedState state => state.Value,
+                _ => throw new ArgumentException("Unknown state.", nameof(context))
+            });
     }
 
     /// <summary>
@@ -91,6 +95,91 @@ public class EntityRootMetadataCollectionTests {
         await root.AcceptAsync(new TestCommand("agg/1", "new-value"), TestContext.Current.CancellationToken);
 
         root.State.Value.Should().Be("new-value");
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(0)]
+    public async Task GivenAnyNumberOfEvents_EvaluatesTheCommandAttributesOnce(int events) {
+        await using var scope = new MetadataScope();
+        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
+        var counter = new Counter();
+
+        await root.AcceptAsync(new CountedCommand("agg/1", events, counter), TestContext.Current.CancellationToken);
+
+        counter.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GivenNoEvents_DoesNotEvaluateTheStateAttributes() {
+        await using var scope = new MetadataScope();
+        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
+
+        await root.AcceptAsync(new CountedCommand("agg/1", 0, new Counter()), TestContext.Current.CancellationToken);
+
+        scope.Snapshot().Should().NotContainKey("stateKey");
+    }
+
+    [Fact]
+    public async Task GivenThreeEvents_EvaluatesTheStateAttributesAfterEachEvent() {
+        await using var scope = new MetadataScope();
+        var root = new EntityRoot<TrackedState, TestEvent>(default, AggregateVersion.None);
+
+        await root.AcceptAsync(new ThreeEventsCommand("agg/1"), TestContext.Current.CancellationToken);
+
+        scope.Snapshot()["states"].Should().BeEquivalentTo(new object?[] { "first", "second", "third" });
+    }
+
+    [Fact]
+    public async Task GivenTheSameKeyOnStateAndCommand_TheCommandValueWins() {
+        await using var scope = new MetadataScope();
+        var root = new EntityRoot<TrackedState, TestEvent>(default, AggregateVersion.None);
+
+        await root.AcceptAsync(new ThreeEventsCommand("agg/1"), TestContext.Current.CancellationToken);
+
+        scope.Snapshot()["shared"].Should().Be("command");
+    }
+
+    sealed class Counter {
+        public int Calls;
+    }
+
+    [CountingMetadata("countKey")]
+    record CountedCommand(AggregateIdentifier Id, int Events, Counter Counter) : ICommand<TestState, TestEvent> {
+        public async IAsyncEnumerable<TestEvent> ProgressAsync(
+            TestState state,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            for (var i = 0; i < Events; i++)
+                yield return new TestEvent($"event-{i}");
+        }
+    }
+
+    sealed class CountingMetadataAttribute(string key) : MetadataAttribute(key) {
+        public override ValueTask<object?> GetValueAsync(object context, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<object?>(++((CountedCommand)context).Counter.Calls);
+    }
+
+    [StateValueMetadata("shared")]
+    [TrackedValueMetadata("states")]
+    record struct TrackedState(string Value) : IState<TrackedState, TestEvent> {
+        public static TrackedState Initial => new("initial");
+        public TrackedState Apply(TestEvent @event) => new(@event.Value);
+    }
+
+    sealed class TrackedValueMetadataAttribute(string key) : MetadataAttribute(key, MetadataMultiplicity.Multiple) {
+        public override ValueTask<object?> GetValueAsync(object context, CancellationToken cancellationToken) =>
+            ValueTask.FromResult<object?>(((TrackedState)context).Value);
+    }
+
+    [FixedMetadata("shared", "command")]
+    record ThreeEventsCommand(AggregateIdentifier Id) : ICommand<TrackedState, TestEvent> {
+        public async IAsyncEnumerable<TestEvent> ProgressAsync(
+            TrackedState state,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default) {
+            yield return new TestEvent("first");
+            yield return new TestEvent("second");
+            yield return new TestEvent("third");
+        }
     }
 
     // A command that produces two events, useful for testing ordering.

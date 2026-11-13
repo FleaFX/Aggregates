@@ -29,8 +29,8 @@ public sealed class EntityRoot<TState, TEvent>(TState? state, AggregateVersion v
 
     /// <summary>
     /// Applies <paramref name="command"/> to the current state, collecting the resulting events.
-    /// For each event produced, metadata is collected from the updated state and the command
-    /// (in that order) into the ambient <see cref="MetadataScope"/>, if active.
+    /// Metadata is collected into the ambient <see cref="MetadataScope"/>, if active: from the
+    /// updated state after each event, then once from the command, also when it produces no events.
     /// </summary>
     /// <param name="command">The command to apply.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -40,8 +40,8 @@ public sealed class EntityRoot<TState, TEvent>(TState? state, AggregateVersion v
             _changes.Add(@event);
             State = State.Apply(@event);
             await CollectMetadataAsync(State, cancellationToken);
-            await CollectMetadataAsync(command, cancellationToken);
         }
+        await CollectMetadataAsync(command, cancellationToken);
     }
 
     static async ValueTask CollectMetadataAsync(object? context, CancellationToken cancellationToken) {
