@@ -14,9 +14,11 @@ namespace Aggregates;
 /// (<c>MetadataScope.Current?.Add(...)</c>) to add entries safely.
 /// </para>
 /// <para>
-/// Scopes nest: creating a new <see cref="MetadataScope"/> pushes it onto the ambient stack.
-/// The new scope starts with an optional seed taken from the parent (e.g. incoming event
-/// metadata propagated through a saga or policy). Disposing pops the scope.
+/// Scopes nest: creating a new <see cref="MetadataScope"/> pushes it onto the ambient stack,
+/// and disposing pops it. A scope created without arguments starts with a copy of the entries
+/// of the current scope; a scope created with a seed starts with the seed only (e.g. the
+/// metadata of the event a saga or policy handles). Changes to a nested scope never reach the
+/// scope it was created in.
 /// </para>
 /// <para>
 /// Internally, <see cref="MetadataMultiplicity.Multiple"/> entries are tracked as
@@ -38,16 +40,24 @@ public sealed class MetadataScope : IAsyncDisposable {
     bool _disposed;
 
     /// <summary>
-    /// Initializes a new <see cref="MetadataScope"/> with no initial entries and pushes it onto
-    /// the ambient stack.
+    /// Initializes a new <see cref="MetadataScope"/> with a copy of the entries of the
+    /// <see cref="Current"/> scope, if any, and pushes it onto the ambient stack.
     /// </summary>
-    public MetadataScope() => Scopes = Scopes.Push(this);
+    public MetadataScope() {
+        if (Current is { } outer)
+            foreach (var (key, (value, isMultiple)) in outer._entries)
+                _entries[key] = isMultiple
+                    ? (new List<object?>((List<object?>)value!), true)
+                    : (value, false);
+        Scopes = Scopes.Push(this);
+    }
 
     /// <summary>
-    /// Initializes a new <see cref="MetadataScope"/> seeded from <paramref name="seed"/> and
-    /// pushes it onto the ambient stack. Entries present in the seed are available immediately;
-    /// array values in the seed are restored as accumulators so further
+    /// Initializes a new <see cref="MetadataScope"/> seeded from <paramref name="seed"/> only,
+    /// without the entries of the <see cref="Current"/> scope, and pushes it onto the ambient
+    /// stack. Array values in the seed are restored as accumulators so further
     /// <see cref="MetadataMultiplicity.Multiple"/> additions append correctly.
+    /// Pass <see cref="EventMetadata.Empty"/> for an empty nested scope.
     /// </summary>
     /// <param name="seed">The <see cref="EventMetadata"/> to seed from.</param>
     public MetadataScope(EventMetadata seed) {

@@ -135,6 +135,25 @@ public class PolicySubscriptionServiceTests {
     }
 
     [Fact]
+    public async Task HandleAsync_InsideAnAmbientScope_GivesTheCommandsOnlyTheMetadataOfTheMessage() {
+        var command = new PolicyTestCommand();
+        A.CallTo(() => _handler.ReactAsync(new PolicyTestEvent(1), A<CancellationToken>._))
+            .Returns(new ICommand[] { command }.ToAsyncEnumerable());
+        EventMetadata? seen = null;
+        A.CallTo(() => _commandDispatcher.DispatchAsync(command, A<CancellationToken>._))
+            .Invokes(_ => seen = MetadataScope.Current?.Snapshot());
+        var metadata = new EventMetadata(new Dictionary<string, object?> { ["correlation"] = "c-1" });
+        var factory = new FakeSubscriptionFactory(FakeSubscriptionFactory.Messages(1, _ => new PolicyTestEvent(1)));
+        using var service = BuildService(factory);
+        await using var ambient = new MetadataScope();
+        ambient.Add("Location", "L1");
+
+        await service.HandleAsync(new SubscriptionMessage(new PolicyTestEvent(1), 42, new EventReference("stream-1", 1), metadata), Token);
+
+        seen.Should().BeEquivalentTo(metadata);
+    }
+
+    [Fact]
     public async Task HandleAsync_DoesNotRetryOrPark_WhenThePolicyFails() {
         var failure = new InvalidOperationException("policy failed");
         A.CallTo(() => _handler.ReactAsync(A<PolicyTestEvent>._, A<CancellationToken>._)).Throws(failure);

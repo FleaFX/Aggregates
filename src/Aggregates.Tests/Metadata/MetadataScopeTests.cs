@@ -142,7 +142,64 @@ public class MetadataScopeTests {
         }
     }
 
+    public class Constructor {
+        [Fact]
+        public async Task GivenOuterScope_StartsWithItsEntries() {
+            await using var outer = new MetadataScope();
+            outer.Add("Location", "L1");
+
+            await using var inner = new MetadataScope();
+            inner.Add("User", "U1");
+
+            inner.Snapshot().Should().BeEquivalentTo(new Dictionary<string, object?> {
+                ["Location"] = "L1",
+                ["User"] = "U1"
+            });
+        }
+
+        [Fact]
+        public async Task GivenMultipleInOuterScope_FurtherMultipleAddsAppend() {
+            await using var outer = new MetadataScope();
+            outer.Add("tags", "a", MetadataMultiplicity.Multiple);
+            outer.Add("tags", "b", MetadataMultiplicity.Multiple);
+
+            await using var inner = new MetadataScope();
+            inner.Add("tags", "c", MetadataMultiplicity.Multiple);
+
+            inner.Snapshot()["tags"].Should().BeEquivalentTo(new object?[] { "a", "b", "c" });
+        }
+
+        [Fact]
+        public async Task GivenChangesInInnerScope_OuterScopeIsUnchanged() {
+            await using var outer = new MetadataScope();
+            outer.Add("key", "outer");
+            outer.Add("tags", "a", MetadataMultiplicity.Multiple);
+
+            await using (var inner = new MetadataScope()) {
+                inner.Add("key", "inner");
+                inner.Add("tags", "b", MetadataMultiplicity.Multiple);
+                inner.Add("other", "inner");
+            }
+
+            outer.Snapshot().Should().BeEquivalentTo(new Dictionary<string, object?> {
+                ["key"] = "outer",
+                ["tags"] = new object?[] { "a" }
+            });
+        }
+    }
+
     public class SeedConstructor {
+        [Fact]
+        public async Task GivenEmptySeed_IgnoresOuterScope() {
+            await using var outer = new MetadataScope();
+            outer.Add("Location", "L1");
+
+            await using var inner = new MetadataScope(EventMetadata.Empty);
+
+            inner.Snapshot().Should().BeEmpty();
+        }
+
+
         [Fact]
         public async Task GivenScalarInSeed_IsAccessibleInNewScope() {
             await using var outer = new MetadataScope();
