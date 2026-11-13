@@ -2,8 +2,8 @@ namespace Aggregates;
 
 /// <summary>
 /// Decorates an <see cref="ICommandHandler{TCommand}"/> with <see cref="MetadataScope"/>
-/// lifecycle management. Opens a new scope for each command execution, seeding it from any
-/// ambient parent scope (e.g. a saga-level scope carrying correlation or causation identifiers).
+/// lifecycle management. Opens a new scope for each command execution, with a copy of the
+/// entries of any ambient parent scope (e.g. a saga-level scope carrying correlation or causation identifiers).
 /// The scope is available to <see cref="EntityRoot{TState,TEvent}.AcceptAsync"/> and to
 /// application code via <see cref="MetadataScope.Current"/> for the duration of the command.
 /// </summary>
@@ -18,12 +18,7 @@ sealed class MetadataAwareCommandHandler<TCommand>(UnitOfWorkAwareCommandHandler
 
     /// <inheritdoc/>
     public async ValueTask HandleAsync(TCommand command, CancellationToken cancellationToken = default) {
-        // Seed the new scope from the parent so that correlation/causation identifiers
-        // propagated by an outer saga or policy scope are inherited automatically.
-        var seed = MetadataScope.Current?.Snapshot();
-        await using var scope = seed is not null
-            ? new MetadataScope(seed)
-            : new MetadataScope();
+        await using var scope = new MetadataScope();
         await inner.HandleAsync(command, cancellationToken);
     }
 }

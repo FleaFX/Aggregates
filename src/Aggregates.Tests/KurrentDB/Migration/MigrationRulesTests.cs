@@ -448,8 +448,20 @@ public class MigrationRulesTests {
         }
 
         [Fact]
-        public void AnObjectHandler_ReceivesAll() {
-            MigrationRules.CompareEventTypes(typeof(object), PlacedAndShipped, Registry).Should().Be(("all", false));
+        public void AnObjectHandler_OfAFilteredGroup_ReceivesAll_AndWarns() {
+            MigrationRules.CompareEventTypes(
+                    typeof(object), "^(?:IntegrationTests\\.OrderPlaced@v1|IntegrationTests\\.OrderShipped@v1|IntegrationTests\\.CustomerRegistered@v1)$", null)
+                .Should().Be(("all (0.x: 3)", true));
+        }
+
+        [Fact]
+        public void AnObjectHandler_WithoutAFilter_ReceivesAll() {
+            MigrationRules.CompareEventTypes(typeof(object), null, Registry).Should().Be(("all", false));
+        }
+
+        [Fact]
+        public void AnObjectHandler_WithAFilterOfAnotherShape_ReceivesAll() {
+            MigrationRules.CompareEventTypes(typeof(object), "^IntegrationTests\\..*$", Registry).Should().Be(("all", false));
         }
 
         [Fact]
