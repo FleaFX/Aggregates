@@ -281,6 +281,29 @@ public class ParkedMessagesTests {
     }
 
     [Fact]
+    public async Task ReplayAsync_OfADeferredCommand_InsideAnAmbientScope_UsesOnlyTheMetadataOfTheRequest() {
+        var source = new EventReference("scheduled-requests-x", 0);
+        var due = new DateTimeOffset(2026, 10, 16, 8, 0, 0, TimeSpan.Zero);
+        var metadata = Metadata("correlation", "c-1");
+        _store.Events[source] = new StoredEntry(ScheduledFormat.CommandRequestEventType,
+            ScheduledFormat.WriteRequest("Reminders@v1", due, "Test.Command@v1", "{}"u8), metadata);
+        var command = new NoopCommand();
+        _store.Deserializer = (_, _) => command;
+        _store.Park("scheduled-Reminders@v1", new SubscriptionMessage(null, 42, source, EventMetadata.Empty), new InvalidOperationException("boom"));
+        var dispatcher = A.Fake<ICommandDispatcher>();
+        EventMetadata? seen = null;
+        A.CallTo(() => dispatcher.DispatchAsync(command, A<CancellationToken>._))
+            .Invokes(_ => seen = MetadataScope.Current?.Snapshot());
+        await using var ambient = new MetadataScope();
+        ambient.Add("Location", "L1");
+
+        var replay = await Messages(scopeFactory: ScopeFactory(dispatcher)).ReplayAsync("scheduled-Reminders@v1", "0", Token);
+
+        replay.Succeeded.Should().BeTrue();
+        seen.Should().BeEquivalentTo(metadata);
+    }
+
+    [Fact]
     public async Task ReplayAsync_OfADeadline_DeliversItToTheSagaWhoseSchedulerParkedIt() {
         var source = new EventReference("saga-1", 3);
         var due = new DateTimeOffset(2026, 10, 16, 8, 0, 0, TimeSpan.Zero);
