@@ -89,7 +89,7 @@ public class BaseRepositoryTests {
             IRepository<TestState, TestEvent> repo = new FakeRepository();
             var uow = new UnitOfWork();
             await using var _ = new UnitOfWorkScope(uow, (_, _) => ValueTask.CompletedTask);
-            var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
+            var root = new EntityRoot<TestState, TestEvent>(TestState.Initial, AggregateVersion.None);
 
             repo.Add("agg/1", root);
 

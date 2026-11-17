@@ -8,7 +8,9 @@ namespace Aggregates;
 /// </summary>
 /// <typeparam name="TState">The type of the state object.</typeparam>
 /// <typeparam name="TEvent">The type of the events applicable to this aggregate.</typeparam>
-public sealed class EntityRoot<TState, TEvent>(TState? state, AggregateVersion version) : IAggregateRoot
+/// <param name="state">The state of the aggregate: <c>TState.Initial</c> for a new aggregate.</param>
+/// <param name="version">The version of the aggregate: <see cref="AggregateVersion.None"/> for a new aggregate.</param>
+public sealed class EntityRoot<TState, TEvent>(TState state, AggregateVersion version) : IAggregateRoot
     where TState : IState<TState, TEvent> {
 
     // Cache MetadataAttribute lookups per type to avoid repeated reflection on the hot path.
@@ -19,7 +21,7 @@ public sealed class EntityRoot<TState, TEvent>(TState? state, AggregateVersion v
     /// <summary>
     /// Gets the current state of the aggregate.
     /// </summary>
-    public TState State { get; private set; } = state ?? TState.Initial;
+    public TState State { get; private set; } = state;
 
     /// <inheritdoc/>
     public AggregateVersion Version { get; } = version;

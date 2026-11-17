@@ -27,7 +27,7 @@ sealed class SagaHandler<TSaga, TSagaState, TEvent>(ISagaRepository<TSagaState, 
     public async ValueTask HandleAsync(AggregateIdentifier sagaId, TEvent @event, EventReference source, CancellationToken cancellationToken = default) {
         var sagaRoot = await repository.TryGetAsync(sagaId, cancellationToken);
         if (sagaRoot is null) {
-            sagaRoot = new SagaRoot<TSagaState, TEvent>(default, AggregateVersion.None);
+            sagaRoot = new SagaRoot<TSagaState, TEvent>(TSagaState.Initial, AggregateVersion.None);
             repository.Add(sagaId, sagaRoot);
         }
         var commands = await sagaRoot.AcceptAsync(@event, source, saga, cancellationToken);

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Aggregates.Subscriptions;
 using FakeItEasy;
 using FluentAssertions;
@@ -53,7 +54,7 @@ public class SagaHandlerTests {
 
     [Fact]
     public async Task HandleAsync_WhenSagaExists_UsesExistingRoot() {
-        var existingRoot = new SagaRoot<TestSagaState, TestEvent>(default, new AggregateVersion(0));
+        var existingRoot = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, new AggregateVersion(0));
         var repository = A.Fake<ISagaRepository<TestSagaState, TestEvent>>();
         var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
         var dispatcher = A.Fake<ICommandDispatcher>();
@@ -207,5 +208,33 @@ public class SagaHandlerTests {
         A.CallTo(() => store.AppendAsync("scheduled-Test.Saga@v1", ScheduledFormat.MarkerEventType, A<ReadOnlyMemory<byte>>._, A<CancellationToken>._))
             .MustHaveHappenedOnceExactly()
             .Then(A.CallTo(() => dispatcher.DispatchAsync(command, A<CancellationToken>._)).MustHaveHappenedOnceExactly());
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenSagaNotFound_StartsAValueTypeStateFromInitial() {
+        var repository = A.Fake<ISagaRepository<ValuesState, TestEvent>>();
+        var saga = A.Fake<ISaga<ValuesState, TestEvent>>();
+        SagaRoot<ValuesState, TestEvent>? createdRoot = null;
+        A.CallTo(() => repository.TryGetAsync(A<AggregateIdentifier>._, A<CancellationToken>._))
+            .Returns(ValueTask.FromResult<SagaRoot<ValuesState, TestEvent>?>(null));
+        A.CallTo(() => repository.Add(A<AggregateIdentifier>._, A<SagaRoot<ValuesState, TestEvent>>._))
+            .Invokes(call => createdRoot = call.GetArgument<SagaRoot<ValuesState, TestEvent>>(1));
+        A.CallTo(() => saga.ReactAsync(A<ValuesState>._, A<TestEvent>._, A<CancellationToken>._))
+            .Returns(AsyncEnumerable.Empty<ICommand>());
+        var handler = new SagaHandler<ISaga<ValuesState, TestEvent>, ValuesState, TestEvent>(repository, saga, A.Fake<ICommandDispatcher>(),
+            new SchedulerActivation<ISaga<ValuesState, TestEvent>>(A.Fake<IScheduledStore>(),
+                [new SubscriptionRegistration("Test.Saga@v1", typeof(ISaga<ValuesState, TestEvent>), typeof(TestEvent), false)]));
+
+        await handler.HandleAsync("saga-1", new TestEvent(7), new EventReference("stream-1", 0), TestContext.Current.CancellationToken);
+
+        A.CallTo(() => saga.ReactAsync(A<ValuesState>.That.Matches(state => !state.Values.IsDefault && state.Values.IsEmpty), A<TestEvent>._, A<CancellationToken>._))
+            .MustHaveHappenedOnceExactly();
+        createdRoot!.State.Values.Should().Equal(7);
+    }
+
+    // A value type whose Initial differs from default: Apply on default throws.
+    internal readonly record struct ValuesState(ImmutableArray<int> Values) : IState<ValuesState, TestEvent> {
+        public static ValuesState Initial => new([]);
+        public ValuesState Apply(TestEvent @event) => new(Values.Add(@event.Value));
     }
 }
