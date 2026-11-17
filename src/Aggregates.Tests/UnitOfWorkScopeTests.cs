@@ -30,7 +30,7 @@ public class UnitOfWorkScopeTests {
     [Fact]
     public async Task OnDispose_ClearsUnitOfWork() {
         var uow = new UnitOfWork();
-        uow.Attach(new Aggregate("aggregate/1", new EntityRoot<TestState, string>(default, AggregateVersion.None)));
+        uow.Attach(new Aggregate("aggregate/1", new EntityRoot<TestState, string>(TestState.Initial, AggregateVersion.None)));
 
         await using (new UnitOfWorkScope(uow, (_, _) => ValueTask.CompletedTask)) {
             // no Complete()

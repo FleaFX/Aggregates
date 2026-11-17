@@ -14,7 +14,7 @@ public class SagaRootTests {
 
     [Fact]
     public async Task AcceptAsync_AppliesEventToState() {
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new TestEvent(5), new EventReference("stream-1", 0), SilentSaga(), TestContext.Current.CancellationToken);
 
@@ -23,7 +23,7 @@ public class SagaRootTests {
 
     [Fact]
     public async Task AcceptAsync_AddsSourceToChanges() {
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
         var source = new EventReference("stream-1", 4);
 
         await root.AcceptAsync(new TestEvent(1), source, SilentSaga(), TestContext.Current.CancellationToken);
@@ -39,7 +39,7 @@ public class SagaRootTests {
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Invokes(call => capturedState = call.GetArgument<TestSagaState>(0))
             .Returns(AsyncEnumerable.Empty<ICommand>());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new TestEvent(7), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
 
@@ -54,7 +54,7 @@ public class SagaRootTests {
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Invokes(call => capturedStates.Add(call.GetArgument<TestSagaState>(0)))
             .Returns(AsyncEnumerable.Empty<ICommand>());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new TestEvent(3), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
         await root.AcceptAsync(new TestEvent(4), new EventReference("stream-1", 1), saga, TestContext.Current.CancellationToken);
@@ -69,7 +69,7 @@ public class SagaRootTests {
         var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Returns(new ICommand[] { command }.ToAsyncEnumerable());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
 
         var commands = await root.AcceptAsync(new TestEvent(1), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
 
@@ -78,7 +78,7 @@ public class SagaRootTests {
 
     [Fact]
     public async Task AcceptAsync_MultipleCalls_AccumulatesChanges() {
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new TestEvent(3), new EventReference("stream-1", 0), SilentSaga(), TestContext.Current.CancellationToken);
         await root.AcceptAsync(new TestEvent(4), new EventReference("stream-1", 1), SilentSaga(), TestContext.Current.CancellationToken);
@@ -93,7 +93,7 @@ public class SagaRootTests {
         var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Returns(AsyncEnumerable.Empty<ICommand>());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
         var source = new EventReference("stream-1", 0);
 
         var first = await root.AcceptAsync(new TestEvent(5), source, saga, TestContext.Current.CancellationToken);
@@ -112,7 +112,7 @@ public class SagaRootTests {
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Returns(AsyncEnumerable.Empty<ICommand>());
         var source = new EventReference("stream-1", 0);
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None, new HashSet<EventReference> { source });
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None, new HashSet<EventReference> { source });
 
         var commands = await root.AcceptAsync(new TestEvent(5), source, saga, TestContext.Current.CancellationToken);
 
@@ -128,7 +128,7 @@ public class SagaRootTests {
         var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Returns(new ICommand[] { new TestCommand().DeferUntil(due), new TestCommand() }.ToAsyncEnumerable());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
         var source = new EventReference("stream-1", 3);
 
         var commands = await root.AcceptAsync(new TestEvent(1), source, saga, TestContext.Current.CancellationToken);
@@ -140,7 +140,7 @@ public class SagaRootTests {
 
     [Fact]
     public async Task AcceptAsync_TheOwnerIsTheSubscriptionIdOfTheSaga() {
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new TestEvent(1), new EventReference("stream-1", 0), new DeferredCommandTestSaga(), TestContext.Current.CancellationToken);
 
@@ -154,7 +154,7 @@ public class SagaRootTests {
         var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Returns(new ICommand[] { new TestCommand().DeferUntil(DateTimeOffset.UtcNow) }.ToAsyncEnumerable());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None, new HashSet<EventReference> { source });
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None, new HashSet<EventReference> { source });
 
         var commands = await root.AcceptAsync(new TestEvent(1), source, saga, TestContext.Current.CancellationToken);
 
@@ -177,7 +177,7 @@ public class SagaRootTests {
     public async Task AcceptAsync_RecordsARequestedDeadline_AndDoesNotReturnIt() {
         var due = new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero);
         var saga = DeadlineSaga(new ICommand[] { Deadline.At(due, new TestDeadline(1)), new TestCommand() }.ToAsyncEnumerable());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
         var source = new EventReference("stream-1", 3);
 
         var commands = await root.AcceptAsync(new TestEvent(1), source, saga, TestContext.Current.CancellationToken);
@@ -190,7 +190,7 @@ public class SagaRootTests {
     [Fact]
     public async Task AcceptAsync_ADeadlineWithAPayloadOfAnotherType_Throws() {
         var saga = DeadlineSaga(new ICommand[] { Deadline.At(DateTimeOffset.UtcNow, "text") }.ToAsyncEnumerable());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
 
         var act = () => root.AcceptAsync(new TestEvent(1), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
 
@@ -203,7 +203,7 @@ public class SagaRootTests {
         var saga = A.Fake<ISaga<TestSagaState, TestEvent>>();
         A.CallTo(() => saga.ReactAsync(A<TestSagaState>._, A<TestEvent>._, A<CancellationToken>._))
             .Returns(new ICommand[] { Deadline.At(DateTimeOffset.UtcNow, new TestDeadline(1)) }.ToAsyncEnumerable());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
 
         var act = () => root.AcceptAsync(new TestEvent(1), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
 
@@ -214,7 +214,7 @@ public class SagaRootTests {
     [Fact]
     public async Task AcceptAsync_ADeferredDeadline_Throws() {
         var saga = DeadlineSaga(new ICommand[] { Deadline.At(DateTimeOffset.UtcNow, new TestDeadline(1)).DeferUntil(DateTimeOffset.UtcNow) }.ToAsyncEnumerable());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
 
         var act = () => root.AcceptAsync(new TestEvent(1), new EventReference("stream-1", 0), saga, TestContext.Current.CancellationToken);
 
@@ -252,7 +252,7 @@ public class SagaRootTests {
         var saga = A.Fake<ISaga<TestSagaState, TestEvent, TestDeadline>>();
         A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
             .Returns(new ICommand[] { new TestCommand().DeferUntil(due), Deadline.At(due, new TestDeadline(1)) }.ToAsyncEnumerable());
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None);
         var request = new EventReference("saga-1", 2);
 
         await root.AcceptDeadlineAsync(new TestDeadline(3), request, saga, TestContext.Current.CancellationToken);
@@ -270,7 +270,7 @@ public class SagaRootTests {
         A.CallTo(() => saga.ReactToDeadlineAsync(A<TestSagaState>._, A<TestDeadline>._, A<CancellationToken>._))
             .Returns(new ICommand[] { new TestCommand() }.ToAsyncEnumerable());
         var request = new EventReference("saga-1", 2);
-        var root = new SagaRoot<TestSagaState, TestEvent>(default, AggregateVersion.None, new HashSet<EventReference> { request });
+        var root = new SagaRoot<TestSagaState, TestEvent>(TestSagaState.Initial, AggregateVersion.None, new HashSet<EventReference> { request });
 
         var commands = await root.AcceptDeadlineAsync(new TestDeadline(3), request, saga, TestContext.Current.CancellationToken);
 

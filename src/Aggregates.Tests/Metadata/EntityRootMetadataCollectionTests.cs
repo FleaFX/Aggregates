@@ -48,7 +48,7 @@ public class EntityRootMetadataCollectionTests {
     [Fact]
     public async Task GivenAttributeOnCommand_CollectsCommandMetadata() {
         await using var scope = new MetadataScope();
-        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(TestState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new TestCommand("agg/1", "new-value"), TestContext.Current.CancellationToken);
 
@@ -58,7 +58,7 @@ public class EntityRootMetadataCollectionTests {
     [Fact]
     public async Task GivenAttributeOnState_CollectsStateMetadataAfterApply() {
         await using var scope = new MetadataScope();
-        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(TestState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new TestCommand("agg/1", "new-value"), TestContext.Current.CancellationToken);
 
@@ -70,7 +70,7 @@ public class EntityRootMetadataCollectionTests {
     [Fact]
     public async Task GivenMultipleEvents_StateMetadataReflectsLastAppliedState() {
         await using var scope = new MetadataScope();
-        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(TestState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new TwoEventsCommand("agg/1"), TestContext.Current.CancellationToken);
 
@@ -81,7 +81,7 @@ public class EntityRootMetadataCollectionTests {
 
     [Fact]
     public async Task GivenNoActiveScope_AcceptAsyncDoesNotThrow() {
-        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(TestState.Initial, AggregateVersion.None);
 
         var act = () => root.AcceptAsync(new TestCommand("agg/1", "value"), TestContext.Current.CancellationToken).AsTask();
 
@@ -90,7 +90,7 @@ public class EntityRootMetadataCollectionTests {
 
     [Fact]
     public async Task GivenNoActiveScope_ChangesAreStillApplied() {
-        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(TestState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new TestCommand("agg/1", "new-value"), TestContext.Current.CancellationToken);
 
@@ -102,7 +102,7 @@ public class EntityRootMetadataCollectionTests {
     [InlineData(0)]
     public async Task GivenAnyNumberOfEvents_EvaluatesTheCommandAttributesOnce(int events) {
         await using var scope = new MetadataScope();
-        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(TestState.Initial, AggregateVersion.None);
         var counter = new Counter();
 
         await root.AcceptAsync(new CountedCommand("agg/1", events, counter), TestContext.Current.CancellationToken);
@@ -113,7 +113,7 @@ public class EntityRootMetadataCollectionTests {
     [Fact]
     public async Task GivenNoEvents_DoesNotEvaluateTheStateAttributes() {
         await using var scope = new MetadataScope();
-        var root = new EntityRoot<TestState, TestEvent>(default, AggregateVersion.None);
+        var root = new EntityRoot<TestState, TestEvent>(TestState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new CountedCommand("agg/1", 0, new Counter()), TestContext.Current.CancellationToken);
 
@@ -123,7 +123,7 @@ public class EntityRootMetadataCollectionTests {
     [Fact]
     public async Task GivenThreeEvents_EvaluatesTheStateAttributesAfterEachEvent() {
         await using var scope = new MetadataScope();
-        var root = new EntityRoot<TrackedState, TestEvent>(default, AggregateVersion.None);
+        var root = new EntityRoot<TrackedState, TestEvent>(TrackedState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new ThreeEventsCommand("agg/1"), TestContext.Current.CancellationToken);
 
@@ -133,7 +133,7 @@ public class EntityRootMetadataCollectionTests {
     [Fact]
     public async Task GivenTheSameKeyOnStateAndCommand_TheCommandValueWins() {
         await using var scope = new MetadataScope();
-        var root = new EntityRoot<TrackedState, TestEvent>(default, AggregateVersion.None);
+        var root = new EntityRoot<TrackedState, TestEvent>(TrackedState.Initial, AggregateVersion.None);
 
         await root.AcceptAsync(new ThreeEventsCommand("agg/1"), TestContext.Current.CancellationToken);
 

@@ -217,7 +217,7 @@ public class SagaDeadlineTests(ITestOutputHelper output) {
 
         await using var scope = host.Services.CreateAsyncScope();
         var planned = new BillPlanned("bill-1", Now.AddDays(1));
-        var root = new SagaRoot<DueState, IBillEvent>(default, AggregateVersion.None);
+        var root = new SagaRoot<DueState, IBillEvent>(DueState.Initial, AggregateVersion.None);
         await root.AcceptAsync(planned, new EventReference("bill-1", 0), new UnroutedBillDeadlineSaga(), TestContext.Current.CancellationToken);
         var unitOfWork = new UnitOfWork();
         unitOfWork.Attach(new Aggregate("bill-deadlines-bill-1", root));
